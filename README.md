@@ -1,0 +1,124 @@
+# foodie-backend
+
+Modular monolith backend for the Foodie food-delivery platform.
+
+**Stack:** Java 21 · Spring Boot 3 · Spring Security · Spring Data JPA · PostgreSQL · Redis · Flyway · WebSocket (STOMP) · Docker · Maven
+
+**Specification:** `Docs/Phase3_Backend_Architecture.md` (v1.1) · `Docs/04_API_Contracts.md` (v1.1) + `Docs/04_API_Contracts.md.docx` (v1.0)
+
+## Phase A status
+
+This repository currently contains the **Phase A project skeleton only**:
+
+- Maven / Spring Boot project
+- Docker & Docker Compose (Postgres 15, Redis 7, optional Nginx)
+- Flyway configured (baseline migration — no business tables)
+- Application profiles: `local`, `dev`, `staging`, `prod`
+- Structured logging (`logback-spring.xml`)
+- OpenAPI (springdoc) + Actuator + Prometheus registry
+- Complete package tree per Phase 3 §1 (`package-info.java` placeholders)
+- Testcontainers-ready integration test base + CI workflow
+
+**Not in Phase A:** business modules, APIs, entities, repositories, services.
+
+## Prerequisites
+
+- JDK 21+
+- Docker Desktop (for local Postgres/Redis and Testcontainers)
+- Maven Wrapper (`./mvnw` / `mvnw.cmd`) — no global Maven required
+
+## Project setup
+
+```bash
+# Clone / enter backend repo
+cd foodie-backend
+
+# Optional: local env overrides (never commit secrets)
+cp .env.example .env
+
+# Start infrastructure only
+docker compose up -d postgres redis
+
+# Confirm infra
+docker compose ps
+docker exec foodie-postgres pg_isready -U foodie -d foodie
+docker exec foodie-redis redis-cli ping
+
+# Build
+./mvnw -B -DskipTests package
+
+# Run tests (unit + Testcontainers integration; Docker required for IT)
+./mvnw -B test
+
+# Run API (Flyway baseline runs automatically on startup)
+./mvnw spring-boot:run
+
+# Verify
+curl http://localhost:8080/actuator/health
+# OpenAPI UI: http://localhost:8080/swagger-ui.html
+```
+
+Windows (Git Bash / PowerShell): use `./mvnw.cmd` if `./mvnw` is unavailable.
+
+Full stack (build + run backend container):
+
+```bash
+docker compose up --build
+```
+
+Nginx edge proxy (optional profile):
+
+```bash
+docker compose --profile full up --build
+```
+
+### Flyway
+
+- Migrations live in `src/main/resources/db/migration/`
+- Phase A: `V1__baseline.sql` (no business tables)
+- Applied automatically on application startup when Postgres is reachable
+- Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
+
+## Profiles
+
+| Profile | Purpose |
+|---|---|
+| `local` (default) | Developer machine; Docker Compose Postgres/Redis |
+| `dev` | Shared development environment |
+| `staging` | Pre-production |
+| `prod` | Production (JSON logs, secrets via env) |
+
+Set via `SPRING_PROFILES_ACTIVE`. Secrets are never committed — see `.env.example`.
+
+## Package layout
+
+```
+com.foodie
+├── FoodieApplication
+├── common / shared / config / security / infrastructure
+├── auth | user | restaurant | menu | cart | order | payment
+├── delivery | wallet | notification | review | coupon | admin | analytics
+└── realtime
+```
+
+See Phase 3 §1 for ownership and dependency rules.
+
+## Tests
+
+```bash
+# Unit smoke (no Docker)
+./mvnw -Dtest=FoodieApplicationTests test
+
+# Integration (requires Docker)
+./mvnw test
+```
+
+Integration tests extend `com.foodie.support.AbstractIntegrationTest` (Postgres + Redis Testcontainers).
+
+## CI
+
+GitHub Actions workflow: `.github/workflows/ci.yml` — Java 21, `./mvnw package` + `./mvnw test` on PR/push to `main`/`develop`.
+
+## Next
+
+Module 1 — Authentication (after Phase A review approval).
