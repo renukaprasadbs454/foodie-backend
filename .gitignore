@@ -39,3 +39,6 @@ logs/
 jacoco.exec
 **/surefire-reports/
 **/failsafe-reports/
+
+# Local object storage (Module 2+)
+.local-object-storage/

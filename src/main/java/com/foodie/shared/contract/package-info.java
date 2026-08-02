@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Narrow cross-module read contracts (Phase3 §1 / §2).
  */
 package com.foodie.shared.contract;

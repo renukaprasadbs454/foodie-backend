@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Object storage adapters (S3/R2). Local filesystem adapter for development.
  */
 package com.foodie.infrastructure.storage;

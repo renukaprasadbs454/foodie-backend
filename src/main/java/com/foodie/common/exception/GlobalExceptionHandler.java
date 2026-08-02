@@ -14,6 +14,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -26,6 +28,19 @@ public class GlobalExceptionHandler {
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
             fields.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
+        return ResponseEntity.badRequest().body(ApiResponse.validationFailure(fields));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUpload(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.failure(ErrorCode.PAYLOAD_TOO_LARGE, "Uploaded payload exceeds the server limit."));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException ex) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put(ex.getRequestPartName(), "must not be blank");
         return ResponseEntity.badRequest().body(ApiResponse.validationFailure(fields));
     }
 

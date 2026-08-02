@@ -10,17 +10,18 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Phase A scaffold** tagged `v0.1.0-scaffold`.
 
-**Module 1 — Authentication** implemented (pending review):
+**Module 1 — Authentication** tagged `v0.2.0-auth`.
 
-- Endpoints: `POST /api/v1/auth/otp/request|verify`, `/google`, `/refresh`, `/logout`
-- Flyway: `V2__auth.sql` (`user_credential`, `refresh_token`)
-- Redis: OTP storage, rate limits, session index
-- JWT access tokens + rotating refresh tokens (reuse detection)
-- Google ID token verification via `infrastructure/google`
-- SMS via `infrastructure/sms` (logging adapter; swappable)
-- OpenAPI annotations on Auth controller
+**Module 2 — User (Customer)** implemented (pending review):
 
-**Not yet implemented:** User, Restaurant, Menu, Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
+- Endpoints: `GET|PUT /api/v1/users/me`, address book CRUD, `POST /api/v1/users/me/profile-image`
+- Flyway: `V3__user.sql` (`customer`, `address`)
+- Listens for `UserCredentialCreatedEvent` (CUSTOMER) to create profile
+- Soft-delete addresses (`deleted_at` + Hibernate `@SQLRestriction`)
+- Profile images via `infrastructure/storage` (local adapter; key only in DB)
+- `CustomerSummaryProvider` + `ActiveOrderAddressQuery` (stub until Order)
+
+**Not yet implemented:** Restaurant, Menu, Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -76,7 +77,9 @@ docker compose --profile full up --build
 ### Flyway
 
 - Migrations live in `src/main/resources/db/migration/`
-- Phase A: `V1__baseline.sql` (no business tables)
+- `V1__baseline.sql` — empty baseline
+- `V2__auth.sql` — Module 1
+- `V3__user.sql` — Module 2
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 
