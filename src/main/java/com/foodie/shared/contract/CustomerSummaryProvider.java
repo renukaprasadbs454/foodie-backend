@@ -14,6 +14,9 @@ public interface CustomerSummaryProvider {
     /** Used by Cart (and similar) to resolve the caller's customer without reading User tables. */
     Optional<CustomerSummary> findByUserCredentialId(UUID userCredentialId);
 
+    /** Used by Notification to resolve push recipient without reading User tables. */
+    Optional<UUID> findUserCredentialIdByCustomerId(UUID customerId);
+
     record CustomerSummary(UUID customerId, String fullName, String profileImageKey) {
     }
 }

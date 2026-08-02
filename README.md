@@ -26,17 +26,18 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 8 — Delivery** tagged `v0.9.0-delivery` (frozen).
 
-**Module 9 — Wallet** implemented (pending review):
+**Module 9 — Wallet** tagged `v0.10.0-wallet` (frozen).
 
-- Wallet account + append-only ledger; cached `balance` derived from ledger credits/debits
-- Driver earnings: consumes `DeliveryCompletedEvent` → CREDIT partner (`DELIVERY_ASSIGNMENT`)
-- Refund credits: consumes `RefundProcessedEvent` → CREDIT PLATFORM (`REFUND`)
-- Payout request API creates `REQUESTED` only (bank/UPI settlement out of scope — no ledger DEBIT yet)
-- History: `GET /api/v1/wallet/balance`, `GET /api/v1/wallet/ledger`, `POST /api/v1/wallet/payout-requests`
-- Flyway: `V10__wallet.sql` (`wallet_account`, `ledger_entry`, `payout`)
-- Publishes `WalletCreditedEvent`, `WalletDebitedEvent`, `PayoutRequestedEvent`
+**Module 10 — Notification** implemented (pending review):
 
-**Not yet implemented:** Notification, Review, Coupon, Admin, Analytics.
+- Templated push via `infrastructure/fcm` (stub/live + retry); Email/SMS abstractions present (V1 send path is FCM-only)
+- AFTER_COMMIT + `@Async` domain-event listeners (failures never roll back business txs)
+- History: `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read`
+- Preferences + device token (Redis): `/preferences`, `/device-token`
+- WebSocket: `NotificationDispatchedEvent` → `/topic/user/{id}/notifications`
+- Flyway: `V11__notification.sql` (`notification_template`, `notification_log` + seed templates)
+
+**Not yet implemented:** Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -102,6 +103,7 @@ docker compose --profile full up --build
 - `V8__payment.sql` — Module 7
 - `V9__delivery.sql` — Module 8
 - `V10__wallet.sql` — Module 9
+- `V11__notification.sql` — Module 10
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 
@@ -147,4 +149,4 @@ GitHub Actions workflow: `.github/workflows/ci.yml` — Java 21, `./mvnw package
 
 ## Next
 
-Module 10 — Notification (after Module 9 Wallet review approval).
+Module 11 — Review (after Module 10 Notification review approval).

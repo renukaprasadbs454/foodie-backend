@@ -28,6 +28,12 @@ public class RestaurantSummaryProviderImpl implements RestaurantSummaryProvider 
         return restaurantRepository.findByOwnerUserCredentialId(ownerUserCredentialId).map(this::toSummary);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOwnerUserCredentialIdByRestaurantId(UUID restaurantId) {
+        return restaurantRepository.findById(restaurantId).map(r -> r.getOwnerUserCredentialId());
+    }
+
     private RestaurantSummary toSummary(com.foodie.restaurant.entity.Restaurant r) {
         return new RestaurantSummary(
                 r.getId(),

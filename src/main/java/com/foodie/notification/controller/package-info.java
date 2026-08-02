@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Notification REST controllers (MODULE 10 API Contracts + preference/device-token additives).
  */
 package com.foodie.notification.controller;

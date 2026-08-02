@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Notification service layer — templated send, history, preferences (Phase3 §2.10).
  */
 package com.foodie.notification.service;

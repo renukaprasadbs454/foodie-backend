@@ -80,6 +80,11 @@ foodie:
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
   delivery:
     offer-radius-km: ${FOODIE_DELIVERY_OFFER_RADIUS_KM:5.0}
+  fcm:
+    mode: ${FCM_MODE:stub}
+    project-id: ${FCM_PROJECT_ID:}
+    credentials-path: ${FCM_CREDENTIALS_PATH:}
+    max-attempts: ${FCM_MAX_ATTEMPTS:3}
 
 logging:
   level:

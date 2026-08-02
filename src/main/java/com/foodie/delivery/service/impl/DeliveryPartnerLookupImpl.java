@@ -28,4 +28,11 @@ public class DeliveryPartnerLookupImpl implements DeliveryPartnerLookup {
     public boolean existsById(UUID deliveryPartnerId) {
         return deliveryPartnerRepository.existsById(deliveryPartnerId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findUserCredentialIdByPartnerId(UUID deliveryPartnerId) {
+        return deliveryPartnerRepository.findById(deliveryPartnerId)
+                .map(partner -> partner.getUserCredentialId());
+    }
 }

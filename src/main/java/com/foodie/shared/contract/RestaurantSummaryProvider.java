@@ -13,6 +13,9 @@ public interface RestaurantSummaryProvider {
     /** Used by Menu (and similar) to resolve the caller's owned restaurant without reading Restaurant tables. */
     Optional<RestaurantSummary> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
 
+    /** Used by Notification to resolve restaurant-owner push recipient. */
+    Optional<UUID> findOwnerUserCredentialIdByRestaurantId(UUID restaurantId);
+
     record RestaurantSummary(
             UUID restaurantId,
             String name,
