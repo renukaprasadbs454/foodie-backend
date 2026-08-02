@@ -78,6 +78,8 @@ foodie:
     key-secret: ${RAZORPAY_KEY_SECRET:local-razorpay-key-secret}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
+  delivery:
+    offer-radius-km: ${FOODIE_DELIVERY_OFFER_RADIUS_KM:5.0}
 
 logging:
   level:

@@ -93,6 +93,10 @@ public class Order extends BaseEntity {
         this.status = status;
     }
 
+    public void assignDeliveryPartner(UUID deliveryPartnerId) {
+        this.deliveryPartnerId = deliveryPartnerId;
+    }
+
     public String getOrderNumber() {
         return orderNumber;
     }

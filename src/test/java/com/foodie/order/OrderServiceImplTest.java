@@ -27,6 +27,7 @@ import com.foodie.order.service.impl.OrderServiceImpl;
 import com.foodie.shared.contract.CartCheckoutPort;
 import com.foodie.shared.contract.CustomerAddressOwnershipQuery;
 import com.foodie.shared.contract.CustomerSummaryProvider;
+import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.contract.MenuItemPriceProvider;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import java.math.BigDecimal;
@@ -52,6 +53,7 @@ class OrderServiceImplTest {
     @Mock private CustomerAddressOwnershipQuery addressOwnershipQuery;
     @Mock private RestaurantSummaryProvider restaurantSummaryProvider;
     @Mock private MenuItemPriceProvider menuItemPriceProvider;
+    @Mock private DeliveryPartnerLookup deliveryPartnerLookup;
     @Mock private IdempotencyService idempotencyService;
     @Mock private OrderNumberGenerator orderNumberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -78,6 +80,7 @@ class OrderServiceImplTest {
                 addressOwnershipQuery,
                 restaurantSummaryProvider,
                 menuItemPriceProvider,
+                deliveryPartnerLookup,
                 idempotencyService,
                 orderNumberGenerator,
                 props,

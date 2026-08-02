@@ -27,6 +27,7 @@ import com.foodie.order.statemachine.OrderStateMachine;
 import com.foodie.shared.contract.CartCheckoutPort;
 import com.foodie.shared.contract.CustomerAddressOwnershipQuery;
 import com.foodie.shared.contract.CustomerSummaryProvider;
+import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.contract.MenuItemPriceProvider;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.shared.event.OrderCancelledEvent;
@@ -66,6 +67,7 @@ public class OrderServiceImpl implements OrderService {
     private final CustomerAddressOwnershipQuery addressOwnershipQuery;
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final MenuItemPriceProvider menuItemPriceProvider;
+    private final DeliveryPartnerLookup deliveryPartnerLookup;
     private final IdempotencyService idempotencyService;
     private final OrderNumberGenerator orderNumberGenerator;
     private final OrderProperties orderProperties;
@@ -81,6 +83,7 @@ public class OrderServiceImpl implements OrderService {
             CustomerAddressOwnershipQuery addressOwnershipQuery,
             RestaurantSummaryProvider restaurantSummaryProvider,
             MenuItemPriceProvider menuItemPriceProvider,
+            DeliveryPartnerLookup deliveryPartnerLookup,
             IdempotencyService idempotencyService,
             OrderNumberGenerator orderNumberGenerator,
             OrderProperties orderProperties,
@@ -95,6 +98,7 @@ public class OrderServiceImpl implements OrderService {
         this.addressOwnershipQuery = addressOwnershipQuery;
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.menuItemPriceProvider = menuItemPriceProvider;
+        this.deliveryPartnerLookup = deliveryPartnerLookup;
         this.idempotencyService = idempotencyService;
         this.orderNumberGenerator = orderNumberGenerator;
         this.orderProperties = orderProperties;
@@ -383,9 +387,9 @@ public class OrderServiceImpl implements OrderService {
                 }
             }
             case DELIVERY_PARTNER -> {
-                if (order.getDeliveryPartnerId() == null
-                        || !order.getDeliveryPartnerId().equals(userCredentialId)) {
-                    // Until Delivery module links partner profile IDs, visibility stays closed
+                UUID partnerId = deliveryPartnerLookup.findPartnerIdByUserCredentialId(userCredentialId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+                if (order.getDeliveryPartnerId() == null || !order.getDeliveryPartnerId().equals(partnerId)) {
                     throw new ResourceNotFoundException("Order not found.");
                 }
             }
