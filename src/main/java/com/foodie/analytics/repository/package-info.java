@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Analytics owns no repositories — projections live in owning modules (Phase3 §3.9).
  */
 package com.foodie.analytics.repository;

@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Analytics application services — read-only reporting orchestration.
  */
 package com.foodie.analytics.service;

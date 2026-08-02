@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Analytics mapping is inline in the service layer for V1.
  */
 package com.foodie.analytics.mapper;

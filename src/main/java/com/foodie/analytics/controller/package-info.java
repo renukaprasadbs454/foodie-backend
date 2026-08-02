@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Analytics REST controllers (API Contracts MODULE 14 / Phase3 Module 14).
  */
 package com.foodie.analytics.controller;
