@@ -89,6 +89,11 @@ public class Order extends BaseEntity {
         return order;
     }
 
+    /** Attaches a server-validated coupon after {@link #place}; discount is already in totals. */
+    public void attachCoupon(UUID couponId) {
+        this.couponId = couponId;
+    }
+
     public void transitionTo(OrderStatus status) {
         this.status = status;
     }

@@ -25,6 +25,7 @@ import com.foodie.order.service.IdempotencyService;
 import com.foodie.order.service.OrderNumberGenerator;
 import com.foodie.order.service.impl.OrderServiceImpl;
 import com.foodie.shared.contract.CartCheckoutPort;
+import com.foodie.shared.contract.CouponService;
 import com.foodie.shared.contract.CustomerAddressOwnershipQuery;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
@@ -54,6 +55,7 @@ class OrderServiceImplTest {
     @Mock private RestaurantSummaryProvider restaurantSummaryProvider;
     @Mock private MenuItemPriceProvider menuItemPriceProvider;
     @Mock private DeliveryPartnerLookup deliveryPartnerLookup;
+    @Mock private CouponService couponService;
     @Mock private IdempotencyService idempotencyService;
     @Mock private OrderNumberGenerator orderNumberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -81,6 +83,7 @@ class OrderServiceImplTest {
                 restaurantSummaryProvider,
                 menuItemPriceProvider,
                 deliveryPartnerLookup,
+                couponService,
                 idempotencyService,
                 orderNumberGenerator,
                 props,
@@ -157,19 +160,75 @@ class OrderServiceImplTest {
     }
 
     @Test
-    void createFromCart_couponPresent_throwsCouponInvalid() {
+    void createFromCart_couponPresent_appliesDiscountViaCouponService() {
+        String key = UUID.randomUUID().toString();
+        UUID couponId = UUID.randomUUID();
+        when(idempotencyService.findCachedResponse(any(), any())).thenReturn(Optional.empty());
+        when(orderRepository.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
+        when(addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)).thenReturn(true);
+        when(cartCheckoutPort.getCheckoutSnapshot(credentialId)).thenReturn(
+                new CartCheckoutPort.CartCheckoutSnapshot(
+                        UUID.randomUUID(),
+                        restaurantId,
+                        List.of(new CartCheckoutPort.Line(
+                                menuItemId, null, 2, new BigDecimal("220.00"), new BigDecimal("440.00"))),
+                        new BigDecimal("440.00")
+                ));
+        when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
+                new MenuItemPriceProvider.MenuItemPriceSnapshot(
+                        menuItemId, null, restaurantId, new BigDecimal("220.00"), true, "Paneer Tikka")));
+        when(couponService.apply(eq("WELCOME50"), eq(customerId), eq(restaurantId), any()))
+                .thenReturn(new CouponService.DiscountResult(
+                        couponId, "WELCOME50", new BigDecimal("50.00"), new BigDecimal("390.00")));
+        when(orderNumberGenerator.next()).thenReturn("FD-20260801-000999");
+        when(orderRepository.saveAndFlush(any())).thenAnswer(inv -> {
+            Order order = inv.getArgument(0);
+            setId(order, UUID.randomUUID());
+            return order;
+        });
+        when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any())).thenReturn(List.of());
+        when(orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(any())).thenReturn(List.of());
+
+        OrderResponseDto created = service.createFromCart(
+                credentialId, new CreateOrderRequestDto(addressId, "WELCOME50"), key);
+
+        assertThat(created.discountAmount()).isEqualByComparingTo("50.00");
+        assertThat(created.totalAmount()).isEqualByComparingTo("442.00");
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).saveAndFlush(orderCaptor.capture());
+        assertThat(orderCaptor.getValue().getCouponId()).isEqualTo(couponId);
+    }
+
+    @Test
+    void createFromCart_couponRejectedByCouponService_propagates() {
         when(idempotencyService.findCachedResponse(any(), any())).thenReturn(Optional.empty());
         when(orderRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
                 new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
         when(addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)).thenReturn(true);
+        when(cartCheckoutPort.getCheckoutSnapshot(credentialId)).thenReturn(
+                new CartCheckoutPort.CartCheckoutSnapshot(
+                        UUID.randomUUID(),
+                        restaurantId,
+                        List.of(new CartCheckoutPort.Line(
+                                menuItemId, null, 1, new BigDecimal("100.00"), new BigDecimal("100.00"))),
+                        new BigDecimal("100.00")
+                ));
+        when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
+                new MenuItemPriceProvider.MenuItemPriceSnapshot(
+                        menuItemId, null, restaurantId, new BigDecimal("100.00"), true, "Item")));
+        when(couponService.apply(any(), any(), any(), any()))
+                .thenThrow(new UnprocessableEntityException(
+                        ErrorCode.COUPON_EXPIRED, "Coupon has expired."));
 
         assertThatThrownBy(() -> service.createFromCart(
-                credentialId, new CreateOrderRequestDto(addressId, "WELCOME50"), "k1"))
+                credentialId, new CreateOrderRequestDto(addressId, "OLD50"), "k1"))
                 .isInstanceOf(UnprocessableEntityException.class)
                 .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.COUPON_INVALID);
-        verify(cartCheckoutPort, never()).getCheckoutSnapshot(any());
+                .isEqualTo(ErrorCode.COUPON_EXPIRED);
+        verify(orderRepository, never()).saveAndFlush(any());
     }
 
     @Test

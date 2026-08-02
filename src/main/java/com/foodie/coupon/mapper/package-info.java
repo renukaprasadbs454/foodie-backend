@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Static mappers between Coupon entities/contracts and HTTP DTOs.
  */
 package com.foodie.coupon.mapper;

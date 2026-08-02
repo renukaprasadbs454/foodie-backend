@@ -25,6 +25,7 @@ import com.foodie.order.service.OrderNumberGenerator;
 import com.foodie.order.service.OrderService;
 import com.foodie.order.statemachine.OrderStateMachine;
 import com.foodie.shared.contract.CartCheckoutPort;
+import com.foodie.shared.contract.CouponService;
 import com.foodie.shared.contract.CustomerAddressOwnershipQuery;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
@@ -68,6 +69,7 @@ public class OrderServiceImpl implements OrderService {
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final MenuItemPriceProvider menuItemPriceProvider;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
+    private final CouponService couponService;
     private final IdempotencyService idempotencyService;
     private final OrderNumberGenerator orderNumberGenerator;
     private final OrderProperties orderProperties;
@@ -84,6 +86,7 @@ public class OrderServiceImpl implements OrderService {
             RestaurantSummaryProvider restaurantSummaryProvider,
             MenuItemPriceProvider menuItemPriceProvider,
             DeliveryPartnerLookup deliveryPartnerLookup,
+            CouponService couponService,
             IdempotencyService idempotencyService,
             OrderNumberGenerator orderNumberGenerator,
             OrderProperties orderProperties,
@@ -99,6 +102,7 @@ public class OrderServiceImpl implements OrderService {
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.menuItemPriceProvider = menuItemPriceProvider;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
+        this.couponService = couponService;
         this.idempotencyService = idempotencyService;
         this.orderNumberGenerator = orderNumberGenerator;
         this.orderProperties = orderProperties;
@@ -136,11 +140,6 @@ public class OrderServiceImpl implements OrderService {
             throw new UnprocessableEntityException(
                     ErrorCode.ADDRESS_NOT_OWNED, "Address does not belong to the calling customer.");
         }
-        if (request.couponCode() != null && !request.couponCode().isBlank()) {
-            // Coupon module not in Module 6 scope — codes cannot be applied yet
-            throw new UnprocessableEntityException(
-                    ErrorCode.COUPON_INVALID, "Coupon code is invalid or coupon service is unavailable.");
-        }
 
         CartCheckoutPort.CartCheckoutSnapshot cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
         if (cart.restaurantId() == null || cart.items() == null || cart.items().isEmpty()) {
@@ -166,6 +165,18 @@ public class OrderServiceImpl implements OrderService {
 
         BigDecimal subtotal = cart.subtotal().setScale(2, RoundingMode.HALF_UP);
         BigDecimal discount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        UUID appliedCouponId = null;
+        if (request.couponCode() != null && !request.couponCode().isBlank()) {
+            // Re-validate server-side — client coupon preview is never trusted (API Contracts §6.1).
+            CouponService.DiscountResult applied = couponService.apply(
+                    request.couponCode().trim(),
+                    customerId,
+                    cart.restaurantId(),
+                    subtotal
+            );
+            discount = applied.discountAmount().setScale(2, RoundingMode.HALF_UP);
+            appliedCouponId = applied.couponId();
+        }
         BigDecimal deliveryFee = orderProperties.getDefaultDeliveryFee().setScale(2, RoundingMode.HALF_UP);
         BigDecimal taxAmount = subtotal.multiply(orderProperties.getTaxRate()).setScale(2, RoundingMode.HALF_UP);
         BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
@@ -183,6 +194,9 @@ public class OrderServiceImpl implements OrderService {
                 total,
                 idempotencyKey
         );
+        if (appliedCouponId != null) {
+            order.attachCoupon(appliedCouponId);
+        }
 
         try {
             order = orderRepository.saveAndFlush(order);
@@ -356,7 +370,8 @@ public class OrderServiceImpl implements OrderService {
 
         eventPublisher.publishEvent(OrderStatusChangedEvent.of(order.getId(), from, targetStatus));
         if (targetStatus == OrderStatus.CONFIRMED) {
-            eventPublisher.publishEvent(OrderConfirmedEvent.of(order.getId()));
+            eventPublisher.publishEvent(OrderConfirmedEvent.of(
+                    order.getId(), order.getCustomerId(), order.getCouponId()));
         }
         if (targetStatus == OrderStatus.CANCELLED) {
             eventPublisher.publishEvent(OrderCancelledEvent.of(order.getId(), reason));

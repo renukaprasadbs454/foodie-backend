@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Coupon uses the shared {@code com.foodie.common.exception} hierarchy — no module-local types.
  */
 package com.foodie.coupon.exception;

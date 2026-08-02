@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Coupon REST controllers (API Contracts MODULE 11 + Admin 13.4/13.5 / Phase3 Module 12).
  */
 package com.foodie.coupon.controller;
