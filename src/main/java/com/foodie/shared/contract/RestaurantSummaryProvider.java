@@ -10,6 +10,9 @@ public interface RestaurantSummaryProvider {
 
     Optional<RestaurantSummary> findByRestaurantId(UUID restaurantId);
 
+    /** Used by Menu (and similar) to resolve the caller's owned restaurant without reading Restaurant tables. */
+    Optional<RestaurantSummary> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
+
     record RestaurantSummary(
             UUID restaurantId,
             String name,

@@ -55,6 +55,7 @@ public class SecurityConfig {
                                 "/api/v1/payments/webhook/razorpay"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants", "/api/v1/restaurants/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/menu/restaurants/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

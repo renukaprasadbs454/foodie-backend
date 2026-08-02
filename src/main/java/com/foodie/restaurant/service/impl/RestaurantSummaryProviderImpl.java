@@ -19,12 +19,21 @@ public class RestaurantSummaryProviderImpl implements RestaurantSummaryProvider 
     @Override
     @Transactional(readOnly = true)
     public Optional<RestaurantSummary> findByRestaurantId(UUID restaurantId) {
-        return restaurantRepository.findById(restaurantId)
-                .map(r -> new RestaurantSummary(
-                        r.getId(),
-                        r.getName(),
-                        r.getStatus().name(),
-                        r.getLogoImageKey()
-                ));
+        return restaurantRepository.findById(restaurantId).map(this::toSummary);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RestaurantSummary> findByOwnerUserCredentialId(UUID ownerUserCredentialId) {
+        return restaurantRepository.findByOwnerUserCredentialId(ownerUserCredentialId).map(this::toSummary);
+    }
+
+    private RestaurantSummary toSummary(com.foodie.restaurant.entity.Restaurant r) {
+        return new RestaurantSummary(
+                r.getId(),
+                r.getName(),
+                r.getStatus().name(),
+                r.getLogoImageKey()
+        );
     }
 }
