@@ -110,6 +110,13 @@ public class Restaurant extends BaseEntity {
         this.coverImageKey = coverImageKey;
     }
 
+    /** Denormalized cache — Restaurant owns this write (Phase3 §2.11). */
+    public void updateAvgRating(BigDecimal avgRating) {
+        this.avgRating = avgRating == null
+                ? BigDecimal.ZERO.setScale(1)
+                : avgRating.setScale(1, java.math.RoundingMode.HALF_UP);
+    }
+
     public UUID getOwnerUserCredentialId() {
         return ownerUserCredentialId;
     }

@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Review request DTOs.
  */
 package com.foodie.review.dto.request;

@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Review service layer — submit, list, moderation flags (Phase3 §2.11).
  */
 package com.foodie.review.service;

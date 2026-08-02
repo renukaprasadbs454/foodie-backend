@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Review REST controllers (API Contracts MODULE 12 / Phase3 Module 11).
  */
 package com.foodie.review.controller;
