@@ -72,6 +72,12 @@ foodie:
   order:
     default-delivery-fee: ${FOODIE_DEFAULT_DELIVERY_FEE:30.00}
     tax-rate: ${FOODIE_ORDER_TAX_RATE:0.05}
+  razorpay:
+    mode: ${RAZORPAY_MODE:stub}
+    key-id: ${RAZORPAY_KEY_ID:rzp_test_local}
+    key-secret: ${RAZORPAY_KEY_SECRET:local-razorpay-key-secret}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
+    api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
 
 logging:
   level:

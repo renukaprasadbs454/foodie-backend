@@ -20,14 +20,17 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 5 — Cart** tagged `v0.6.0-cart` (frozen).
 
-**Module 6 — Order** implemented (pending review):
+**Module 6 — Order** tagged `v0.7.0-order` (frozen).
 
-- Place order (cart snapshot, price snapshot, idempotent), get/list, restaurant queue, status transitions
-- State machine + append-only `order_status_event` timeline; `PaymentCapturedEvent` → CONFIRMED
-- Flyway: `V7__order.sql` (`order`, `order_item`, `order_status_event`)
-- Redis: `idempotency:{key}` (~24h), order-number sequence — no order read-cache
+**Module 7 — Payment** implemented (pending review):
 
-**Not yet implemented:** Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
+- Initiate Razorpay order (idempotent), HMAC webhook processing, admin/system refunds
+- Payment state machine (`PENDING→CAPTURED|FAILED`, `CAPTURED→REFUNDED` via webhook)
+- Publishes `PaymentCapturedEvent` / `PaymentFailedEvent` / `RefundProcessedEvent`; consumes `OrderCancelledEvent`
+- Flyway: `V8__payment.sql` (`payment`, `refund_request`)
+- Redis: `idempotency:{key}`, `webhook:razorpay:{eventId}`
+
+**Not yet implemented:** Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -90,6 +93,7 @@ docker compose --profile full up --build
 - `V5__menu.sql` — Module 4
 - `V6__cart.sql` — Module 5
 - `V7__order.sql` — Module 6
+- `V8__payment.sql` — Module 7
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 

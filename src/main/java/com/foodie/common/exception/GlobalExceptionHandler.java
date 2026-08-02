@@ -90,6 +90,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
 
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleExternal(ExternalServiceException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
+    }
+
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ApiResponse<Void>> handleBase(BaseException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
