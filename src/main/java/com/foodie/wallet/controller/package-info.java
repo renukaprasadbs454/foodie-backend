@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Wallet REST controllers (MODULE 9 API Contracts).
  */
 package com.foodie.wallet.controller;

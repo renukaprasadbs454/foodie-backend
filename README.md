@@ -24,17 +24,19 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 7 — Payment** tagged `v0.8.0-payment` (frozen).
 
-**Module 8 — Delivery** implemented (pending review):
+**Module 8 — Delivery** tagged `v0.9.0-delivery` (frozen).
 
-- Delivery partner profile, KYC document upload, availability (online requires VERIFIED KYC)
-- Assignment offers, accept (optimistic lock), pickup/delivery OTP verification
-- Redis GEO live location pings + WebSocket broadcast on `/topic/order/{orderId}`
-- Publishes `DeliveryPartnerAssignedEvent`, `DeliveryCompletedEvent`, `DeliveryLocationUpdatedEvent`
-- Consumes `OrderStatusChangedEvent` (READY_FOR_PICKUP) to create assignments
-- Flyway: `V9__delivery.sql` (`delivery_partner`, `delivery_partner_document`, `delivery_assignment`)
-- Redis: `geo:partners`, `partner:{id}:lastSeen`, `ratelimit:location:{partnerId}`
+**Module 9 — Wallet** implemented (pending review):
 
-**Not yet implemented:** Wallet, Notification, Review, Coupon, Admin, Analytics.
+- Wallet account + append-only ledger; cached `balance` derived from ledger credits/debits
+- Driver earnings: consumes `DeliveryCompletedEvent` → CREDIT partner (`DELIVERY_ASSIGNMENT`)
+- Refund credits: consumes `RefundProcessedEvent` → CREDIT PLATFORM (`REFUND`)
+- Payout request API creates `REQUESTED` only (bank/UPI settlement out of scope — no ledger DEBIT yet)
+- History: `GET /api/v1/wallet/balance`, `GET /api/v1/wallet/ledger`, `POST /api/v1/wallet/payout-requests`
+- Flyway: `V10__wallet.sql` (`wallet_account`, `ledger_entry`, `payout`)
+- Publishes `WalletCreditedEvent`, `WalletDebitedEvent`, `PayoutRequestedEvent`
+
+**Not yet implemented:** Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -99,6 +101,7 @@ docker compose --profile full up --build
 - `V7__order.sql` — Module 6
 - `V8__payment.sql` — Module 7
 - `V9__delivery.sql` — Module 8
+- `V10__wallet.sql` — Module 9
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 
@@ -144,4 +147,4 @@ GitHub Actions workflow: `.github/workflows/ci.yml` — Java 21, `./mvnw package
 
 ## Next
 
-Module 1 — Authentication (after Phase A review approval).
+Module 10 — Notification (after Module 9 Wallet review approval).

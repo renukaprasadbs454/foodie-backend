@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Wallet-owned entities: wallet_account, ledger_entry, payout.
  */
 package com.foodie.wallet.entity;
