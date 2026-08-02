@@ -12,16 +12,17 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 1 — Authentication** tagged `v0.2.0-auth`.
 
-**Module 2 — User (Customer)** implemented (pending review):
+**Module 2 — User (Customer)** tagged `v0.3.0-user`.
 
-- Endpoints: `GET|PUT /api/v1/users/me`, address book CRUD, `POST /api/v1/users/me/profile-image`
-- Flyway: `V3__user.sql` (`customer`, `address`)
-- Listens for `UserCredentialCreatedEvent` (CUSTOMER) to create profile
-- Soft-delete addresses (`deleted_at` + Hibernate `@SQLRestriction`)
-- Profile images via `infrastructure/storage` (local adapter; key only in DB)
-- `CustomerSummaryProvider` + `ActiveOrderAddressQuery` (stub until Order)
+**Module 3 — Restaurant** implemented (pending review):
 
-**Not yet implemented:** Restaurant, Menu, Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
+- Public search/detail; owner register/update; documents + logo/cover images
+- Flyway: `V4__restaurant.sql` (`restaurant_address`, `restaurant`, `restaurant_document`)
+- Status PENDING→APPROVED/SUSPENDED via service methods for Admin module
+- Redis read cache `restaurant:{id}` + list keys (10 min, write-through evict)
+- `RestaurantSummaryProvider`; events: Created / Approved / Suspended
+
+**Not yet implemented:** Menu, Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -80,6 +81,7 @@ docker compose --profile full up --build
 - `V1__baseline.sql` — empty baseline
 - `V2__auth.sql` — Module 1
 - `V3__user.sql` — Module 2
+- `V4__restaurant.sql` — Module 3
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 

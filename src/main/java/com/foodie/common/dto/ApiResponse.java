@@ -16,6 +16,10 @@ public record ApiResponse<T>(
         return new ApiResponse<>(true, data, null, MetaInfo.of(currentRequestId()));
     }
 
+    public static <T> ApiResponse<T> success(T data, PaginationMeta pagination) {
+        return new ApiResponse<>(true, data, null, MetaInfo.of(currentRequestId(), pagination));
+    }
+
     public static <T> ApiResponse<T> failure(ErrorCode code, String message) {
         return new ApiResponse<>(false, null, new ErrorBody(code.name(), message, null), MetaInfo.of(currentRequestId()));
     }

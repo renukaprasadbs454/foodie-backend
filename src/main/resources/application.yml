@@ -26,8 +26,8 @@ spring:
     time-zone: UTC
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 10MB
+      max-request-size: 12MB
 
 server:
   port: ${SERVER_PORT:8080}
@@ -66,6 +66,8 @@ foodie:
     client-id: ${GOOGLE_OAUTH_CLIENT_ID:local-google-client-id.apps.googleusercontent.com}
   storage:
     local-root: ${FOODIE_LOCAL_STORAGE_ROOT:./.local-object-storage}
+  restaurant:
+    default-commission-pct: ${FOODIE_DEFAULT_COMMISSION_PCT:18.00}
 
 logging:
   level:
