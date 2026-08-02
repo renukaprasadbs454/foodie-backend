@@ -51,6 +51,16 @@ public class UserCredential extends BaseEntity {
         return credential;
     }
 
+    /** Provisioned by Admin module via {@code AdminCredentialPort} — never OTP self-signup. */
+    public static UserCredential adminProvision(String phoneNumber, String email) {
+        UserCredential credential = new UserCredential();
+        credential.phoneNumber = phoneNumber;
+        credential.email = email;
+        credential.userType = UserType.ADMIN;
+        credential.active = true;
+        return credential;
+    }
+
     public String getPhoneNumber() {
         return phoneNumber;
     }

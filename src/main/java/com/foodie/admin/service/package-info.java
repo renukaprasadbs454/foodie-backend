@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Admin services — RBAC, audit, and operational orchestration via domain module services.
  */
 package com.foodie.admin.service;

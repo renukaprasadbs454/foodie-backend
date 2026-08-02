@@ -28,16 +28,18 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 9 — Wallet** tagged `v0.10.0-wallet` (frozen).
 
-**Module 10 — Notification** implemented (pending review):
+**Module 10 — Notification** tagged `v0.11.0-notification` (frozen).
 
-- Templated push via `infrastructure/fcm` (stub/live + retry); Email/SMS abstractions present (V1 send path is FCM-only)
-- AFTER_COMMIT + `@Async` domain-event listeners (failures never roll back business txs)
-- History: `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read`
-- Preferences + device token (Redis): `/preferences`, `/device-token`
-- WebSocket: `NotificationDispatchedEvent` → `/topic/user/{id}/notifications`
-- Flyway: `V11__notification.sql` (`notification_template`, `notification_log` + seed templates)
+**Module 11 — Review** implemented (pending review):
 
-**Not yet implemented:** Review, Coupon, Admin, Analytics.
+- Submit review for DELIVERED orders only; one review per order (`POST /api/v1/orders/{id}/review`)
+- Public restaurant history (`GET /api/v1/restaurants/{id}/reviews`) — no customer identity
+- Restaurant + optional delivery-partner ratings on the same `review` row
+- Rating aggregation: `ReviewSubmittedEvent` → Restaurant recalculates `avg_rating` via shared contracts
+- Moderation flags: Redis-backed (no Phase3 DB columns); public list hides flagged
+- Flyway: `V12__review.sql`
+
+**Not yet implemented:** Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -104,6 +106,7 @@ docker compose --profile full up --build
 - `V9__delivery.sql` — Module 8
 - `V10__wallet.sql` — Module 9
 - `V11__notification.sql` — Module 10
+- `V12__review.sql` — Module 11
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 
@@ -149,4 +152,4 @@ GitHub Actions workflow: `.github/workflows/ci.yml` — Java 21, `./mvnw package
 
 ## Next
 
-Module 11 — Review (after Module 10 Notification review approval).
+Module 12 — Coupon (after Module 11 Review review approval).

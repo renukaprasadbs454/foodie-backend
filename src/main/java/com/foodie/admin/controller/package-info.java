@@ -1,5 +1,4 @@
 /**
- * Package reserved per Phase3_Backend_Architecture.md §1.
- * Phase A scaffold only — no business implementations yet.
+ * Admin REST controllers (API Contracts MODULE 13 / Phase3 Module 13).
  */
 package com.foodie.admin.controller;

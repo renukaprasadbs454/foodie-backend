@@ -45,7 +45,7 @@ public class PaymentController {
     }
 
     @PostMapping("/{paymentId}/refund")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
     @Operation(summary = "Initiate refund (async; finalized by webhook)")
     public ResponseEntity<ApiResponse<RefundInitiationResponseDto>> refund(
             @AuthenticationPrincipal AuthPrincipal principal,
