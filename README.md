@@ -6,20 +6,21 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Specification:** `Docs/Phase3_Backend_Architecture.md` (v1.1) · `Docs/04_API_Contracts.md` (v1.1) + `Docs/04_API_Contracts.md.docx` (v1.0)
 
-## Phase A status
+## Current status
 
-This repository currently contains the **Phase A project skeleton only**:
+**Phase A scaffold** tagged `v0.1.0-scaffold`.
 
-- Maven / Spring Boot project
-- Docker & Docker Compose (Postgres 15, Redis 7, optional Nginx)
-- Flyway configured (baseline migration — no business tables)
-- Application profiles: `local`, `dev`, `staging`, `prod`
-- Structured logging (`logback-spring.xml`)
-- OpenAPI (springdoc) + Actuator + Prometheus registry
-- Complete package tree per Phase 3 §1 (`package-info.java` placeholders)
-- Testcontainers-ready integration test base + CI workflow
+**Module 1 — Authentication** implemented (pending review):
 
-**Not in Phase A:** business modules, APIs, entities, repositories, services.
+- Endpoints: `POST /api/v1/auth/otp/request|verify`, `/google`, `/refresh`, `/logout`
+- Flyway: `V2__auth.sql` (`user_credential`, `refresh_token`)
+- Redis: OTP storage, rate limits, session index
+- JWT access tokens + rotating refresh tokens (reuse detection)
+- Google ID token verification via `infrastructure/google`
+- SMS via `infrastructure/sms` (logging adapter; swappable)
+- OpenAPI annotations on Auth controller
+
+**Not yet implemented:** User, Restaurant, Menu, Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 

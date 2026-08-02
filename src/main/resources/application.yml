@@ -50,6 +50,17 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
 
+foodie:
+  jwt:
+    # Override via JWT_SECRET in non-local environments (min 32 bytes for HS256)
+    secret: ${JWT_SECRET:local-dev-only-change-me-foodie-jwt-secret-key-32b}
+    access-token-ttl-seconds: 900
+    refresh-token-ttl-customer-seconds: 2592000
+    refresh-token-ttl-partner-seconds: 1209600
+    refresh-token-ttl-admin-seconds: 604800
+  google:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:local-google-client-id.apps.googleusercontent.com}
+
 logging:
   level:
     root: INFO

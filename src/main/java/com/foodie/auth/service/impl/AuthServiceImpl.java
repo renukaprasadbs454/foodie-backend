@@ -1,0 +1,255 @@
+package com.foodie.auth.service.impl;
+
+import com.foodie.auth.dto.request.GoogleAuthRequestDto;
+import com.foodie.auth.dto.request.VerifyOtpRequestDto;
+import com.foodie.auth.dto.response.TokenPairResponseDto;
+import com.foodie.auth.entity.RefreshToken;
+import com.foodie.auth.entity.UserCredential;
+import com.foodie.auth.exception.InvalidOtpException;
+import com.foodie.auth.exception.OtpExpiredException;
+import com.foodie.auth.repository.RefreshTokenRepository;
+import com.foodie.auth.repository.UserCredentialRepository;
+import com.foodie.auth.service.AuthService;
+import com.foodie.common.enums.UserType;
+import com.foodie.common.exception.BadRequestException;
+import com.foodie.common.exception.ErrorCode;
+import com.foodie.common.exception.ForbiddenException;
+import com.foodie.common.exception.UnauthorizedException;
+import com.foodie.common.util.HashUtils;
+import com.foodie.infrastructure.google.GoogleTokenVerifier;
+import com.foodie.infrastructure.sms.SmsSender;
+import com.foodie.security.jwt.JwtTokenProvider;
+import com.foodie.security.ratelimit.RedisRateLimiter;
+import com.foodie.shared.event.UserCredentialCreatedEvent;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
+
+    private static final Duration OTP_TTL = Duration.ofMinutes(5);
+    private static final Duration OTP_REQUEST_WINDOW = Duration.ofMinutes(10);
+    private static final Duration OTP_VERIFY_WINDOW = Duration.ofMinutes(10);
+    private static final int OTP_REQUEST_LIMIT = 5;
+    private static final int OTP_VERIFY_LIMIT = 10;
+
+    private final UserCredentialRepository userCredentialRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final RedisRateLimiter rateLimiter;
+    private final PasswordEncoder passwordEncoder;
+    private final SmsSender smsSender;
+    private final GoogleTokenVerifier googleTokenVerifier;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public AuthServiceImpl(
+            UserCredentialRepository userCredentialRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            StringRedisTemplate redisTemplate,
+            RedisRateLimiter rateLimiter,
+            PasswordEncoder passwordEncoder,
+            SmsSender smsSender,
+            GoogleTokenVerifier googleTokenVerifier,
+            JwtTokenProvider jwtTokenProvider,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this.userCredentialRepository = userCredentialRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.redisTemplate = redisTemplate;
+        this.rateLimiter = rateLimiter;
+        this.passwordEncoder = passwordEncoder;
+        this.smsSender = smsSender;
+        this.googleTokenVerifier = googleTokenVerifier;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Override
+    public void requestOtp(String phoneNumber) {
+        rateLimiter.check("ratelimit:otp-request:" + phoneNumber, OTP_REQUEST_LIMIT, OTP_REQUEST_WINDOW);
+
+        String otp = HashUtils.sixDigitOtp();
+        String otpHash = passwordEncoder.encode(otp);
+        redisTemplate.opsForValue().set(otpKey(phoneNumber), otpHash, OTP_TTL);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                smsSender.sendOtp(phoneNumber, otp);
+            } catch (Exception ex) {
+                log.error("SMS dispatch failed for OTP request", ex);
+            }
+        });
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto verifyOtp(VerifyOtpRequestDto request) {
+        rateLimiter.check("ratelimit:otp-verify:" + request.phoneNumber(), OTP_VERIFY_LIMIT, OTP_VERIFY_WINDOW);
+
+        String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
+        if (storedHash == null) {
+            throw new OtpExpiredException();
+        }
+        if (!passwordEncoder.matches(request.otp(), storedHash)) {
+            throw new InvalidOtpException();
+        }
+        redisTemplate.delete(otpKey(request.phoneNumber()));
+
+        Optional<UserCredential> existing = userCredentialRepository.findByPhoneNumber(request.phoneNumber());
+        boolean isNewUser = existing.isEmpty();
+        UserCredential credential;
+        if (isNewUser) {
+            if (request.userType() == null) {
+                throw new BadRequestException(ErrorCode.USER_TYPE_REQUIRED, "userType is required for first-time signup.");
+            }
+            if (request.userType() == UserType.ADMIN) {
+                throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
+            }
+            credential = userCredentialRepository.save(
+                    UserCredential.phoneSignup(request.phoneNumber(), request.userType())
+            );
+            eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
+                    credential.getId(),
+                    credential.getUserType(),
+                    credential.getPhoneNumber(),
+                    credential.getEmail()
+            ));
+        } else {
+            credential = existing.get();
+        }
+
+        assertActive(credential);
+        if (credential.getUserType() == UserType.RESTAURANT) {
+            log.info("Restaurant login for userCredentialId={}", credential.getId());
+        }
+        return issueTokenPair(credential, request.deviceInfo(), isNewUser);
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto authenticateWithGoogle(GoogleAuthRequestDto request) {
+        var identity = googleTokenVerifier.verify(request.idToken());
+        Optional<UserCredential> existing = userCredentialRepository.findByGoogleId(identity.googleId());
+        boolean isNewUser = existing.isEmpty();
+        UserCredential credential;
+        if (isNewUser) {
+            credential = userCredentialRepository.save(
+                    UserCredential.googleSignup(identity.googleId(), identity.email())
+            );
+            eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
+                    credential.getId(),
+                    credential.getUserType(),
+                    credential.getPhoneNumber(),
+                    credential.getEmail()
+            ));
+        } else {
+            credential = existing.get();
+        }
+        assertActive(credential);
+        return issueTokenPair(credential, request.deviceInfo(), isNewUser);
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto refresh(String refreshTokenRaw) {
+        String hash = HashUtils.sha256Hex(refreshTokenRaw);
+        Optional<RefreshToken> found = refreshTokenRepository.findByTokenHash(hash);
+        if (found.isEmpty()) {
+            throw new UnauthorizedException(ErrorCode.INVALID_REFRESH_TOKEN, "Invalid refresh token.");
+        }
+        RefreshToken existing = found.get();
+        if (existing.isRevoked()) {
+            log.warn("Refresh token reuse detected for userCredentialId={}", existing.getUserCredential().getId());
+            revokeAllForUser(existing.getUserCredential().getId());
+            throw new UnauthorizedException(ErrorCode.TOKEN_REUSE_DETECTED, "Refresh token reuse detected. Please log in again.");
+        }
+        if (existing.getExpiresAt().isBefore(Instant.now())) {
+            existing.revoke();
+            throw new UnauthorizedException(ErrorCode.INVALID_REFRESH_TOKEN, "Refresh token expired.");
+        }
+
+        UserCredential credential = existing.getUserCredential();
+        assertActive(credential);
+
+        existing.revoke();
+        TokenPairResponseDto pair = issueTokenPair(credential, existing.getDeviceInfo(), false);
+        RefreshToken replacement = refreshTokenRepository.findByTokenHash(HashUtils.sha256Hex(pair.refreshToken()))
+                .orElseThrow();
+        existing.linkReplacement(replacement.getId());
+        return pair;
+    }
+
+    @Override
+    @Transactional
+    public void revoke(String refreshTokenRaw) {
+        String hash = HashUtils.sha256Hex(refreshTokenRaw);
+        refreshTokenRepository.findByTokenHash(hash).ifPresent(token -> {
+            if (!token.isRevoked()) {
+                token.revoke();
+            }
+            redisTemplate.delete(sessionKey(hash));
+        });
+    }
+
+    @Override
+    @Transactional
+    public void revokeAllForUser(UUID userCredentialId) {
+        refreshTokenRepository.findByUserCredentialIdAndRevokedFalse(userCredentialId)
+                .forEach(token -> {
+                    token.revoke();
+                    redisTemplate.delete(sessionKey(token.getTokenHash()));
+                });
+        refreshTokenRepository.revokeAllActiveForUser(userCredentialId);
+    }
+
+    private TokenPairResponseDto issueTokenPair(UserCredential credential, String deviceInfo, boolean isNewUser) {
+        String accessToken = jwtTokenProvider.createAccessToken(credential.getId(), credential.getUserType());
+        String refreshRaw = HashUtils.randomToken();
+        String refreshHash = HashUtils.sha256Hex(refreshRaw);
+        Instant expiresAt = Instant.now().plusSeconds(jwtTokenProvider.refreshTtlSeconds(credential.getUserType()));
+
+        RefreshToken refreshToken = refreshTokenRepository.save(
+                RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo)
+        );
+
+        Duration sessionTtl = Duration.between(Instant.now(), expiresAt);
+        if (!sessionTtl.isNegative() && !sessionTtl.isZero()) {
+            redisTemplate.opsForValue().set(sessionKey(refreshHash), credential.getId().toString(), sessionTtl);
+        }
+
+        return new TokenPairResponseDto(
+                accessToken,
+                refreshRaw,
+                jwtTokenProvider.accessTokenTtlSeconds(),
+                credential.getUserType(),
+                isNewUser
+        );
+    }
+
+    private void assertActive(UserCredential credential) {
+        if (!credential.isActive()) {
+            throw new ForbiddenException(ErrorCode.ACCOUNT_DEACTIVATED, "Account is deactivated.");
+        }
+    }
+
+    private static String otpKey(String phoneNumber) {
+        return "otp:" + phoneNumber;
+    }
+
+    private static String sessionKey(String tokenHash) {
+        return "session:" + tokenHash;
+    }
+}
