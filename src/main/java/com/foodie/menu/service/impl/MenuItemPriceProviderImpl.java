@@ -49,7 +49,8 @@ public class MenuItemPriceProviderImpl implements MenuItemPriceProvider {
                 resolvedVariantId,
                 item.getRestaurantId(),
                 unitPrice,
-                item.isAvailable()
+                item.isAvailable(),
+                item.getName()
         ));
     }
 }

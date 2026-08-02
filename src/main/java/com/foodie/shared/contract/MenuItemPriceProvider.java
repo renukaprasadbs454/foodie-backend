@@ -16,7 +16,8 @@ public interface MenuItemPriceProvider {
             UUID variantId,
             UUID restaurantId,
             BigDecimal unitPrice,
-            boolean available
+            boolean available,
+            String itemName
     ) {
     }
 }

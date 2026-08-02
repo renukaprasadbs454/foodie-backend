@@ -9,6 +9,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
+        auto_quote_keyword: true
         jdbc:
           time_zone: UTC
         format_sql: true
@@ -68,6 +69,9 @@ foodie:
     local-root: ${FOODIE_LOCAL_STORAGE_ROOT:./.local-object-storage}
   restaurant:
     default-commission-pct: ${FOODIE_DEFAULT_COMMISSION_PCT:18.00}
+  order:
+    default-delivery-fee: ${FOODIE_DEFAULT_DELIVERY_FEE:30.00}
+    tax-rate: ${FOODIE_ORDER_TAX_RATE:0.05}
 
 logging:
   level:

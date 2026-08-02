@@ -89,7 +89,7 @@ class CartServiceImplTest {
         UUID menuItemId = UUID.randomUUID();
         when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
-                        menuItemId, null, restaurantA, new BigDecimal("100.00"), true)));
+                        menuItemId, null, restaurantA, new BigDecimal("100.00"), true, "Item")));
         when(cartItemRepository.findByCartIdAndMenuItemIdAndVariantIdIsNull(cart.getId(), menuItemId))
                 .thenReturn(Optional.empty());
         when(cartItemRepository.save(any())).thenAnswer(inv -> {
@@ -122,7 +122,7 @@ class CartServiceImplTest {
         UUID menuItemId = UUID.randomUUID();
         when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
-                        menuItemId, null, restaurantB, new BigDecimal("50.00"), true)));
+                        menuItemId, null, restaurantB, new BigDecimal("50.00"), true, "Item")));
 
         assertThatThrownBy(() -> service.addItem(
                 credentialId, new AddCartItemRequestDto(menuItemId, null, 1, null)))
@@ -147,7 +147,7 @@ class CartServiceImplTest {
         UUID menuItemId = UUID.randomUUID();
         when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
-                        menuItemId, null, restaurantA, new BigDecimal("50.00"), false)));
+                        menuItemId, null, restaurantA, new BigDecimal("50.00"), false, "Item")));
 
         assertThatThrownBy(() -> service.addItem(
                 credentialId, new AddCartItemRequestDto(menuItemId, null, 1, null)))
@@ -169,7 +169,7 @@ class CartServiceImplTest {
         setId(existing, UUID.randomUUID());
         when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
-                        menuItemId, null, restaurantA, new BigDecimal("10.00"), true)));
+                        menuItemId, null, restaurantA, new BigDecimal("10.00"), true, "Item")));
         when(cartItemRepository.findByCartIdAndMenuItemIdAndVariantIdIsNull(cart.getId(), menuItemId))
                 .thenReturn(Optional.of(existing));
         when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()))

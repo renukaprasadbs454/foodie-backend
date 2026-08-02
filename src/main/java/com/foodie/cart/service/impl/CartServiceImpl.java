@@ -14,6 +14,7 @@ import com.foodie.common.exception.ConflictException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
+import com.foodie.shared.contract.CartCheckoutPort;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.MenuItemPriceProvider;
 import java.math.BigDecimal;
@@ -25,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class CartServiceImpl implements CartService {
+public class CartServiceImpl implements CartService, CartCheckoutPort {
 
     private static final int MAX_QUANTITY = 20;
 
@@ -129,6 +130,28 @@ public class CartServiceImpl implements CartService {
         Cart cart = getOrCreateCart(resolveCustomerId(userCredentialId));
         cartItemRepository.deleteAllByCartId(cart.getId());
         cart.clearRestaurant();
+    }
+
+    @Override
+    @Transactional
+    public CartCheckoutSnapshot getCheckoutSnapshot(UUID userCredentialId) {
+        CartResponseDto view = getOrCreate(userCredentialId);
+        List<Line> lines = view.items().stream()
+                .map(item -> new Line(
+                        item.menuItemId(),
+                        item.variantId(),
+                        item.quantity(),
+                        item.unitPrice(),
+                        item.lineTotal()
+                ))
+                .toList();
+        return new CartCheckoutSnapshot(view.cartId(), view.restaurantId(), lines, view.subtotal());
+    }
+
+    @Override
+    @Transactional
+    public void clearCart(UUID userCredentialId) {
+        clear(userCredentialId);
     }
 
     private Cart getOrCreateCart(UUID customerId) {

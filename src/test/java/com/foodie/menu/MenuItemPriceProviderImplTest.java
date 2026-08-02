@@ -50,6 +50,7 @@ class MenuItemPriceProviderImplTest {
         assertThat(snap.get().unitPrice()).isEqualByComparingTo("220.00");
         assertThat(snap.get().variantId()).isNull();
         assertThat(snap.get().available()).isTrue();
+        assertThat(snap.get().itemName()).isEqualTo("Item");
     }
 
     @Test
