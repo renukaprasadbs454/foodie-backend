@@ -75,7 +75,11 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(ConflictException.class)
-    public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleConflict(ConflictException ex) {
+        if (ex.getData() != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage(), ex.getData()));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }

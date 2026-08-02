@@ -19,7 +19,16 @@ public class CustomerSummaryProviderImpl implements CustomerSummaryProvider {
     @Override
     @Transactional(readOnly = true)
     public Optional<CustomerSummary> findByCustomerId(UUID customerId) {
-        return customerRepository.findById(customerId)
-                .map(c -> new CustomerSummary(c.getId(), c.getFullName(), c.getProfileImageKey()));
+        return customerRepository.findById(customerId).map(this::toSummary);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<CustomerSummary> findByUserCredentialId(UUID userCredentialId) {
+        return customerRepository.findByUserCredentialId(userCredentialId).map(this::toSummary);
+    }
+
+    private CustomerSummary toSummary(com.foodie.user.entity.Customer c) {
+        return new CustomerSummary(c.getId(), c.getFullName(), c.getProfileImageKey());
     }
 }

@@ -24,6 +24,11 @@ public record ApiResponse<T>(
         return new ApiResponse<>(false, null, new ErrorBody(code.name(), message, null), MetaInfo.of(currentRequestId()));
     }
 
+    /** Failure that still carries a data payload (e.g. CART_RESTAURANT_CONFLICT suggestedAction). */
+    public static <T> ApiResponse<T> failure(ErrorCode code, String message, T data) {
+        return new ApiResponse<>(false, data, new ErrorBody(code.name(), message, null), MetaInfo.of(currentRequestId()));
+    }
+
     public static <T> ApiResponse<T> validationFailure(Map<String, String> fields) {
         return new ApiResponse<>(
                 false,

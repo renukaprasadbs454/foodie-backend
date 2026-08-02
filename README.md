@@ -16,14 +16,16 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 3 — Restaurant** tagged `v0.4.0-restaurant`.
 
-**Module 4 — Menu** implemented (pending review):
+**Module 4 — Menu** tagged `v0.5.0-menu`.
 
-- Public full menu; owner categories, items, variants, availability, item images
-- Flyway: `V5__menu.sql` (`category`, `menu_item`, `variant`) with soft-delete
-- Redis `menu:{restaurantId}` (10 min, write-through evict)
-- `MenuItemPriceProvider` + `MenuItemPriceChangedEvent`
+**Module 5 — Cart** implemented (pending review):
 
-**Not yet implemented:** Cart, Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
+- Get-or-create cart, add/upsert item, remove item, clear cart
+- Live price/subtotal via `MenuItemPriceProvider`; single-restaurant constraint
+- Flyway: `V6__cart.sql` (`cart`, `cart_item`)
+- No Redis cart cache (not defined in Phase3 §6)
+
+**Not yet implemented:** Order, Payment, Delivery, Wallet, Notification, Review, Coupon, Admin, Analytics.
 
 ## Prerequisites
 
@@ -84,6 +86,7 @@ docker compose --profile full up --build
 - `V3__user.sql` — Module 2
 - `V4__restaurant.sql` — Module 3
 - `V5__menu.sql` — Module 4
+- `V6__cart.sql` — Module 5
 - Applied automatically on application startup when Postgres is reachable
 - Verify: `docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT * FROM flyway_schema_history;"`
 
