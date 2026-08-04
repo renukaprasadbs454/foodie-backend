@@ -25,15 +25,24 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(UUID userId, UserType userType) {
+        return createAccessToken(userId, userType, null);
+    }
+
+    /**
+     * @param adminRole optional Admin role claim (SUPER_ADMIN / OPS / FINANCE / SUPPORT); ignored when null
+     */
+    public String createAccessToken(UUID userId, UserType userType, String adminRole) {
         Instant now = Instant.now();
         Instant expiry = now.plusSeconds(properties.accessTokenTtlSeconds());
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(userId.toString())
                 .claim("userType", userType.name())
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(expiry))
-                .signWith(secretKey)
-                .compact();
+                .expiration(Date.from(expiry));
+        if (adminRole != null && !adminRole.isBlank()) {
+            builder.claim("adminRole", adminRole);
+        }
+        return builder.signWith(secretKey).compact();
     }
 
     public AuthPrincipal parse(String token) {

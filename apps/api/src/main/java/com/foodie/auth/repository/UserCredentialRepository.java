@@ -13,4 +13,6 @@ public interface UserCredentialRepository extends JpaRepository<UserCredential, 
     List<UserCredential> findAllByPhoneNumber(String phoneNumber);
 
     Optional<UserCredential> findByGoogleId(String googleId);
+
+    Optional<UserCredential> findByEmailIgnoreCaseAndUserType(String email, UserType userType);
 }

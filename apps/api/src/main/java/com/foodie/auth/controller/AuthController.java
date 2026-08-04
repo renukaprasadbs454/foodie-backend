@@ -1,5 +1,6 @@
 package com.foodie.auth.controller;
 
+import com.foodie.auth.dto.request.AdminLoginRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
 import com.foodie.auth.dto.request.LogoutRequestDto;
 import com.foodie.auth.dto.request.RefreshTokenRequestDto;
@@ -56,6 +57,25 @@ public class AuthController {
             @Valid @RequestBody GoogleAuthRequestDto request
     ) {
         return ResponseEntity.ok(ApiResponse.success(authService.authenticateWithGoogle(request)));
+    }
+
+    @PostMapping("/login")
+    @Operation(
+            summary = "Admin email/password login",
+            description = "Authenticates ADMIN credentials. Reuses the platform JWT + refresh-token pair. "
+                    + "Customer/Restaurant/Delivery must not call this endpoint."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authenticated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation failed"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid credentials"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Account deactivated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limited")
+    })
+    public ResponseEntity<ApiResponse<TokenPairResponseDto>> login(
+            @Valid @RequestBody AdminLoginRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(authService.loginAdmin(request)));
     }
 
     @PostMapping("/refresh")
