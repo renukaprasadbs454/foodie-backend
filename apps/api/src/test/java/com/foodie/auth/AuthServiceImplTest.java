@@ -6,11 +6,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.foodie.auth.dto.request.AdminLoginRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
@@ -23,10 +26,13 @@ import com.foodie.auth.service.impl.AuthServiceImpl;
 import com.foodie.common.enums.UserType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
+import com.foodie.common.exception.ForbiddenException;
+import com.foodie.common.exception.UnauthorizedException;
 import com.foodie.infrastructure.google.GoogleTokenVerifier;
 import com.foodie.infrastructure.sms.SmsSender;
 import com.foodie.security.jwt.JwtTokenProvider;
 import com.foodie.security.ratelimit.RedisRateLimiter;
+import com.foodie.shared.contract.AdminIdentityQueryPort;
 import com.foodie.shared.event.UserCredentialCreatedEvent;
 import java.time.Duration;
 import java.util.Optional;
@@ -56,13 +62,14 @@ class AuthServiceImplTest {
     @Mock private GoogleTokenVerifier googleTokenVerifier;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private AdminIdentityQueryPort adminIdentityQueryPort;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthServiceImpl authService;
 
     @BeforeEach
     void setUp() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         authService = new AuthServiceImpl(
                 userCredentialRepository,
                 refreshTokenRepository,
@@ -72,7 +79,8 @@ class AuthServiceImplTest {
                 smsSender,
                 googleTokenVerifier,
                 jwtTokenProvider,
-                eventPublisher
+                eventPublisher,
+                adminIdentityQueryPort
         );
     }
 
@@ -111,7 +119,6 @@ class AuthServiceImplTest {
     @Test
     void verifyOtp_newUserWithoutUserType_throwsUserTypeRequired() {
         doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-        when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("123456"));
 
         assertThatThrownBy(() -> authService.verifyOtp(
                 new VerifyOtpRequestDto("+919876543210", "123456", null, null)
@@ -133,7 +140,7 @@ class AuthServiceImplTest {
                 .thenReturn(java.util.List.of(credential));
         when(userCredentialRepository.findByPhoneNumberAndUserType("+919876543210", UserType.CUSTOMER))
                 .thenReturn(Optional.of(credential));
-        when(jwtTokenProvider.createAccessToken(userId, UserType.CUSTOMER)).thenReturn("access");
+        when(jwtTokenProvider.createAccessToken(eq(userId), eq(UserType.CUSTOMER), isNull())).thenReturn("access");
         when(jwtTokenProvider.accessTokenTtlSeconds()).thenReturn(900L);
         when(jwtTokenProvider.refreshTtlSeconds(UserType.CUSTOMER)).thenReturn(2592000L);
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -145,6 +152,8 @@ class AuthServiceImplTest {
         assertThat(response.accessToken()).isEqualTo("access");
         assertThat(response.userType()).isEqualTo(UserType.CUSTOMER);
         assertThat(response.isNewUser()).isFalse();
+        assertThat(response.userId()).isEqualTo(userId);
+        assertThat(response.role()).isNull();
         assertThat(response.refreshToken()).isNotBlank();
         verify(redisTemplate).delete("otp:+919876543210");
     }
@@ -166,7 +175,7 @@ class AuthServiceImplTest {
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
             return saved;
         });
-        when(jwtTokenProvider.createAccessToken(any(), eq(UserType.RESTAURANT))).thenReturn("access-rest");
+        when(jwtTokenProvider.createAccessToken(any(), eq(UserType.RESTAURANT), isNull())).thenReturn("access-rest");
         when(jwtTokenProvider.accessTokenTtlSeconds()).thenReturn(900L);
         when(jwtTokenProvider.refreshTtlSeconds(UserType.RESTAURANT)).thenReturn(2592000L);
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -192,7 +201,7 @@ class AuthServiceImplTest {
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
             return saved;
         });
-        when(jwtTokenProvider.createAccessToken(any(), eq(UserType.CUSTOMER))).thenReturn("access");
+        when(jwtTokenProvider.createAccessToken(any(), eq(UserType.CUSTOMER), isNull())).thenReturn("access");
         when(jwtTokenProvider.accessTokenTtlSeconds()).thenReturn(900L);
         when(jwtTokenProvider.refreshTtlSeconds(UserType.CUSTOMER)).thenReturn(2592000L);
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -204,5 +213,89 @@ class AuthServiceImplTest {
         assertThat(response.isNewUser()).isTrue();
         assertThat(response.userType()).isEqualTo(UserType.CUSTOMER);
         verify(eventPublisher).publishEvent(any(UserCredentialCreatedEvent.class));
+    }
+
+    @Test
+    void loginAdmin_success_issuesTokenPairWithRole() {
+        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+        UUID userId = UUID.randomUUID();
+        UserCredential admin = UserCredential.adminProvisionWithPassword(
+                "+919999999999",
+                "admin@foodie.local",
+                passwordEncoder.encode("ChangeMe@123")
+        );
+        ReflectionTestUtils.setField(admin, "id", userId);
+
+        when(userCredentialRepository.findByEmailIgnoreCaseAndUserType("admin@foodie.local", UserType.ADMIN))
+                .thenReturn(Optional.of(admin));
+        when(adminIdentityQueryPort.findRoleNameByUserCredentialId(userId))
+                .thenReturn(Optional.of("SUPER_ADMIN"));
+        when(jwtTokenProvider.createAccessToken(eq(userId), eq(UserType.ADMIN), eq("SUPER_ADMIN")))
+                .thenReturn("admin-access");
+        when(jwtTokenProvider.accessTokenTtlSeconds()).thenReturn(900L);
+        when(jwtTokenProvider.refreshTtlSeconds(UserType.ADMIN)).thenReturn(604800L);
+        when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TokenPairResponseDto response = authService.loginAdmin(
+                new AdminLoginRequestDto("admin@foodie.local", "ChangeMe@123", "Admin Panel")
+        );
+
+        assertThat(response.accessToken()).isEqualTo("admin-access");
+        assertThat(response.userType()).isEqualTo(UserType.ADMIN);
+        assertThat(response.userId()).isEqualTo(userId);
+        assertThat(response.role()).isEqualTo("SUPER_ADMIN");
+        assertThat(response.isNewUser()).isFalse();
+    }
+
+    @Test
+    void loginAdmin_invalidPassword_throwsUnauthorized() {
+        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+        UUID userId = UUID.randomUUID();
+        UserCredential admin = UserCredential.adminProvisionWithPassword(
+                "+919999999999",
+                "admin@foodie.local",
+                passwordEncoder.encode("ChangeMe@123")
+        );
+        ReflectionTestUtils.setField(admin, "id", userId);
+        when(userCredentialRepository.findByEmailIgnoreCaseAndUserType("admin@foodie.local", UserType.ADMIN))
+                .thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.loginAdmin(
+                new AdminLoginRequestDto("admin@foodie.local", "WrongPassword", null)
+        )).isInstanceOf(UnauthorizedException.class)
+                .extracting(ex -> ((UnauthorizedException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.UNAUTHORIZED);
+    }
+
+    @Test
+    void loginAdmin_unknownEmail_throwsUnauthorized() {
+        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+        when(userCredentialRepository.findByEmailIgnoreCaseAndUserType("missing@foodie.local", UserType.ADMIN))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.loginAdmin(
+                new AdminLoginRequestDto("missing@foodie.local", "ChangeMe@123", null)
+        )).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void loginAdmin_disabled_throwsAccountDeactivated() {
+        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+        UUID userId = UUID.randomUUID();
+        UserCredential admin = UserCredential.adminProvisionWithPassword(
+                "+919999999999",
+                "admin@foodie.local",
+                passwordEncoder.encode("ChangeMe@123")
+        );
+        ReflectionTestUtils.setField(admin, "id", userId);
+        admin.deactivate();
+        when(userCredentialRepository.findByEmailIgnoreCaseAndUserType("admin@foodie.local", UserType.ADMIN))
+                .thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> authService.loginAdmin(
+                new AdminLoginRequestDto("admin@foodie.local", "ChangeMe@123", null)
+        )).isInstanceOf(ForbiddenException.class)
+                .extracting(ex -> ((ForbiddenException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_DEACTIVATED);
     }
 }

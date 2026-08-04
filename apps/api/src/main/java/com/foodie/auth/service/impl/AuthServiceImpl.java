@@ -1,5 +1,6 @@
 package com.foodie.auth.service.impl;
 
+import com.foodie.auth.dto.request.AdminLoginRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
@@ -20,9 +21,11 @@ import com.foodie.infrastructure.google.GoogleTokenVerifier;
 import com.foodie.infrastructure.sms.SmsSender;
 import com.foodie.security.jwt.JwtTokenProvider;
 import com.foodie.security.ratelimit.RedisRateLimiter;
+import com.foodie.shared.contract.AdminIdentityQueryPort;
 import com.foodie.shared.event.UserCredentialCreatedEvent;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +47,8 @@ public class AuthServiceImpl implements AuthService {
     private static final Duration OTP_VERIFY_WINDOW = Duration.ofMinutes(10);
     private static final int OTP_REQUEST_LIMIT = 5;
     private static final int OTP_VERIFY_LIMIT = 10;
+    private static final Duration ADMIN_LOGIN_WINDOW = Duration.ofMinutes(10);
+    private static final int ADMIN_LOGIN_LIMIT = 10;
 
     private final UserCredentialRepository userCredentialRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -54,6 +59,7 @@ public class AuthServiceImpl implements AuthService {
     private final GoogleTokenVerifier googleTokenVerifier;
     private final JwtTokenProvider jwtTokenProvider;
     private final ApplicationEventPublisher eventPublisher;
+    private final AdminIdentityQueryPort adminIdentityQueryPort;
 
     public AuthServiceImpl(
             UserCredentialRepository userCredentialRepository,
@@ -64,7 +70,8 @@ public class AuthServiceImpl implements AuthService {
             SmsSender smsSender,
             GoogleTokenVerifier googleTokenVerifier,
             JwtTokenProvider jwtTokenProvider,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            AdminIdentityQueryPort adminIdentityQueryPort
     ) {
         this.userCredentialRepository = userCredentialRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -75,6 +82,7 @@ public class AuthServiceImpl implements AuthService {
         this.googleTokenVerifier = googleTokenVerifier;
         this.jwtTokenProvider = jwtTokenProvider;
         this.eventPublisher = eventPublisher;
+        this.adminIdentityQueryPort = adminIdentityQueryPort;
     }
 
     @Override
@@ -180,6 +188,38 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    public TokenPairResponseDto loginAdmin(AdminLoginRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        rateLimiter.check("ratelimit:admin-login:" + email, ADMIN_LOGIN_LIMIT, ADMIN_LOGIN_WINDOW);
+
+        Optional<UserCredential> found =
+                userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.ADMIN);
+
+        UserCredential credential = found.orElse(null);
+        String passwordHash = credential == null ? null : credential.getPasswordHash();
+        boolean passwordOk = passwordHash != null
+                && !passwordHash.isBlank()
+                && passwordEncoder.matches(request.password(), passwordHash);
+
+        // Opaque failure for unknown email, missing password, or mismatch (no user enumeration).
+        if (credential == null || !passwordOk) {
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
+        }
+
+        assertActive(credential);
+
+        String role = adminIdentityQueryPort
+                .findRoleNameByUserCredentialId(credential.getId())
+                .orElseThrow(() -> new ForbiddenException(
+                        ErrorCode.FORBIDDEN,
+                        "Admin profile is not provisioned."
+                ));
+
+        return issueTokenPair(credential, request.deviceInfo(), false, role);
+    }
+
+    @Override
+    @Transactional
     public TokenPairResponseDto refresh(String refreshTokenRaw) {
         String hash = HashUtils.sha256Hex(refreshTokenRaw);
         Optional<RefreshToken> found = refreshTokenRepository.findByTokenHash(hash);
@@ -232,7 +272,24 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private TokenPairResponseDto issueTokenPair(UserCredential credential, String deviceInfo, boolean isNewUser) {
-        String accessToken = jwtTokenProvider.createAccessToken(credential.getId(), credential.getUserType());
+        String role = null;
+        if (credential.getUserType() == UserType.ADMIN) {
+            role = adminIdentityQueryPort.findRoleNameByUserCredentialId(credential.getId()).orElse(null);
+        }
+        return issueTokenPair(credential, deviceInfo, isNewUser, role);
+    }
+
+    private TokenPairResponseDto issueTokenPair(
+            UserCredential credential,
+            String deviceInfo,
+            boolean isNewUser,
+            String role
+    ) {
+        String accessToken = jwtTokenProvider.createAccessToken(
+                credential.getId(),
+                credential.getUserType(),
+                role
+        );
         String refreshRaw = HashUtils.randomToken();
         String refreshHash = HashUtils.sha256Hex(refreshRaw);
         Instant expiresAt = Instant.now().plusSeconds(jwtTokenProvider.refreshTtlSeconds(credential.getUserType()));
@@ -251,7 +308,9 @@ public class AuthServiceImpl implements AuthService {
                 refreshRaw,
                 jwtTokenProvider.accessTokenTtlSeconds(),
                 credential.getUserType(),
-                isNewUser
+                isNewUser,
+                credential.getId(),
+                role
         );
     }
 

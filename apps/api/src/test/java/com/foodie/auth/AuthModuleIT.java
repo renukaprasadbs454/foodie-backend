@@ -24,6 +24,9 @@ class AuthModuleIT extends AbstractIntegrationTest {
     @Autowired
     private CapturingSmsSender capturingSmsSender;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     @Test
     void otpLogin_refresh_and_logout_flow() {
         String phone = "+919876543210";
@@ -86,6 +89,109 @@ class AuthModuleIT extends AbstractIntegrationTest {
                 Map.class
         );
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void adminLogin_refresh_logout_and_unauthorizedPaths() {
+        ResponseEntity<Map> login = restTemplate.postForEntity(
+                "/api/v1/auth/login",
+                Map.of(
+                        "email", "admin@foodie.local",
+                        "password", "ChangeMe@123",
+                        "deviceInfo", "it-admin"
+                ),
+                Map.class
+        );
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(login.getBody()).containsEntry("success", true);
+        Map<?, ?> data = (Map<?, ?>) login.getBody().get("data");
+        assertThat(data.get("accessToken")).isNotNull();
+        assertThat(data.get("refreshToken")).isNotNull();
+        assertThat(data.get("userType")).isEqualTo("ADMIN");
+        assertThat(data.get("role")).isEqualTo("SUPER_ADMIN");
+        assertThat(data.get("userId")).isEqualTo("33333333-3333-3333-3333-333333333001");
+        assertThat(data.get("isNewUser")).isEqualTo(false);
+
+        String refreshToken = data.get("refreshToken").toString();
+        String accessToken = data.get("accessToken").toString();
+
+        ResponseEntity<Map> refreshed = restTemplate.postForEntity(
+                "/api/v1/auth/refresh",
+                Map.of("refreshToken", refreshToken),
+                Map.class
+        );
+        assertThat(refreshed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> refreshedData = (Map<?, ?>) refreshed.getBody().get("data");
+        assertThat(refreshedData.get("userType")).isEqualTo("ADMIN");
+        assertThat(refreshedData.get("role")).isEqualTo("SUPER_ADMIN");
+        String newAccess = refreshedData.get("accessToken").toString();
+        String newRefresh = refreshedData.get("refreshToken").toString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(newAccess);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<Map> me = restTemplate.exchange(
+                "/api/v1/admin/users/me",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Map.class
+        );
+        assertThat(me.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Map> logout = restTemplate.exchange(
+                "/api/v1/auth/logout",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("refreshToken", newRefresh), headers),
+                Map.class
+        );
+        assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        ResponseEntity<Map> unauthorizedMe = restTemplate.exchange(
+                "/api/v1/admin/users/me",
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                Map.class
+        );
+        assertThat(unauthorizedMe.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<Map> badPassword = restTemplate.postForEntity(
+                "/api/v1/auth/login",
+                Map.of("email", "admin@foodie.local", "password", "WrongPass@1"),
+                Map.class
+        );
+        assertThat(badPassword.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        Map<?, ?> badPasswordError = (Map<?, ?>) badPassword.getBody().get("error");
+        assertThat(badPasswordError.get("code")).isEqualTo("UNAUTHORIZED");
+
+        ResponseEntity<Map> unknownEmail = restTemplate.postForEntity(
+                "/api/v1/auth/login",
+                Map.of("email", "nobody@foodie.local", "password", "ChangeMe@123"),
+                Map.class
+        );
+        assertThat(unknownEmail.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void adminLogin_disabledAccount_returnsAccountDeactivated() {
+        jdbcTemplate.update(
+                "UPDATE user_credential SET active = FALSE WHERE id = ?",
+                java.util.UUID.fromString("33333333-3333-3333-3333-333333333001")
+        );
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    "/api/v1/auth/login",
+                    Map.of("email", "admin@foodie.local", "password", "ChangeMe@123"),
+                    Map.class
+            );
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            Map<?, ?> error = (Map<?, ?>) response.getBody().get("error");
+            assertThat(error.get("code")).isEqualTo("ACCOUNT_DEACTIVATED");
+        } finally {
+            jdbcTemplate.update(
+                    "UPDATE user_credential SET active = TRUE WHERE id = ?",
+                    java.util.UUID.fromString("33333333-3333-3333-3333-333333333001")
+            );
+        }
     }
 
     @Test

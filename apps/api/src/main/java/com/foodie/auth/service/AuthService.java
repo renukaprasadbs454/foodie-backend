@@ -1,5 +1,6 @@
 package com.foodie.auth.service;
 
+import com.foodie.auth.dto.request.AdminLoginRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
@@ -16,6 +17,9 @@ public interface AuthService {
     TokenPairResponseDto verifyOtp(VerifyOtpRequestDto request);
 
     TokenPairResponseDto authenticateWithGoogle(GoogleAuthRequestDto request);
+
+    /** Admin email/password login (GAP-API-13). Reuses JWT + refresh token issuance. */
+    TokenPairResponseDto loginAdmin(AdminLoginRequestDto request);
 
     TokenPairResponseDto refresh(String refreshToken);
 

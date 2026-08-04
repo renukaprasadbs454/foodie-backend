@@ -62,12 +62,29 @@ public class UserCredential extends BaseEntity {
         return credential;
     }
 
+    /**
+     * Admin with email/password (GAP-API-13). {@code passwordHash} must already be BCrypt-encoded.
+     */
+    public static UserCredential adminProvisionWithPassword(
+            String phoneNumber,
+            String email,
+            String passwordHash
+    ) {
+        UserCredential credential = adminProvision(phoneNumber, email);
+        credential.passwordHash = passwordHash;
+        return credential;
+    }
+
     public String getPhoneNumber() {
         return phoneNumber;
     }
 
     public String getEmail() {
         return email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
     }
 
     public String getGoogleId() {
@@ -80,5 +97,9 @@ public class UserCredential extends BaseEntity {
 
     public boolean isActive() {
         return active;
+    }
+
+    public void deactivate() {
+        this.active = false;
     }
 }
