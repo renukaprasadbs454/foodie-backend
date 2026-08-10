@@ -1,0 +1,14 @@
+# foodie-backend root
+.m2/
+.m2-docker/
+**/target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+*.log
+.local-object-storage/
