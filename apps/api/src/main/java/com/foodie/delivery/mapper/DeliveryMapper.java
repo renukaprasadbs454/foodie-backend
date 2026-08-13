@@ -9,6 +9,8 @@ import com.foodie.delivery.entity.DeliveryPartner;
 import com.foodie.delivery.entity.DeliveryPartnerDocument;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 @Component
 public class DeliveryMapper {
 
@@ -38,13 +40,15 @@ public class DeliveryMapper {
                         DeliveryAssignment assignment,
                         String restaurantName,
                         String pickupAddress,
-                        Double estimatedDistance) {
+                        Double estimatedDistance,
+                        BigDecimal estimatedFee) {
                 return new DeliveryOfferResponseDto(
                                 assignment.getId(),
                                 assignment.getOrderId(),
                                 restaurantName,
                                 pickupAddress,
-                                estimatedDistance);
+                                estimatedDistance,
+                                estimatedFee);
         }
 
         public DeliveryAssignmentResponseDto toAssignment(DeliveryAssignment assignment) {

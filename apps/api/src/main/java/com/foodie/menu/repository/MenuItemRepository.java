@@ -13,4 +13,8 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
     List<MenuItem> findByRestaurantIdOrderByCreatedAtAsc(UUID restaurantId);
 
     List<MenuItem> findByCategoryIdOrderByCreatedAtAsc(UUID categoryId);
+
+    List<MenuItem> findByNameContainingIgnoreCase(String query);
+
+    List<MenuItem> findByRestaurantIdAndAvailableTrue(UUID restaurantId);
 }

@@ -252,6 +252,31 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
+    public OrderResponseDto getActiveOrderForCustomer(UUID userCredentialId) {
+        UUID customerId = resolveCustomerId(userCredentialId);
+        List<OrderStatus> activeStatuses = List.of(
+                OrderStatus.PLACED,
+                OrderStatus.CONFIRMED,
+                OrderStatus.PREPARING,
+                OrderStatus.READY_FOR_PICKUP,
+                OrderStatus.OUT_FOR_DELIVERY
+        );
+        Order activeOrder = orderRepository.findByCustomerIdAndStatusIn(customerId, activeStatuses)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("No active order found."));
+
+        return toDetail(activeOrder);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponseDto cancelOrder(UUID orderId, UUID userCredentialId, String reason) {
+        return transition(orderId, OrderStatus.CANCELLED, reason, userCredentialId, UserType.CUSTOMER);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageResult<OrderSummaryResponseDto> listForCustomer(
             UUID userCredentialId,
             OrderStatus statusFilter,

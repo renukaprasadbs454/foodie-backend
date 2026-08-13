@@ -16,6 +16,10 @@ public interface OrderService {
 
     OrderResponseDto getById(UUID orderId, UUID userCredentialId, UserType userType);
 
+    OrderResponseDto getActiveOrderForCustomer(UUID userCredentialId);
+
+    OrderResponseDto cancelOrder(UUID orderId, UUID userCredentialId, String reason);
+
     PageResult<OrderSummaryResponseDto> listForCustomer(
             UUID userCredentialId,
             OrderStatus statusFilter,

@@ -69,6 +69,8 @@ class DeliveryServiceImplTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private RedisRateLimiter redisRateLimiter;
+    @Mock
+    private com.foodie.delivery.service.DeliveryPricingService deliveryPricingService;
 
     private DeliveryServiceImpl service;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -93,7 +95,8 @@ class DeliveryServiceImplTest {
                 eventPublisher,
                 passwordEncoder,
                 redisRateLimiter,
-                properties
+                properties,
+                deliveryPricingService
         );
     }
 

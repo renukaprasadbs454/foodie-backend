@@ -146,6 +146,32 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    public boolean verifyPayment(UUID userCredentialId, com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
+        boolean valid = signatureVerifier.isValidPaymentSignature(
+                request.razorpayOrderId(),
+                request.razorpayPaymentId(),
+                request.razorpaySignature()
+        );
+        if (!valid) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Invalid payment signature.");
+        }
+
+        Payment payment = paymentRepository.findByOrderId(request.orderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for order."));
+
+        if (payment.getStatus() == PaymentStatus.PENDING) {
+            payment.markCaptured(request.razorpayPaymentId());
+            paymentRepository.save(payment);
+            eventPublisher.publishEvent(PaymentCapturedEvent.of(
+                    payment.getOrderId(),
+                    payment.getId()
+            ));
+        }
+        return true;
+    }
+
+    @Override
+    @Transactional
     public void handleWebhook(String rawBody, String signatureHeader) {
         if (!signatureVerifier.isValid(rawBody, signatureHeader)) {
             throw new BadRequestException(

@@ -5,6 +5,11 @@ import java.util.UUID;
 
 public record AddressResponseDto(
         UUID addressId,
+        String recipientName,
+        String recipientPhone,
+        String houseFlatNo,
+        String landmark,
+        String state,
         String label,
         String line1,
         String line2,

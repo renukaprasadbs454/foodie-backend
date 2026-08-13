@@ -1,7 +1,11 @@
 package com.foodie.auth.service.impl;
 
 import com.foodie.auth.dto.request.AdminLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerRegisterRequestDto;
+import com.foodie.auth.dto.request.ForgotPasswordRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
+import com.foodie.auth.dto.request.ResetPasswordRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
 import com.foodie.auth.entity.RefreshToken;
@@ -183,6 +187,75 @@ public class AuthServiceImpl implements AuthService {
         }
         assertActive(credential);
         return issueTokenPair(credential, request.deviceInfo(), isNewUser);
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto registerCustomer(CustomerRegisterRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        Optional<UserCredential> existingEmail = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER);
+        if (existingEmail.isPresent()) {
+            throw new BadRequestException(ErrorCode.CONFLICT, "Email is already registered.");
+        }
+
+        String encodedPassword = passwordEncoder.encode(request.password());
+        UserCredential credential = userCredentialRepository.save(
+                UserCredential.customerPasswordSignup(email, request.phoneNumber(), encodedPassword)
+        );
+
+        eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
+                credential.getId(),
+                credential.getUserType(),
+                credential.getPhoneNumber(),
+                credential.getEmail()
+        ));
+
+        return issueTokenPair(credential, request.deviceInfo(), true);
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto loginCustomer(CustomerLoginRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        UserCredential credential = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER)
+                .orElseThrow(() -> new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password."));
+
+        String passwordHash = credential.getPasswordHash();
+        if (passwordHash == null || !passwordEncoder.matches(request.password(), passwordHash)) {
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
+        }
+
+        assertActive(credential);
+        return issueTokenPair(credential, request.deviceInfo(), false);
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        Optional<UserCredential> found = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER);
+        if (found.isPresent()) {
+            String resetToken = HashUtils.sixDigitOtp();
+            String tokenHash = passwordEncoder.encode(resetToken);
+            redisTemplate.opsForValue().set("reset-password:" + email, tokenHash, Duration.ofMinutes(15));
+            log.info("Generated password reset code for email={}", email);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String storedHash = redisTemplate.opsForValue().get("reset-password:" + email);
+        if (storedHash == null || !passwordEncoder.matches(request.otpCode(), storedHash)) {
+            throw new BadRequestException(ErrorCode.INVALID_OTP, "Invalid or expired password reset token.");
+        }
+
+        UserCredential credential = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER)
+                .orElseThrow(() -> new BadRequestException(ErrorCode.RESOURCE_NOT_FOUND, "Customer profile not found."));
+
+        credential.updatePasswordHash(passwordEncoder.encode(request.newPassword()));
+        redisTemplate.delete("reset-password:" + email);
+        revokeAllForUser(credential.getId());
     }
 
     @Override

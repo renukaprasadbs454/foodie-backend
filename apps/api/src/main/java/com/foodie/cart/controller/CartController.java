@@ -1,6 +1,7 @@
 package com.foodie.cart.controller;
 
 import com.foodie.cart.dto.request.AddCartItemRequestDto;
+import com.foodie.cart.dto.request.UpdateCartItemQuantityRequestDto;
 import com.foodie.cart.dto.response.CartResponseDto;
 import com.foodie.cart.service.CartService;
 import com.foodie.common.dto.ApiResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +50,16 @@ public class CartController {
             @Valid @RequestBody AddCartItemRequestDto request
     ) {
         return ResponseEntity.ok(ApiResponse.success(cartService.addItem(principal.userId(), request)));
+    }
+
+    @PutMapping("/items/{cartItemId}")
+    @Operation(summary = "Update line item quantity in cart")
+    public ResponseEntity<ApiResponse<CartResponseDto>> updateItemQuantity(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID cartItemId,
+            @Valid @RequestBody UpdateCartItemQuantityRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(cartService.updateItemQuantity(principal.userId(), cartItemId, request)));
     }
 
     @DeleteMapping("/items/{cartItemId}")

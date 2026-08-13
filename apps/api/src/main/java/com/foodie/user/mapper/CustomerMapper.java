@@ -22,6 +22,11 @@ public class CustomerMapper {
     public AddressResponseDto toAddress(Address address) {
         return new AddressResponseDto(
                 address.getId(),
+                address.getRecipientName(),
+                address.getRecipientPhone(),
+                address.getHouseFlatNo(),
+                address.getLandmark(),
+                address.getState(),
                 address.getLabel(),
                 address.getLine1(),
                 address.getLine2(),

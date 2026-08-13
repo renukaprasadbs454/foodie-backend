@@ -29,6 +29,18 @@ public class RazorpaySignatureVerifier {
         );
     }
 
+    public boolean isValidPaymentSignature(String razorpayOrderId, String razorpayPaymentId, String signature) {
+        if (razorpayOrderId == null || razorpayPaymentId == null || signature == null) {
+            return false;
+        }
+        String payload = razorpayOrderId + "|" + razorpayPaymentId;
+        String expected = hmacSha256Hex(properties.getKeySecret(), payload);
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                signature.trim().getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
     public static String hmacSha256Hex(String secret, String payload) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

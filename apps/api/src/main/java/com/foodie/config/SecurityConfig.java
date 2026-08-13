@@ -51,11 +51,7 @@ public class SecurityConfig {
                                                                 "/v3/api-docs/**",
                                                                 "/swagger-ui/**",
                                                                 "/swagger-ui.html",
-                                                                "/api/v1/auth/otp/request",
-                                                                "/api/v1/auth/otp/verify",
-                                                                "/api/v1/auth/google",
-                                                                "/api/v1/auth/login",
-                                                                "/api/v1/auth/refresh",
+                                                                "/api/v1/auth/**",
                                                                 "/api/v1/payments/webhook/razorpay",
                                                                 "/api/v1/storage/**",
                                                                 "/api/v1/debug/**")
@@ -65,8 +61,8 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews")
                                                 .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/menu/restaurants/**")
-                                                .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                                                 .anyRequest().authenticated())
                                 .exceptionHandling(ex -> ex
                                                 .authenticationEntryPoint((request, response,
@@ -82,6 +78,8 @@ public class SecurityConfig {
                                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
+        }
+
         }
 
         private void writeError(HttpServletResponse response, int status, ErrorCode code, String message)
