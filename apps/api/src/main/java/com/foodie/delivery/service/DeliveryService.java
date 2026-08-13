@@ -9,6 +9,7 @@ import com.foodie.delivery.dto.response.AvailabilityResponseDto;
 import com.foodie.delivery.dto.response.DeliveryAssignmentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryOfferResponseDto;
+import com.foodie.delivery.dto.response.DeliveryProfileImageResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileResponseDto;
 import java.util.List;
 import java.util.UUID;
@@ -16,29 +17,36 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface DeliveryService {
 
-    DeliveryProfileResponseDto getOrCreateProfile(UUID userCredentialId);
+        DeliveryProfileResponseDto getOrCreateProfile(UUID userCredentialId);
 
-    DeliveryProfileResponseDto upsertProfile(UUID userCredentialId, UpsertDeliveryProfileRequestDto request);
+        DeliveryProfileResponseDto upsertProfile(UUID userCredentialId, UpsertDeliveryProfileRequestDto request);
 
-    DeliveryDocumentResponseDto uploadDocument(
-            UUID userCredentialId,
-            DeliveryDocType docType,
-            MultipartFile file
-    );
+        DeliveryDocumentResponseDto uploadDocument(
+                        UUID userCredentialId,
+                        DeliveryDocType docType,
+                        MultipartFile file);
 
-    AvailabilityResponseDto setAvailability(UUID userCredentialId, SetAvailabilityRequestDto request);
+        DeliveryProfileImageResponseDto uploadProfileImage(
+                        UUID userCredentialId,
+                        MultipartFile file);
 
-    List<DeliveryOfferResponseDto> listOffers(UUID userCredentialId);
+        AvailabilityResponseDto setAvailability(UUID userCredentialId, SetAvailabilityRequestDto request);
 
-    DeliveryAssignmentResponseDto accept(UUID userCredentialId, UUID assignmentId);
+        List<DeliveryOfferResponseDto> listOffers(UUID userCredentialId);
 
-    DeliveryAssignmentResponseDto verifyPickup(UUID userCredentialId, UUID assignmentId, VerifyOtpRequestDto request);
+        DeliveryAssignmentResponseDto accept(UUID userCredentialId, UUID assignmentId);
 
-    DeliveryAssignmentResponseDto verifyDelivery(UUID userCredentialId, UUID assignmentId, VerifyOtpRequestDto request);
+        DeliveryAssignmentResponseDto verifyPickup(UUID userCredentialId, UUID assignmentId,
+                        VerifyOtpRequestDto request);
 
-    void locationPing(UUID userCredentialId, LocationPingRequestDto request);
+        DeliveryAssignmentResponseDto verifyDelivery(UUID userCredentialId, UUID assignmentId,
+                        VerifyOtpRequestDto request);
 
-    void createAssignmentForOrder(UUID orderId);
+        void locationPing(UUID userCredentialId, LocationPingRequestDto request);
 
-    DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
+        void createAssignmentForOrder(UUID orderId);
+
+        DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
+
+        boolean verifyFace(UUID userCredentialId, MultipartFile file);
 }

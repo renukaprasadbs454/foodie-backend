@@ -44,8 +44,7 @@ public class DeliveryPartner extends BaseEntity {
             UUID userCredentialId,
             String fullName,
             VehicleType vehicleType,
-            String vehicleNumber
-    ) {
+            String vehicleNumber) {
         DeliveryPartner partner = new DeliveryPartner();
         partner.userCredentialId = userCredentialId;
         partner.fullName = fullName;
@@ -60,6 +59,10 @@ public class DeliveryPartner extends BaseEntity {
         this.fullName = fullName;
         this.vehicleType = vehicleType;
         this.vehicleNumber = vehicleNumber;
+    }
+
+    public void setProfileImageKey(String profileImageKey) {
+        this.profileImageKey = profileImageKey;
     }
 
     public void setOnline(boolean online) {

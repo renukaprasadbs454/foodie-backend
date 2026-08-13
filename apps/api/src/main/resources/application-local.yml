@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:foodie}
-    username: ${DB_USER:foodie}
-    password: ${DB_PASSWORD:foodie}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/postgres
+    username: postgres
+    password: ""
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
