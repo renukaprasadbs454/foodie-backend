@@ -20,6 +20,21 @@ public class Address extends BaseEntity {
     @JoinColumn(name = "customer_id", nullable = false, updatable = false)
     private Customer customer;
 
+    @Column(name = "recipient_name", length = 100)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", length = 20)
+    private String recipientPhone;
+
+    @Column(name = "house_flat_no", length = 100)
+    private String houseFlatNo;
+
+    @Column(name = "landmark")
+    private String landmark;
+
+    @Column(name = "state", length = 100)
+    private String state;
+
     @Column(name = "label", length = 50)
     private String label;
 
@@ -52,6 +67,11 @@ public class Address extends BaseEntity {
 
     public static Address create(
             Customer customer,
+            String recipientName,
+            String recipientPhone,
+            String houseFlatNo,
+            String landmark,
+            String state,
             String label,
             String line1,
             String line2,
@@ -63,6 +83,11 @@ public class Address extends BaseEntity {
     ) {
         Address address = new Address();
         address.customer = customer;
+        address.recipientName = recipientName;
+        address.recipientPhone = recipientPhone;
+        address.houseFlatNo = houseFlatNo;
+        address.landmark = landmark;
+        address.state = state;
         address.label = label;
         address.line1 = line1;
         address.line2 = line2;
@@ -72,6 +97,48 @@ public class Address extends BaseEntity {
         address.longitude = longitude;
         address.isDefault = isDefault;
         return address;
+    }
+
+    public static Address create(
+            Customer customer,
+            String label,
+            String line1,
+            String line2,
+            String city,
+            String pincode,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            boolean isDefault
+    ) {
+        return create(customer, null, null, null, null, null, label, line1, line2, city, pincode, latitude, longitude, isDefault);
+    }
+
+    public void update(
+            String recipientName,
+            String recipientPhone,
+            String houseFlatNo,
+            String landmark,
+            String state,
+            String label,
+            String line1,
+            String line2,
+            String city,
+            String pincode,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        this.recipientName = recipientName;
+        this.recipientPhone = recipientPhone;
+        this.houseFlatNo = houseFlatNo;
+        this.landmark = landmark;
+        this.state = state;
+        this.label = label;
+        this.line1 = line1;
+        this.line2 = line2;
+        this.city = city;
+        this.pincode = pincode;
+        if (latitude != null) this.latitude = latitude;
+        if (longitude != null) this.longitude = longitude;
     }
 
     public void clearDefault() {
@@ -89,6 +156,26 @@ public class Address extends BaseEntity {
 
     public Customer getCustomer() {
         return customer;
+    }
+
+    public String getRecipientName() {
+        return recipientName;
+    }
+
+    public String getRecipientPhone() {
+        return recipientPhone;
+    }
+
+    public String getHouseFlatNo() {
+        return houseFlatNo;
+    }
+
+    public String getLandmark() {
+        return landmark;
+    }
+
+    public String getState() {
+        return state;
     }
 
     public String getLabel() {

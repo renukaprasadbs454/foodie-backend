@@ -133,9 +133,34 @@ public class MenuServiceImpl implements MenuService {
         try {
             menuCacheService.put(restaurantId, objectMapper.writeValueAsString(menu));
         } catch (JsonProcessingException ex) {
-            log.warn("Failed to cache menu for restaurant {}", restaurantId, ex);
+            log.warn("Failed to serialize full menu cache for restaurantId={}", restaurantId, ex);
         }
         return menu;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MenuItemResponseDto getItemById(UUID menuItemId) {
+        MenuItem item = menuItemRepository.findById(menuItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found with id: " + menuItemId));
+        String imageUrl = signedOrNull(item.getImageS3Key());
+        return menuMapper.toMenuItem(item, imageUrl);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MenuItemResponseDto> getItemsByRestaurant(UUID restaurantId, UUID categoryId, Boolean isVeg) {
+        List<MenuItem> items;
+        if (categoryId != null) {
+            items = menuItemRepository.findByCategoryIdOrderByCreatedAtAsc(categoryId);
+        } else {
+            items = menuItemRepository.findByRestaurantIdOrderByCreatedAtAsc(restaurantId);
+        }
+
+        return items.stream()
+                .filter(item -> isVeg == null || item.isVeg() == isVeg)
+                .map(item -> menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key())))
+                .toList();
     }
 
     @Override

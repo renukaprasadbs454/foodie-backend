@@ -57,7 +57,6 @@ springdoc:
 
 foodie:
   jwt:
-    # Override via JWT_SECRET in non-local environments (min 32 bytes for HS256)
     secret: ${JWT_SECRET:local-dev-only-change-me-foodie-jwt-secret-key-32b}
     access-token-ttl-seconds: 900
     refresh-token-ttl-customer-seconds: 2592000

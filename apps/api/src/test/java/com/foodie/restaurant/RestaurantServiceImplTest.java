@@ -214,11 +214,11 @@ class RestaurantServiceImplTest {
 
     @Test
     void search_invalidSort_throws() {
-        assertThatThrownBy(() -> service.search(null, null, null, null, 0, 20, "price"))
+        assertThatThrownBy(() -> service.search(null, null, null, null, null, 0, 20, "price"))
                 .isInstanceOf(com.foodie.common.exception.BadRequestException.class)
                 .extracting(ex -> ((com.foodie.common.exception.BadRequestException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
-        verify(restaurantRepository, never()).searchApproved(any(), any(), any());
+        verify(restaurantRepository, never()).searchApproved(any(), any(), any(), any());
     }
 
     private Restaurant pendingRestaurant() {

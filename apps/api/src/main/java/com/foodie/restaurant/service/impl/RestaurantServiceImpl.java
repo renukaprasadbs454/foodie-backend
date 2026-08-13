@@ -99,6 +99,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     public PageResult<RestaurantSummaryResponseDto> search(
             String search,
             String cuisineType,
+            Double minRating,
             Double lat,
             Double lng,
             int page,
@@ -106,9 +107,11 @@ public class RestaurantServiceImpl implements RestaurantService {
             String sort
     ) {
         validateCuisineFilter(cuisineType);
+        BigDecimal minRatingDecimal = minRating != null ? BigDecimal.valueOf(minRating) : null;
         String cacheKey = RestaurantCacheService.geoBucket(lat, lng)
                 + "|" + nullToEmpty(search)
                 + "|" + nullToEmpty(cuisineType)
+                + "|" + (minRating != null ? minRating : "")
                 + "|" + page + "|" + size + "|" + nullToEmpty(sort);
         var cached = restaurantCacheService.getListJson(cacheKey);
         if (cached.isPresent()) {
@@ -125,10 +128,10 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (lat != null && lng != null) {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size));
             result = restaurantRepository.searchApprovedGeo(
-                    emptyToNull(search), emptyToNull(cuisineType), lat, lng, pageable);
+                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, lat, lng, pageable);
         } else {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
-            result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType), pageable);
+            result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, pageable);
         }
 
         List<RestaurantSummaryResponseDto> items = result.getContent().stream()

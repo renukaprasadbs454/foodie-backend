@@ -10,12 +10,17 @@ import com.foodie.menu.dto.response.FullMenuResponseDto;
 import com.foodie.menu.dto.response.MenuImageUploadResponseDto;
 import com.foodie.menu.dto.response.MenuItemResponseDto;
 import com.foodie.menu.dto.response.VariantResponseDto;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface MenuService {
 
     FullMenuResponseDto getFullMenu(UUID restaurantId);
+
+    MenuItemResponseDto getItemById(UUID menuItemId);
+
+    List<MenuItemResponseDto> getItemsByRestaurant(UUID restaurantId, UUID categoryId, Boolean isVeg);
 
     CategoryResponseDto createCategory(UUID ownerCredentialId, CreateCategoryRequestDto request);
 

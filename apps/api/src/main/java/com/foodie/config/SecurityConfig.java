@@ -49,16 +49,13 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/api/v1/auth/otp/request",
-                                "/api/v1/auth/otp/verify",
-                                "/api/v1/auth/google",
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/**",
                                 "/api/v1/payments/webhook/razorpay"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants", "/api/v1/restaurants/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/menu/restaurants/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

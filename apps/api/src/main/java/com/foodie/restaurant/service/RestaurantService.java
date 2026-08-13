@@ -21,6 +21,7 @@ public interface RestaurantService {
     PageResult<RestaurantSummaryResponseDto> search(
             String search,
             String cuisineType,
+            Double minRating,
             Double lat,
             Double lng,
             int page,

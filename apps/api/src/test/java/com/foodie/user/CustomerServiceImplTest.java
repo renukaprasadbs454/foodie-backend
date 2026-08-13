@@ -50,6 +50,8 @@ class CustomerServiceImplTest {
     private ObjectStorageClient objectStorageClient;
     @Mock
     private ActiveOrderAddressQuery activeOrderAddressQuery;
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     private CustomerServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();
@@ -63,7 +65,8 @@ class CustomerServiceImplTest {
                 userCredentialRepository,
                 new CustomerMapper(),
                 objectStorageClient,
-                activeOrderAddressQuery
+                activeOrderAddressQuery,
+                passwordEncoder
         );
         customer = Customer.createInitial(credentialId, null);
         // assign id via reflection-free save simulation: use a subclass trick — set through repository stub returns
@@ -120,6 +123,11 @@ class CustomerServiceImplTest {
         });
 
         AddAddressRequestDto request = new AddAddressRequestDto(
+                null,
+                null,
+                null,
+                null,
+                null,
                 "Home",
                 "Line 1",
                 null,

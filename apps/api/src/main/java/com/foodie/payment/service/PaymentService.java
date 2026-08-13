@@ -5,9 +5,13 @@ import com.foodie.payment.dto.response.PaymentInitiationResponseDto;
 import com.foodie.payment.dto.response.RefundInitiationResponseDto;
 import java.util.UUID;
 
+import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
+
 public interface PaymentService {
 
     PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey);
+
+    boolean verifyPayment(UUID userCredentialId, VerifyPaymentRequestDto request);
 
     void handleWebhook(String rawBody, String signatureHeader);
 

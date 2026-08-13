@@ -1,6 +1,7 @@
 package com.foodie.restaurant.repository;
 
 import com.foodie.restaurant.entity.Restaurant;
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -27,6 +28,7 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                            ))
                       AND (CAST(:cuisineType AS text) IS NULL OR CAST(:cuisineType AS text) = ''
                            OR CAST(:cuisineType AS text) = ANY (r.cuisine_types))
+                      AND (:minRating IS NULL OR r.avg_rating >= CAST(:minRating AS numeric))
                     """,
             countQuery = """
                     SELECT count(*) FROM restaurant r
@@ -39,12 +41,14 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                            ))
                       AND (CAST(:cuisineType AS text) IS NULL OR CAST(:cuisineType AS text) = ''
                            OR CAST(:cuisineType AS text) = ANY (r.cuisine_types))
+                      AND (:minRating IS NULL OR r.avg_rating >= CAST(:minRating AS numeric))
                     """,
             nativeQuery = true
     )
     Page<Restaurant> searchApproved(
             @Param("search") String search,
             @Param("cuisineType") String cuisineType,
+            @Param("minRating") BigDecimal minRating,
             Pageable pageable
     );
 
@@ -60,6 +64,7 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                            ))
                       AND (CAST(:cuisineType AS text) IS NULL OR CAST(:cuisineType AS text) = ''
                            OR CAST(:cuisineType AS text) = ANY (r.cuisine_types))
+                      AND (:minRating IS NULL OR r.avg_rating >= CAST(:minRating AS numeric))
                     ORDER BY (6371 * acos(
                                LEAST(1.0, GREATEST(-1.0,
                                    cos(radians(CAST(:lat AS double precision)))
@@ -82,12 +87,14 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                            ))
                       AND (CAST(:cuisineType AS text) IS NULL OR CAST(:cuisineType AS text) = ''
                            OR CAST(:cuisineType AS text) = ANY (r.cuisine_types))
+                      AND (:minRating IS NULL OR r.avg_rating >= CAST(:minRating AS numeric))
                     """,
             nativeQuery = true
     )
     Page<Restaurant> searchApprovedGeo(
             @Param("search") String search,
             @Param("cuisineType") String cuisineType,
+            @Param("minRating") BigDecimal minRating,
             @Param("lat") double lat,
             @Param("lng") double lng,
             Pageable pageable

@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
+
 @RestController
 @RequestMapping("/api/v1/payments")
 @Tag(name = "Payment")
@@ -42,6 +44,17 @@ public class PaymentController {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 paymentService.initiate(principal.userId(), orderId, idempotencyKey)));
+    }
+
+    @PostMapping("/verify")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Verify client-side Razorpay payment signature")
+    public ResponseEntity<ApiResponse<Boolean>> verify(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody VerifyPaymentRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.verifyPayment(principal.userId(), request)));
     }
 
     @PostMapping("/{paymentId}/refund")
