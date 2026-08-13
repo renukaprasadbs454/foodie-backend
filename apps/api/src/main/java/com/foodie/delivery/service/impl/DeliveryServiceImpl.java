@@ -55,6 +55,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.delivery.service.DeliveryPricingService;
+import java.math.BigDecimal;
+
 @Service
 public class DeliveryServiceImpl implements DeliveryService {
 
@@ -76,6 +79,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final PasswordEncoder passwordEncoder;
     private final RedisRateLimiter redisRateLimiter;
     private final DeliveryProperties deliveryProperties;
+    private final DeliveryPricingService deliveryPricingService;
 
     public DeliveryServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -89,7 +93,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             ApplicationEventPublisher eventPublisher,
             PasswordEncoder passwordEncoder,
             RedisRateLimiter redisRateLimiter,
-            DeliveryProperties deliveryProperties
+            DeliveryProperties deliveryProperties,
+            DeliveryPricingService deliveryPricingService
     ) {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
@@ -103,6 +108,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.passwordEncoder = passwordEncoder;
         this.redisRateLimiter = redisRateLimiter;
         this.deliveryProperties = deliveryProperties;
+        this.deliveryPricingService = deliveryPricingService;
     }
 
     @Override
@@ -374,11 +380,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .map(GeoPartnerHit::distanceKm)
                 .orElse(null);
 
+        BigDecimal estimatedFee = deliveryPricingService.calculateDeliveryFee(estimatedDistance);
+
         return deliveryMapper.toOffer(
                 assignment,
                 pickup.restaurantName(),
                 pickup.formattedAddress(),
-                estimatedDistance
+                estimatedDistance,
+                estimatedFee
         );
     }
 

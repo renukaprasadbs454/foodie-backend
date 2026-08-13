@@ -1,5 +1,6 @@
 package com.foodie.delivery.dto.response;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record DeliveryOfferResponseDto(
@@ -7,6 +8,7 @@ public record DeliveryOfferResponseDto(
         UUID orderId,
         String restaurantName,
         String pickupAddress,
-        Double estimatedDistance
+        Double estimatedDistance,
+        BigDecimal estimatedFee
 ) {
 }
