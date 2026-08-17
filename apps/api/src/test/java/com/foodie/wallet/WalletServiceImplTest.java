@@ -15,6 +15,7 @@ import com.foodie.common.enums.PayoutStatus;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.UnprocessableEntityException;
+import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
@@ -51,6 +52,7 @@ class WalletServiceImplTest {
     @Mock private LedgerEntryRepository ledgerEntryRepository;
     @Mock private PayoutRepository payoutRepository;
     @Mock private DeliveryPartnerLookup deliveryPartnerLookup;
+    @Mock private RestaurantRepository restaurantRepository;
     @Mock private PayoutIdempotencyStore payoutIdempotencyStore;
     @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -66,6 +68,7 @@ class WalletServiceImplTest {
                 ledgerEntryRepository,
                 payoutRepository,
                 deliveryPartnerLookup,
+                restaurantRepository,
                 payoutIdempotencyStore,
                 eventPublisher
         );

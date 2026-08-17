@@ -25,8 +25,11 @@ import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
 import com.foodie.restaurant.entity.RestaurantDocument;
 import com.foodie.restaurant.mapper.RestaurantMapper;
+import com.foodie.menu.repository.MenuItemRepository;
+import com.foodie.order.repository.OrderRepository;
 import com.foodie.restaurant.repository.RestaurantAddressRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
+import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
 import com.foodie.restaurant.service.impl.RestaurantServiceImpl;
@@ -55,6 +58,12 @@ class RestaurantServiceImplTest {
     @Mock
     private RestaurantDocumentRepository restaurantDocumentRepository;
     @Mock
+    private RestaurantLegalDetailRepository restaurantLegalDetailRepository;
+    @Mock
+    private OrderRepository orderRepository;
+    @Mock
+    private MenuItemRepository menuItemRepository;
+    @Mock
     private ObjectStorageClient objectStorageClient;
     @Mock
     private RestaurantCacheService restaurantCacheService;
@@ -70,6 +79,9 @@ class RestaurantServiceImplTest {
                 restaurantRepository,
                 restaurantAddressRepository,
                 restaurantDocumentRepository,
+                restaurantLegalDetailRepository,
+                orderRepository,
+                menuItemRepository,
                 new RestaurantMapper(),
                 objectStorageClient,
                 restaurantCacheService,

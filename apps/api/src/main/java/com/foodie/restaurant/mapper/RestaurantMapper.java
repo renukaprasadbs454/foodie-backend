@@ -3,10 +3,13 @@ package com.foodie.restaurant.mapper;
 import com.foodie.restaurant.dto.response.RestaurantAddressResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLegalDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantUpiResponseDto;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
 import com.foodie.restaurant.entity.RestaurantDocument;
+import com.foodie.restaurant.entity.RestaurantLegalDetail;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -62,6 +65,31 @@ public class RestaurantMapper {
                 document.getId(),
                 document.getDocType().name(),
                 document.getVerifiedAt()
+        );
+    }
+
+    public RestaurantUpiResponseDto toUpiResponse(Restaurant restaurant) {
+        return new RestaurantUpiResponseDto(
+                restaurant.getUpiId(),
+                restaurant.getUpiName(),
+                restaurant.isUpiVerified(),
+                restaurant.getUpiVerifiedAt()
+        );
+    }
+
+    public RestaurantLegalDetailResponseDto toLegalDetailResponse(RestaurantLegalDetail detail) {
+        return new RestaurantLegalDetailResponseDto(
+                detail.getId(),
+                detail.getRestaurant().getId(),
+                detail.getGstin(),
+                detail.getPan(),
+                detail.getFssaiLicenseNumber(),
+                detail.getLegalName(),
+                detail.getBusinessType(),
+                detail.getContactEmail(),
+                detail.getContactPhone(),
+                detail.getCreatedAt(),
+                detail.getUpdatedAt()
         );
     }
 

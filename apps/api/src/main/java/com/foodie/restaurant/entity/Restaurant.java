@@ -58,6 +58,18 @@ public class Restaurant extends BaseEntity {
     @Column(name = "commission_pct", nullable = false, precision = 4, scale = 2)
     private BigDecimal commissionPct;
 
+    @Column(name = "upi_id", length = 100)
+    private String upiId;
+
+    @Column(name = "upi_name", length = 150)
+    private String upiName;
+
+    @Column(name = "upi_verified", nullable = false)
+    private boolean upiVerified = false;
+
+    @Column(name = "upi_verified_at")
+    private java.time.Instant upiVerifiedAt;
+
     protected Restaurant() {
     }
 
@@ -163,5 +175,33 @@ public class Restaurant extends BaseEntity {
 
     public BigDecimal getCommissionPct() {
         return commissionPct;
+    }
+
+    public void updateUpi(String upiId, String upiName) {
+        this.upiId = upiId;
+        this.upiName = upiName;
+        this.upiVerified = false;
+        this.upiVerifiedAt = null;
+    }
+
+    public void verifyUpi() {
+        this.upiVerified = true;
+        this.upiVerifiedAt = java.time.Instant.now();
+    }
+
+    public String getUpiId() {
+        return upiId;
+    }
+
+    public String getUpiName() {
+        return upiName;
+    }
+
+    public boolean isUpiVerified() {
+        return upiVerified;
+    }
+
+    public java.time.Instant getUpiVerifiedAt() {
+        return upiVerifiedAt;
     }
 }

@@ -17,18 +17,32 @@ import com.foodie.infrastructure.storage.ImageMagicBytes;
 import com.foodie.infrastructure.storage.ObjectStorageClient;
 import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
 import com.foodie.restaurant.dto.request.RestaurantAddressRequestDto;
+import com.foodie.restaurant.dto.request.RestaurantLegalDetailRequestDto;
+import com.foodie.restaurant.dto.request.RestaurantUpiRequestDto;
 import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
+import com.foodie.common.enums.OrderStatus;
+import com.foodie.menu.repository.MenuItemRepository;
+import com.foodie.order.entity.Order;
+import com.foodie.order.repository.OrderRepository;
+import com.foodie.restaurant.dto.response.RestaurantDashboardSummaryResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLegalDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantUpiResponseDto;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
 import com.foodie.restaurant.entity.RestaurantDocument;
+import com.foodie.restaurant.entity.RestaurantLegalDetail;
 import com.foodie.restaurant.mapper.RestaurantMapper;
 import com.foodie.restaurant.repository.RestaurantAddressRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
+import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import com.foodie.restaurant.service.RestaurantCacheService;
 import com.foodie.restaurant.service.RestaurantService;
 import com.foodie.shared.event.RestaurantApprovedEvent;
@@ -65,6 +79,9 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final RestaurantRepository restaurantRepository;
     private final RestaurantAddressRepository restaurantAddressRepository;
     private final RestaurantDocumentRepository restaurantDocumentRepository;
+    private final RestaurantLegalDetailRepository restaurantLegalDetailRepository;
+    private final OrderRepository orderRepository;
+    private final MenuItemRepository menuItemRepository;
     private final RestaurantMapper restaurantMapper;
     private final ObjectStorageClient objectStorageClient;
     private final RestaurantCacheService restaurantCacheService;
@@ -76,6 +93,9 @@ public class RestaurantServiceImpl implements RestaurantService {
             RestaurantRepository restaurantRepository,
             RestaurantAddressRepository restaurantAddressRepository,
             RestaurantDocumentRepository restaurantDocumentRepository,
+            RestaurantLegalDetailRepository restaurantLegalDetailRepository,
+            OrderRepository orderRepository,
+            MenuItemRepository menuItemRepository,
             RestaurantMapper restaurantMapper,
             ObjectStorageClient objectStorageClient,
             RestaurantCacheService restaurantCacheService,
@@ -86,6 +106,9 @@ public class RestaurantServiceImpl implements RestaurantService {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
         this.restaurantDocumentRepository = restaurantDocumentRepository;
+        this.restaurantLegalDetailRepository = restaurantLegalDetailRepository;
+        this.orderRepository = orderRepository;
+        this.menuItemRepository = menuItemRepository;
         this.restaurantMapper = restaurantMapper;
         this.objectStorageClient = objectStorageClient;
         this.restaurantCacheService = restaurantCacheService;
@@ -289,6 +312,143 @@ public class RestaurantServiceImpl implements RestaurantService {
         }
         restaurantCacheService.evictRestaurant(restaurant.getId());
         return new RestaurantImageUploadResponseDto(key, imageType.name(), uploadedAt);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantUpiResponseDto getUpiDetails(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        return restaurantMapper.toUpiResponse(restaurant);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantUpiResponseDto updateUpiDetails(UUID ownerCredentialId, RestaurantUpiRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.updateUpi(request.upiId(), request.upiName());
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        return restaurantMapper.toUpiResponse(restaurant);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantUpiResponseDto verifyUpiDetails(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        if (restaurant.getUpiId() == null || restaurant.getUpiId().isBlank()) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "UPI ID must be configured before verification.");
+        }
+        restaurant.verifyUpi();
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        return restaurantMapper.toUpiResponse(restaurant);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        if (restaurantLegalDetailRepository.existsByRestaurantId(restaurant.getId())) {
+            throw new ConflictException(ErrorCode.CONFLICT, "Legal details already exist for this restaurant.");
+        }
+        RestaurantLegalDetail detail = restaurantLegalDetailRepository.save(RestaurantLegalDetail.create(
+                restaurant,
+                request.gstin(),
+                request.pan(),
+                request.fssaiLicenseNumber(),
+                request.legalName(),
+                request.businessType(),
+                request.contactEmail(),
+                request.contactPhone()
+        ));
+        return restaurantMapper.toLegalDetailResponse(detail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantLegalDetailResponseDto getLegalDetails(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Legal details not found for this restaurant."));
+        return restaurantMapper.toLegalDetailResponse(detail);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Legal details not found for this restaurant."));
+        detail.update(
+                request.gstin(),
+                request.pan(),
+                request.fssaiLicenseNumber(),
+                request.legalName(),
+                request.businessType(),
+                request.contactEmail(),
+                request.contactPhone()
+        );
+        return restaurantMapper.toLegalDetailResponse(detail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom, LocalDate dateTo) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+
+        List<Order> orders;
+        if (dateFrom != null && dateTo != null) {
+            orders = orderRepository.findByRestaurantIdAndCreatedAtBetween(
+                    restaurant.getId(),
+                    dateFrom.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                    dateTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
+            );
+        } else {
+            orders = orderRepository.findByRestaurantId(restaurant.getId());
+        }
+
+        long totalOrders = orders.size();
+        long completedOrders = 0;
+        long cancelledOrders = 0;
+        long pendingOrders = 0;
+
+        BigDecimal grossSales = BigDecimal.ZERO;
+
+        for (Order order : orders) {
+            OrderStatus status = order.getStatus();
+            if (status == OrderStatus.DELIVERED) {
+                completedOrders++;
+                if (order.getTotalAmount() != null) {
+                    grossSales = grossSales.add(order.getTotalAmount());
+                }
+            } else if (status == OrderStatus.CANCELLED || status == OrderStatus.REJECTED) {
+                cancelledOrders++;
+            } else {
+                pendingOrders++;
+            }
+        }
+
+        BigDecimal commissionPct = restaurant.getCommissionPct() != null ? restaurant.getCommissionPct() : BigDecimal.ZERO;
+        BigDecimal commissionDeducted = grossSales.multiply(commissionPct)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal netEarnings = grossSales.subtract(commissionDeducted);
+
+        BigDecimal avgOrderValue = completedOrders > 0
+                ? grossSales.divide(BigDecimal.valueOf(completedOrders), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        long activeMenuItemsCount = menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurant.getId()).size();
+
+        return new RestaurantDashboardSummaryResponseDto(
+                totalOrders,
+                completedOrders,
+                cancelledOrders,
+                pendingOrders,
+                grossSales.setScale(2, RoundingMode.HALF_UP),
+                commissionDeducted.setScale(2, RoundingMode.HALF_UP),
+                netEarnings.setScale(2, RoundingMode.HALF_UP),
+                avgOrderValue,
+                restaurant.getAvgRating(),
+                activeMenuItemsCount
+        );
     }
 
     @Override

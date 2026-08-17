@@ -7,18 +7,25 @@ import com.foodie.common.enums.UserType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
+import com.foodie.restaurant.dto.request.RestaurantLegalDetailRequestDto;
+import com.foodie.restaurant.dto.request.RestaurantUpiRequestDto;
 import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
+import com.foodie.restaurant.dto.response.RestaurantDashboardSummaryResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLegalDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantUpiResponseDto;
 import com.foodie.restaurant.service.RestaurantService;
 import com.foodie.security.principal.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -128,5 +135,75 @@ public class RestaurantController {
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(restaurantService.uploadImage(principal.userId(), type, file)));
+    }
+
+    @GetMapping("/me/upi")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get my restaurant UPI payment details")
+    public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> getUpiDetails(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.getUpiDetails(principal.userId())));
+    }
+
+    @PutMapping("/me/upi")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Add or update my restaurant UPI payment details")
+    public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> updateUpiDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody RestaurantUpiRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateUpiDetails(principal.userId(), request)));
+    }
+
+    @PostMapping("/me/upi/verify")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Verify my restaurant UPI payment details")
+    public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> verifyUpiDetails(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.verifyUpiDetails(principal.userId())));
+    }
+
+    @PostMapping("/me/legal-details")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Create business and legal details for my restaurant")
+    public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> createLegalDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody RestaurantLegalDetailRequestDto request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(restaurantService.createLegalDetails(principal.userId(), request)));
+    }
+
+    @GetMapping("/me/legal-details")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get business and legal details for my restaurant")
+    public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> getLegalDetails(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.getLegalDetails(principal.userId())));
+    }
+
+    @PutMapping("/me/legal-details")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update business and legal details for my restaurant")
+    public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> updateLegalDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody RestaurantLegalDetailRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateLegalDetails(principal.userId(), request)));
+    }
+
+    @GetMapping("/me/dashboard-summary")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get dashboard summary metrics for my restaurant portal")
+    public ResponseEntity<ApiResponse<RestaurantDashboardSummaryResponseDto>> getDashboardSummary(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                restaurantService.getDashboardSummary(principal.userId(), dateFrom, dateTo)));
     }
 }

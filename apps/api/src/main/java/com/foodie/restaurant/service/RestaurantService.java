@@ -13,6 +13,13 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.restaurant.dto.request.RestaurantLegalDetailRequestDto;
+import com.foodie.restaurant.dto.request.RestaurantUpiRequestDto;
+import com.foodie.restaurant.dto.response.RestaurantDashboardSummaryResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLegalDetailResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantUpiResponseDto;
+import java.time.LocalDate;
+
 public interface RestaurantService {
 
     record PageResult<T>(List<T> items, PaginationMeta pagination) {
@@ -46,6 +53,20 @@ public interface RestaurantService {
             RestaurantImageType imageType,
             MultipartFile file
     );
+
+    RestaurantUpiResponseDto getUpiDetails(UUID ownerCredentialId);
+
+    RestaurantUpiResponseDto updateUpiDetails(UUID ownerCredentialId, RestaurantUpiRequestDto request);
+
+    RestaurantUpiResponseDto verifyUpiDetails(UUID ownerCredentialId);
+
+    RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request);
+
+    RestaurantLegalDetailResponseDto getLegalDetails(UUID ownerCredentialId);
+
+    RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request);
+
+    RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom, LocalDate dateTo);
 
     /** Invoked by Admin module (Phase3 §2.3 / API §13.1) — not exposed as restaurant HTTP in Module 3. */
     RestaurantDetailResponseDto approve(UUID restaurantId, UUID adminId);

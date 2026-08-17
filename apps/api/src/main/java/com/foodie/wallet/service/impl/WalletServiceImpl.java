@@ -8,6 +8,8 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
+import com.foodie.restaurant.entity.Restaurant;
+import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
@@ -54,6 +56,7 @@ public class WalletServiceImpl implements WalletService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final PayoutRepository payoutRepository;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
+    private final RestaurantRepository restaurantRepository;
     private final PayoutIdempotencyStore payoutIdempotencyStore;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -62,6 +65,7 @@ public class WalletServiceImpl implements WalletService {
             LedgerEntryRepository ledgerEntryRepository,
             PayoutRepository payoutRepository,
             DeliveryPartnerLookup deliveryPartnerLookup,
+            RestaurantRepository restaurantRepository,
             PayoutIdempotencyStore payoutIdempotencyStore,
             ApplicationEventPublisher eventPublisher
     ) {
@@ -69,6 +73,7 @@ public class WalletServiceImpl implements WalletService {
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.payoutRepository = payoutRepository;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
+        this.restaurantRepository = restaurantRepository;
         this.payoutIdempotencyStore = payoutIdempotencyStore;
         this.eventPublisher = eventPublisher;
     }
@@ -236,14 +241,97 @@ public class WalletServiceImpl implements WalletService {
         return WalletMapper.toLedger(entry);
     }
 
+    @Override
+    @Transactional
+    public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        return WalletMapper.toBalance(account);
+    }
+
+    @Override
+    @Transactional
+    public PageResult<LedgerEntryResponseDto> getRestaurantLedger(
+            UUID ownerCredentialId,
+            int page,
+            int size,
+            String sort,
+            Instant createdAtFrom,
+            Instant createdAtTo
+    ) {
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
+        Page<LedgerEntry> result = ledgerEntryRepository.findHistory(
+                account.getId(), createdAtFrom, createdAtTo, pageable);
+        List<LedgerEntryResponseDto> items = result.getContent().stream()
+                .map(WalletMapper::toLedger)
+                .toList();
+        PaginationMeta meta = new PaginationMeta(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages()
+        );
+        return new PageResult<>(items, meta);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto requestRestaurantPayout(
+            UUID ownerCredentialId,
+            PayoutRequestDto request,
+            String idempotencyKey
+    ) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var cached = payoutIdempotencyStore.find(idempotencyKey.trim());
+            if (cached.isPresent()) {
+                return cached.get();
+            }
+        }
+
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreateForUpdate(OwnerType.RESTAURANT, restaurantId);
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
+                account.getId(), OPEN_PAYOUT_STATUSES);
+        BigDecimal available = account.getBalance().subtract(openPayouts);
+        if (amount.compareTo(available) > 0) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.INSUFFICIENT_BALANCE,
+                    "Requested payout exceeds available wallet balance."
+            );
+        }
+
+        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount));
+        PayoutResponseDto response = WalletMapper.toPayout(payout);
+        eventPublisher.publishEvent(PayoutRequestedEvent.of(
+                payout.getId(), account.getId(), restaurantId, amount));
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            payoutIdempotencyStore.store(idempotencyKey.trim(), response);
+        }
+        return response;
+    }
+
     private UUID requirePartnerId(UUID userCredentialId) {
         return deliveryPartnerLookup.findPartnerIdByUserCredentialId(userCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner profile not found."));
     }
 
+    private UUID requireRestaurantId(UUID ownerCredentialId) {
+        return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
+                .map(Restaurant::getId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
+    }
+
     private void validateOwner(OwnerType ownerType, UUID ownerId) {
         if (ownerType == OwnerType.DELIVERY_PARTNER && !deliveryPartnerLookup.existsById(ownerId)) {
             throw new ResourceNotFoundException("Delivery partner not found for wallet credit.");
+        }
+        if (ownerType == OwnerType.RESTAURANT && !restaurantRepository.existsById(ownerId)) {
+            throw new ResourceNotFoundException("Restaurant not found for wallet credit.");
         }
         if (ownerType == OwnerType.PLATFORM && !WalletConstants.PLATFORM_OWNER_ID.equals(ownerId)) {
             throw new BadRequestException(

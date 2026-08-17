@@ -27,6 +27,23 @@ public interface WalletService {
 
     PayoutResponseDto requestPayout(UUID userCredentialId, PayoutRequestDto request, String idempotencyKey);
 
+    WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId);
+
+    PageResult<LedgerEntryResponseDto> getRestaurantLedger(
+            UUID ownerCredentialId,
+            int page,
+            int size,
+            String sort,
+            Instant createdAtFrom,
+            Instant createdAtTo
+    );
+
+    PayoutResponseDto requestRestaurantPayout(
+            UUID ownerCredentialId,
+            PayoutRequestDto request,
+            String idempotencyKey
+    );
+
     /** Idempotent CREDIT used by domain event listeners (driver earnings / refund credits). */
     LedgerEntryResponseDto credit(
             OwnerType ownerType,
