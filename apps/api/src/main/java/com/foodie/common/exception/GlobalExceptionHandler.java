@@ -44,6 +44,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.validationFailure(fields));
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(
+            org.springframework.web.bind.MissingServletRequestParameterException ex) {
+        log.error("Missing param: {}", ex.getParameterName());
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put(ex.getParameterName(), "must not be blank");
+        return ResponseEntity.badRequest().body(ApiResponse.validationFailure(fields));
+    }
+
     @ExceptionHandler(RateLimitedException.class)
     public ResponseEntity<ApiResponse<Void>> handleRateLimited(RateLimitedException ex, HttpServletResponse response) {
         response.setHeader("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
@@ -53,6 +62,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(BadRequestException ex) {
+        log.error("Bad Request: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
 
@@ -117,6 +127,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnhandled(Exception ex) {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred."));
+                .body(ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "Error: " + ex.getMessage()));
     }
 }

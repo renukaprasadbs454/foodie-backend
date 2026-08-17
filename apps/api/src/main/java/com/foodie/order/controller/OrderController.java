@@ -67,6 +67,26 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 
+    @GetMapping("/me/active")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Get my current active order (for live tracking bar)")
+    public ResponseEntity<ApiResponse<OrderResponseDto>> getActiveOrder(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getActiveOrderForCustomer(principal.userId())));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Cancel an order (if allowed by status)")
+    public ResponseEntity<ApiResponse<OrderResponseDto>> cancelOrder(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @RequestParam(required = false) String reason
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.cancelOrder(id, principal.userId(), reason)));
+    }
+
     @GetMapping("/restaurant")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "List restaurant order queue (own restaurant from JWT)")

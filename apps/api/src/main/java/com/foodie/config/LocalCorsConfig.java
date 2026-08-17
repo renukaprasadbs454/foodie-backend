@@ -13,7 +13,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Production uses gateway/nginx CORS — do not enable this profile in prod.
  */
 @Configuration
-@Profile({"local", "dev"})
+@Profile({ "local", "dev" })
 public class LocalCorsConfig {
 
     @Bean
@@ -21,8 +21,8 @@ public class LocalCorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",
-                "http://127.0.0.1:*"
-        ));
+                "http://127.0.0.1:*",
+                "*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

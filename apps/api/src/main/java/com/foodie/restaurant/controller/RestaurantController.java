@@ -51,13 +51,14 @@ public class RestaurantController {
     public ResponseEntity<ApiResponse<List<RestaurantSummaryResponseDto>>> search(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String cuisineType,
+            @RequestParam(required = false) Double minRating,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort
     ) {
-        var result = restaurantService.search(search, cuisineType, lat, lng, page, size, sort);
+        var result = restaurantService.search(search, cuisineType, minRating, lat, lng, page, size, sort);
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 

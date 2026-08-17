@@ -29,6 +29,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.user.dto.request.ChangePasswordRequestDto;
+import com.foodie.user.dto.request.UpdateAddressRequestDto;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 @Service
 public class CustomerServiceImpl implements CustomerService {
 
@@ -40,6 +44,7 @@ public class CustomerServiceImpl implements CustomerService {
     private final CustomerMapper customerMapper;
     private final ObjectStorageClient objectStorageClient;
     private final ActiveOrderAddressQuery activeOrderAddressQuery;
+    private final PasswordEncoder passwordEncoder;
 
     public CustomerServiceImpl(
             CustomerRepository customerRepository,
@@ -47,7 +52,8 @@ public class CustomerServiceImpl implements CustomerService {
             UserCredentialRepository userCredentialRepository,
             CustomerMapper customerMapper,
             ObjectStorageClient objectStorageClient,
-            ActiveOrderAddressQuery activeOrderAddressQuery
+            ActiveOrderAddressQuery activeOrderAddressQuery,
+            PasswordEncoder passwordEncoder
     ) {
         this.customerRepository = customerRepository;
         this.addressRepository = addressRepository;
@@ -55,6 +61,7 @@ public class CustomerServiceImpl implements CustomerService {
         this.customerMapper = customerMapper;
         this.objectStorageClient = objectStorageClient;
         this.activeOrderAddressQuery = activeOrderAddressQuery;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -70,7 +77,58 @@ public class CustomerServiceImpl implements CustomerService {
         Customer customer = requireCustomer(userCredentialId);
         // PUT full-replace: omitted/null email clears the profile email (API Contracts §2.2).
         customer.updateProfile(request.fullName(), request.email());
-        return customerMapper.toProfile(customer, phoneOf(userCredentialId));
+        return getMyProfile(userCredentialId);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(UUID userCredentialId, ChangePasswordRequestDto request) {
+        UserCredential credential = userCredentialRepository.findById(userCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("User credential not found."));
+
+        String currentHash = credential.getPasswordHash();
+        if (currentHash == null || !passwordEncoder.matches(request.currentPassword(), currentHash)) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Current password does not match.");
+        }
+
+        credential.updatePasswordHash(passwordEncoder.encode(request.newPassword()));
+    }
+
+    @Override
+    @Transactional
+    public AddressResponseDto updateAddress(UUID userCredentialId, UUID addressId, UpdateAddressRequestDto request) {
+        Customer customer = requireCustomer(userCredentialId);
+        Address address = addressRepository.findByIdAndCustomerId(addressId, customer.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Address not found."));
+
+        address.update(
+                request.recipientName(),
+                request.recipientPhone(),
+                request.houseFlatNo(),
+                request.landmark(),
+                request.state(),
+                request.label(),
+                request.line1(),
+                request.line2(),
+                request.city(),
+                request.pincode(),
+                request.latitude(),
+                request.longitude()
+        );
+        return customerMapper.toAddress(address);
+    }
+
+    @Override
+    @Transactional
+    public AddressResponseDto setDefaultAddress(UUID userCredentialId, UUID addressId) {
+        Customer customer = requireCustomer(userCredentialId);
+        Address address = addressRepository.findByIdAndCustomerId(addressId, customer.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Address not found."));
+
+        addressRepository.clearDefaultForCustomer(customer.getId());
+        address.markDefault();
+        customer.setDefaultAddressId(address.getId());
+        return customerMapper.toAddress(address);
     }
 
     @Override
@@ -83,6 +141,11 @@ public class CustomerServiceImpl implements CustomerService {
         }
         Address address = Address.create(
                 customer,
+                request.recipientName(),
+                request.recipientPhone(),
+                request.houseFlatNo(),
+                request.landmark(),
+                request.state(),
                 request.label(),
                 request.line1(),
                 request.line2(),

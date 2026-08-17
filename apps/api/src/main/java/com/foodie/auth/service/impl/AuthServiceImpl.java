@@ -1,7 +1,11 @@
 package com.foodie.auth.service.impl;
 
 import com.foodie.auth.dto.request.AdminLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerRegisterRequestDto;
+import com.foodie.auth.dto.request.ForgotPasswordRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
+import com.foodie.auth.dto.request.ResetPasswordRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
 import com.foodie.auth.entity.RefreshToken;
@@ -71,8 +75,7 @@ public class AuthServiceImpl implements AuthService {
             GoogleTokenVerifier googleTokenVerifier,
             JwtTokenProvider jwtTokenProvider,
             ApplicationEventPublisher eventPublisher,
-            AdminIdentityQueryPort adminIdentityQueryPort
-    ) {
+            AdminIdentityQueryPort adminIdentityQueryPort) {
         this.userCredentialRepository = userCredentialRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.redisTemplate = redisTemplate;
@@ -92,6 +95,11 @@ public class AuthServiceImpl implements AuthService {
         String otp = HashUtils.sixDigitOtp();
         String otpHash = passwordEncoder.encode(otp);
         redisTemplate.opsForValue().set(otpKey(phoneNumber), otpHash, OTP_TTL);
+
+        // Print to backend terminal for testing bypass
+        log.info("==========================================================");
+        log.info("🔔 [TESTING BYPASS] OTP for {}: {}", phoneNumber, otp);
+        log.info("==========================================================");
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -123,7 +131,8 @@ public class AuthServiceImpl implements AuthService {
         }
         redisTemplate.delete(otpKey(request.phoneNumber()));
 
-        // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays exclusive.
+        // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays
+        // exclusive.
         boolean phoneUsedByAdmin = userCredentialRepository
                 .findAllByPhoneNumber(request.phoneNumber())
                 .stream()
@@ -131,26 +140,22 @@ public class AuthServiceImpl implements AuthService {
         if (phoneUsedByAdmin) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED,
-                    "Phone number is reserved for an admin account."
-            );
+                    "Phone number is reserved for an admin account.");
         }
 
         Optional<UserCredential> existing = userCredentialRepository.findByPhoneNumberAndUserType(
                 request.phoneNumber(),
-                request.userType()
-        );
+                request.userType());
         boolean isNewUser = existing.isEmpty();
         UserCredential credential;
         if (isNewUser) {
             credential = userCredentialRepository.save(
-                    UserCredential.phoneSignup(request.phoneNumber(), request.userType())
-            );
+                    UserCredential.phoneSignup(request.phoneNumber(), request.userType()));
             eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
                     credential.getId(),
                     credential.getUserType(),
                     credential.getPhoneNumber(),
-                    credential.getEmail()
-            ));
+                    credential.getEmail()));
         } else {
             credential = existing.get();
         }
@@ -171,14 +176,12 @@ public class AuthServiceImpl implements AuthService {
         UserCredential credential;
         if (isNewUser) {
             credential = userCredentialRepository.save(
-                    UserCredential.googleSignup(identity.googleId(), identity.email())
-            );
+                    UserCredential.googleSignup(identity.googleId(), identity.email()));
             eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
                     credential.getId(),
                     credential.getUserType(),
                     credential.getPhoneNumber(),
-                    credential.getEmail()
-            ));
+                    credential.getEmail()));
         } else {
             credential = existing.get();
         }
@@ -188,12 +191,81 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    public TokenPairResponseDto registerCustomer(CustomerRegisterRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        Optional<UserCredential> existingEmail = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER);
+        if (existingEmail.isPresent()) {
+            throw new BadRequestException(ErrorCode.CONFLICT, "Email is already registered.");
+        }
+
+        String encodedPassword = passwordEncoder.encode(request.password());
+        UserCredential credential = userCredentialRepository.save(
+                UserCredential.customerPasswordSignup(email, request.phoneNumber(), encodedPassword)
+        );
+
+        eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
+                credential.getId(),
+                credential.getUserType(),
+                credential.getPhoneNumber(),
+                credential.getEmail()
+        ));
+
+        return issueTokenPair(credential, request.deviceInfo(), true);
+    }
+
+    @Override
+    @Transactional
+    public TokenPairResponseDto loginCustomer(CustomerLoginRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        UserCredential credential = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER)
+                .orElseThrow(() -> new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password."));
+
+        String passwordHash = credential.getPasswordHash();
+        if (passwordHash == null || !passwordEncoder.matches(request.password(), passwordHash)) {
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
+        }
+
+        assertActive(credential);
+        return issueTokenPair(credential, request.deviceInfo(), false);
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        Optional<UserCredential> found = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER);
+        if (found.isPresent()) {
+            String resetToken = HashUtils.sixDigitOtp();
+            String tokenHash = passwordEncoder.encode(resetToken);
+            redisTemplate.opsForValue().set("reset-password:" + email, tokenHash, Duration.ofMinutes(15));
+            log.info("Generated password reset code for email={}", email);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDto request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String storedHash = redisTemplate.opsForValue().get("reset-password:" + email);
+        if (storedHash == null || !passwordEncoder.matches(request.otpCode(), storedHash)) {
+            throw new BadRequestException(ErrorCode.INVALID_OTP, "Invalid or expired password reset token.");
+        }
+
+        UserCredential credential = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER)
+                .orElseThrow(() -> new BadRequestException(ErrorCode.RESOURCE_NOT_FOUND, "Customer profile not found."));
+
+        credential.updatePasswordHash(passwordEncoder.encode(request.newPassword()));
+        redisTemplate.delete("reset-password:" + email);
+        revokeAllForUser(credential.getId());
+    }
+
+    @Override
+    @Transactional
     public TokenPairResponseDto loginAdmin(AdminLoginRequestDto request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         rateLimiter.check("ratelimit:admin-login:" + email, ADMIN_LOGIN_LIMIT, ADMIN_LOGIN_WINDOW);
 
-        Optional<UserCredential> found =
-                userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.ADMIN);
+        Optional<UserCredential> found = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email,
+                UserType.ADMIN);
 
         UserCredential credential = found.orElse(null);
         String passwordHash = credential == null ? null : credential.getPasswordHash();
@@ -201,7 +273,8 @@ public class AuthServiceImpl implements AuthService {
                 && !passwordHash.isBlank()
                 && passwordEncoder.matches(request.password(), passwordHash);
 
-        // Opaque failure for unknown email, missing password, or mismatch (no user enumeration).
+        // Opaque failure for unknown email, missing password, or mismatch (no user
+        // enumeration).
         if (credential == null || !passwordOk) {
             throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
         }
@@ -212,8 +285,7 @@ public class AuthServiceImpl implements AuthService {
                 .findRoleNameByUserCredentialId(credential.getId())
                 .orElseThrow(() -> new ForbiddenException(
                         ErrorCode.FORBIDDEN,
-                        "Admin profile is not provisioned."
-                ));
+                        "Admin profile is not provisioned."));
 
         return issueTokenPair(credential, request.deviceInfo(), false, role);
     }
@@ -230,7 +302,8 @@ public class AuthServiceImpl implements AuthService {
         if (existing.isRevoked()) {
             log.warn("Refresh token reuse detected for userCredentialId={}", existing.getUserCredential().getId());
             revokeAllForUser(existing.getUserCredential().getId());
-            throw new UnauthorizedException(ErrorCode.TOKEN_REUSE_DETECTED, "Refresh token reuse detected. Please log in again.");
+            throw new UnauthorizedException(ErrorCode.TOKEN_REUSE_DETECTED,
+                    "Refresh token reuse detected. Please log in again.");
         }
         if (existing.getExpiresAt().isBefore(Instant.now())) {
             existing.revoke();
@@ -283,20 +356,17 @@ public class AuthServiceImpl implements AuthService {
             UserCredential credential,
             String deviceInfo,
             boolean isNewUser,
-            String role
-    ) {
+            String role) {
         String accessToken = jwtTokenProvider.createAccessToken(
                 credential.getId(),
                 credential.getUserType(),
-                role
-        );
+                role);
         String refreshRaw = HashUtils.randomToken();
         String refreshHash = HashUtils.sha256Hex(refreshRaw);
         Instant expiresAt = Instant.now().plusSeconds(jwtTokenProvider.refreshTtlSeconds(credential.getUserType()));
 
         RefreshToken refreshToken = refreshTokenRepository.save(
-                RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo)
-        );
+                RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo));
 
         Duration sessionTtl = Duration.between(Instant.now(), expiresAt);
         if (!sessionTtl.isNegative() && !sessionTtl.isZero()) {
@@ -310,8 +380,7 @@ public class AuthServiceImpl implements AuthService {
                 credential.getUserType(),
                 isNewUser,
                 credential.getId(),
-                role
-        );
+                role);
     }
 
     private void assertActive(UserCredential credential) {

@@ -3,6 +3,8 @@ package com.foodie.user.controller;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.security.principal.AuthPrincipal;
 import com.foodie.user.dto.request.AddAddressRequestDto;
+import com.foodie.user.dto.request.ChangePasswordRequestDto;
+import com.foodie.user.dto.request.UpdateAddressRequestDto;
 import com.foodie.user.dto.request.UpdateProfileRequestDto;
 import com.foodie.user.dto.response.AddressResponseDto;
 import com.foodie.user.dto.response.CustomerProfileResponseDto;
@@ -58,6 +60,16 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(customerService.updateMyProfile(principal.userId(), request)));
     }
 
+    @PostMapping("/me/change-password")
+    @Operation(summary = "Change password for logged in customer")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequestDto request
+    ) {
+        customerService.changePassword(principal.userId(), request);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @PostMapping("/me/addresses")
     @Operation(summary = "Add a delivery address")
     public ResponseEntity<ApiResponse<AddressResponseDto>> addAddress(
@@ -66,6 +78,25 @@ public class UserController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(customerService.addAddress(principal.userId(), request)));
+    }
+
+    @PutMapping("/me/addresses/{addressId}")
+    @Operation(summary = "Update a delivery address")
+    public ResponseEntity<ApiResponse<AddressResponseDto>> updateAddress(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID addressId,
+            @Valid @RequestBody UpdateAddressRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.updateAddress(principal.userId(), addressId, request)));
+    }
+
+    @PutMapping("/me/addresses/{addressId}/default")
+    @Operation(summary = "Set default delivery address")
+    public ResponseEntity<ApiResponse<AddressResponseDto>> setDefaultAddress(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID addressId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.setDefaultAddress(principal.userId(), addressId)));
     }
 
     @GetMapping("/me/addresses")

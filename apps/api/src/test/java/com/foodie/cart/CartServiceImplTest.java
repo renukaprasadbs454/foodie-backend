@@ -22,6 +22,7 @@ import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.MenuItemPriceProvider;
+import com.foodie.shared.contract.RestaurantSummaryProvider;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +44,8 @@ class CartServiceImplTest {
     private CustomerSummaryProvider customerSummaryProvider;
     @Mock
     private MenuItemPriceProvider menuItemPriceProvider;
+    @Mock
+    private RestaurantSummaryProvider restaurantSummaryProvider;
 
     private CartServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();
@@ -57,7 +60,8 @@ class CartServiceImplTest {
                 cartItemRepository,
                 new CartMapper(),
                 customerSummaryProvider,
-                menuItemPriceProvider
+                menuItemPriceProvider,
+                restaurantSummaryProvider
         );
     }
 

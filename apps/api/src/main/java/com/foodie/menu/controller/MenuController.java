@@ -16,6 +16,7 @@ import com.foodie.security.principal.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,6 +49,22 @@ public class MenuController {
     @Operation(summary = "Get full menu for a restaurant (public)")
     public ResponseEntity<ApiResponse<FullMenuResponseDto>> getFullMenu(@PathVariable UUID restaurantId) {
         return ResponseEntity.ok(ApiResponse.success(menuService.getFullMenu(restaurantId)));
+    }
+
+    @GetMapping("/items/{itemId}")
+    @Operation(summary = "Get individual food item details (public)")
+    public ResponseEntity<ApiResponse<MenuItemResponseDto>> getItemById(@PathVariable UUID itemId) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.getItemById(itemId)));
+    }
+
+    @GetMapping("/restaurants/{restaurantId}/items")
+    @Operation(summary = "Get food items for a restaurant with category/veg filter (public)")
+    public ResponseEntity<ApiResponse<List<MenuItemResponseDto>>> getItemsByRestaurant(
+            @PathVariable UUID restaurantId,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) Boolean isVeg
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.getItemsByRestaurant(restaurantId, categoryId, isVeg)));
     }
 
     @PostMapping("/categories")

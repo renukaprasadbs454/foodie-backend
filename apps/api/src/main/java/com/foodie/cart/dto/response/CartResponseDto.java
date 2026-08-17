@@ -7,7 +7,13 @@ import java.util.UUID;
 public record CartResponseDto(
         UUID cartId,
         UUID restaurantId,
+        String restaurantName,
+        String restaurantImageUrl,
         List<CartItemResponseDto> items,
-        BigDecimal subtotal
+        BigDecimal subtotal,
+        BigDecimal deliveryFee,
+        BigDecimal taxAmount,
+        BigDecimal discountAmount,
+        BigDecimal grandTotal
 ) {
 }

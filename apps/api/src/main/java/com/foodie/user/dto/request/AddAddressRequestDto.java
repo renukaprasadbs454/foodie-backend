@@ -4,11 +4,25 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public record AddAddressRequestDto(
+        @Size(max = 100)
+        String recipientName,
+
+        @Size(max = 20)
+        String recipientPhone,
+
+        @Size(max = 100)
+        String houseFlatNo,
+
+        @Size(max = 255)
+        String landmark,
+
+        @Size(max = 100)
+        String state,
+
         @Size(max = 50)
         String label,
 
@@ -24,7 +38,6 @@ public record AddAddressRequestDto(
         String city,
 
         @NotBlank
-        @Pattern(regexp = "^\\d{6}$", message = "pincode must be 6 digits")
         String pincode,
 
         @NotNull

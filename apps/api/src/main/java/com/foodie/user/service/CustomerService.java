@@ -1,6 +1,8 @@
 package com.foodie.user.service;
 
 import com.foodie.user.dto.request.AddAddressRequestDto;
+import com.foodie.user.dto.request.ChangePasswordRequestDto;
+import com.foodie.user.dto.request.UpdateAddressRequestDto;
 import com.foodie.user.dto.request.UpdateProfileRequestDto;
 import com.foodie.user.dto.response.AddressResponseDto;
 import com.foodie.user.dto.response.CustomerProfileResponseDto;
@@ -15,7 +17,13 @@ public interface CustomerService {
 
     CustomerProfileResponseDto updateMyProfile(UUID userCredentialId, UpdateProfileRequestDto request);
 
+    void changePassword(UUID userCredentialId, ChangePasswordRequestDto request);
+
     AddressResponseDto addAddress(UUID userCredentialId, AddAddressRequestDto request);
+
+    AddressResponseDto updateAddress(UUID userCredentialId, UUID addressId, UpdateAddressRequestDto request);
+
+    AddressResponseDto setDefaultAddress(UUID userCredentialId, UUID addressId);
 
     List<AddressResponseDto> listAddresses(UUID userCredentialId);
 

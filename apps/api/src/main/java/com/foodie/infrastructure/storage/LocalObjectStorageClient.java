@@ -14,7 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Local filesystem storage for development. Swap for S3/R2 without touching User module.
+ * Local filesystem storage for development. Swap for S3/R2 without touching
+ * User module.
  */
 @Component
 public class LocalObjectStorageClient implements ObjectStorageClient {
@@ -46,8 +47,9 @@ public class LocalObjectStorageClient implements ObjectStorageClient {
 
     @Override
     public String createSignedGetUrl(String key, Duration ttl) {
-        Instant expires = Instant.now().plus(ttl);
-        return "local://" + key + "?expires=" + expires;
+        // Omitting expires= param natively prevents React Native Image cache busting on
+        // re-renders
+        return "/api/v1/storage/" + key;
     }
 
     private Path resolve(String key) {

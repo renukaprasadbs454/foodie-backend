@@ -1,6 +1,7 @@
 package com.foodie.cart.service.impl;
 
 import com.foodie.cart.dto.request.AddCartItemRequestDto;
+import com.foodie.cart.dto.request.UpdateCartItemQuantityRequestDto;
 import com.foodie.cart.dto.response.CartConflictHintDto;
 import com.foodie.cart.dto.response.CartResponseDto;
 import com.foodie.cart.entity.Cart;
@@ -17,6 +18,7 @@ import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.shared.contract.CartCheckoutPort;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.MenuItemPriceProvider;
+import com.foodie.shared.contract.RestaurantSummaryProvider;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,19 +37,22 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
     private final CartMapper cartMapper;
     private final CustomerSummaryProvider customerSummaryProvider;
     private final MenuItemPriceProvider menuItemPriceProvider;
+    private final RestaurantSummaryProvider restaurantSummaryProvider;
 
     public CartServiceImpl(
             CartRepository cartRepository,
             CartItemRepository cartItemRepository,
             CartMapper cartMapper,
             CustomerSummaryProvider customerSummaryProvider,
-            MenuItemPriceProvider menuItemPriceProvider
+            MenuItemPriceProvider menuItemPriceProvider,
+            RestaurantSummaryProvider restaurantSummaryProvider
     ) {
         this.cartRepository = cartRepository;
         this.cartItemRepository = cartItemRepository;
         this.cartMapper = cartMapper;
         this.customerSummaryProvider = customerSummaryProvider;
         this.menuItemPriceProvider = menuItemPriceProvider;
+        this.restaurantSummaryProvider = restaurantSummaryProvider;
     }
 
     @Override
@@ -173,6 +178,28 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
         return cartItemRepository.findByCartIdAndMenuItemIdAndVariantId(cartId, menuItemId, variantId);
     }
 
+    @Override
+    @Transactional
+    public CartResponseDto updateItemQuantity(UUID userCredentialId, UUID cartItemId, UpdateCartItemQuantityRequestDto request) {
+        Cart cart = getOrCreateCart(resolveCustomerId(userCredentialId));
+        CartItem item = cartItemRepository.findById(cartItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cart item not found."));
+
+        if (!item.getCart().getId().equals(cart.getId())) {
+            throw new ResourceNotFoundException("Cart item does not belong to your cart.");
+        }
+
+        if (request.quantity() <= 0) {
+            cartItemRepository.delete(item);
+            if (cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()).isEmpty()) {
+                cart.clearRestaurant();
+            }
+        } else {
+            item.setQuantity(request.quantity());
+        }
+        return toView(cart);
+    }
+
     private CartResponseDto toView(Cart cart) {
         List<CartItem> items = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
         List<CartMapper.PricedLine> priced = new ArrayList<>();
@@ -183,6 +210,16 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
                     .orElse(BigDecimal.ZERO);
             priced.add(new CartMapper.PricedLine(cartMapper.toItem(item, unitPrice)));
         }
-        return cartMapper.toCart(cart, priced);
+
+        String restName = null;
+        String restImage = null;
+        if (cart.getRestaurantId() != null) {
+            var restSummary = restaurantSummaryProvider.findByRestaurantId(cart.getRestaurantId());
+            if (restSummary.isPresent()) {
+                restName = restSummary.get().name();
+            }
+        }
+
+        return cartMapper.toCart(cart, restName, restImage, priced);
     }
 }

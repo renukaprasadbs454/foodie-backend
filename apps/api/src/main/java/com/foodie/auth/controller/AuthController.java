@@ -1,10 +1,14 @@
 package com.foodie.auth.controller;
 
 import com.foodie.auth.dto.request.AdminLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerLoginRequestDto;
+import com.foodie.auth.dto.request.CustomerRegisterRequestDto;
+import com.foodie.auth.dto.request.ForgotPasswordRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
 import com.foodie.auth.dto.request.LogoutRequestDto;
 import com.foodie.auth.dto.request.RefreshTokenRequestDto;
 import com.foodie.auth.dto.request.RequestOtpRequestDto;
+import com.foodie.auth.dto.request.ResetPasswordRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
 import com.foodie.auth.service.AuthService;
@@ -29,6 +33,41 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
+    }
+
+    @PostMapping("/register")
+    @Operation(summary = "Customer Registration with email/password")
+    public ResponseEntity<ApiResponse<TokenPairResponseDto>> register(
+            @Valid @RequestBody CustomerRegisterRequestDto request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(authService.registerCustomer(request)));
+    }
+
+    @PostMapping("/login/customer")
+    @Operation(summary = "Customer Email/Password login")
+    public ResponseEntity<ApiResponse<TokenPairResponseDto>> loginCustomer(
+            @Valid @RequestBody CustomerLoginRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(authService.loginCustomer(request)));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request password reset code via email")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequestDto request
+    ) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset customer password using reset code")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequestDto request
+    ) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PostMapping("/otp/request")

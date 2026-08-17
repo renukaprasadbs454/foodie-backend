@@ -52,6 +52,20 @@ public class UserCredential extends BaseEntity {
         return credential;
     }
 
+    public static UserCredential customerPasswordSignup(String email, String phoneNumber, String passwordHash) {
+        UserCredential credential = new UserCredential();
+        credential.email = email;
+        credential.phoneNumber = phoneNumber;
+        credential.passwordHash = passwordHash;
+        credential.userType = UserType.CUSTOMER;
+        credential.active = true;
+        return credential;
+    }
+
+    public void updatePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     /** Provisioned by Admin module via {@code AdminCredentialPort} — never OTP self-signup. */
     public static UserCredential adminProvision(String phoneNumber, String email) {
         UserCredential credential = new UserCredential();
