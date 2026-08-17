@@ -17,16 +17,24 @@ import com.foodie.infrastructure.storage.ImageMagicBytes;
 import com.foodie.infrastructure.storage.ObjectStorageClient;
 import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
 import com.foodie.restaurant.dto.request.RestaurantAddressRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantBankDetailsRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantLocationRequestDto;
 import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
+import com.foodie.restaurant.dto.request.VerifyUpiRequestDto;
+import com.foodie.restaurant.dto.response.RestaurantBankDetailsResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLocationResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
+import com.foodie.restaurant.dto.response.VerificationResultResponseDto;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
+import com.foodie.restaurant.entity.RestaurantBankDetails;
 import com.foodie.restaurant.entity.RestaurantDocument;
 import com.foodie.restaurant.mapper.RestaurantMapper;
 import com.foodie.restaurant.repository.RestaurantAddressRepository;
+import com.foodie.restaurant.repository.RestaurantBankDetailsRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
@@ -65,6 +73,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final RestaurantRepository restaurantRepository;
     private final RestaurantAddressRepository restaurantAddressRepository;
     private final RestaurantDocumentRepository restaurantDocumentRepository;
+    private final RestaurantBankDetailsRepository restaurantBankDetailsRepository;
     private final RestaurantMapper restaurantMapper;
     private final ObjectStorageClient objectStorageClient;
     private final RestaurantCacheService restaurantCacheService;
@@ -76,6 +85,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             RestaurantRepository restaurantRepository,
             RestaurantAddressRepository restaurantAddressRepository,
             RestaurantDocumentRepository restaurantDocumentRepository,
+            RestaurantBankDetailsRepository restaurantBankDetailsRepository,
             RestaurantMapper restaurantMapper,
             ObjectStorageClient objectStorageClient,
             RestaurantCacheService restaurantCacheService,
@@ -86,6 +96,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
         this.restaurantDocumentRepository = restaurantDocumentRepository;
+        this.restaurantBankDetailsRepository = restaurantBankDetailsRepository;
         this.restaurantMapper = restaurantMapper;
         this.objectStorageClient = objectStorageClient;
         this.restaurantCacheService = restaurantCacheService;
@@ -197,6 +208,18 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        return restaurantMapper.toDetail(
+                restaurant,
+                signedOrNull(restaurant.getLogoImageKey()),
+                signedOrNull(restaurant.getCoverImageKey()),
+                true
+        );
+    }
+
+    @Override
     @Transactional
     public RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request) {
         if (restaurantRepository.existsByOwnerUserCredentialId(ownerCredentialId)) {
@@ -234,8 +257,12 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant.getAddress().replace(
                 request.address().line1(),
                 request.address().line2(),
+                request.address().landmark(),
                 request.address().city(),
+                request.address().state(),
+                request.address().country(),
                 request.address().pincode(),
+                request.address().formattedAddress(),
                 request.address().latitude(),
                 request.address().longitude()
         );
@@ -247,6 +274,91 @@ public class RestaurantServiceImpl implements RestaurantService {
                 signedOrNull(restaurant.getCoverImageKey()),
                 true
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantLocationResponseDto getLocation(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        return restaurantMapper.toLocation(restaurant);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId, UpdateRestaurantLocationRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.getAddress().replace(
+                request.addressLine1(),
+                request.addressLine2(),
+                request.landmark(),
+                request.city(),
+                request.state(),
+                request.country(),
+                request.pincode(),
+                request.formattedAddress(),
+                request.latitude(),
+                request.longitude()
+        );
+        restaurant.syncGeoFromAddress();
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        restaurantCacheService.evictAllListCaches();
+        return restaurantMapper.toLocation(restaurant);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantBankDetailsResponseDto getBankDetails(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
+                .orElse(null);
+        return restaurantMapper.toBankDetails(bankDetails);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantBankDetailsResponseDto updateBankDetails(UUID ownerCredentialId, UpdateRestaurantBankDetailsRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
+                .orElseGet(() -> RestaurantBankDetails.createDefault(restaurant.getId()));
+        bankDetails.updateDetails(
+                request.accountHolderName(),
+                request.bankName(),
+                request.accountNumber(),
+                request.ifscCode(),
+                request.accountType(),
+                request.branchName(),
+                request.upiId()
+        );
+        bankDetails = restaurantBankDetailsRepository.save(bankDetails);
+        return restaurantMapper.toBankDetails(bankDetails);
+    }
+
+    @Override
+    @Transactional
+    public VerificationResultResponseDto verifyBankDetails(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
+                .orElseThrow(() -> new BadRequestException(
+                        ErrorCode.VALIDATION_FAILED, "Bank details not found. Please add bank details first."));
+        if (bankDetails.getAccountNumber() == null || bankDetails.getAccountNumber().isBlank()
+                || bankDetails.getIfscCode() == null || bankDetails.getIfscCode().isBlank()) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED, "Bank account number and IFSC code are required for verification.");
+        }
+        bankDetails.verifyBankAccount();
+        restaurantBankDetailsRepository.save(bankDetails);
+        return new VerificationResultResponseDto("VERIFIED", "Bank account verified successfully.");
+    }
+
+    @Override
+    @Transactional
+    public VerificationResultResponseDto verifyUpi(UUID ownerCredentialId, VerifyUpiRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
+                .orElseGet(() -> restaurantBankDetailsRepository.save(RestaurantBankDetails.createDefault(restaurant.getId())));
+        bankDetails.verifyUpi(request.upiId());
+        restaurantBankDetailsRepository.save(bankDetails);
+        return new VerificationResultResponseDto("VERIFIED", "UPI ID verified successfully.");
     }
 
     @Override
@@ -353,7 +465,8 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {
         return RestaurantAddress.create(
-                dto.line1(), dto.line2(), dto.city(), dto.pincode(), dto.latitude(), dto.longitude());
+                dto.line1(), dto.line2(), dto.landmark(), dto.city(), dto.state(), dto.country(),
+                dto.pincode(), dto.formattedAddress(), dto.latitude(), dto.longitude());
     }
 
     private static String[] toCuisineArray(List<CuisineType> cuisineTypes) {

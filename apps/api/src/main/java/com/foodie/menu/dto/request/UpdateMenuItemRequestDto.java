@@ -9,8 +9,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-public record CreateMenuItemRequestDto(
-        @NotNull
+public record UpdateMenuItemRequestDto(
         UUID categoryId,
 
         @NotBlank
@@ -30,7 +29,7 @@ public record CreateMenuItemRequestDto(
         @Pattern(regexp = "^(VEG|NON_VEG)$", message = "foodType must be VEG or NON_VEG")
         String foodType
 ) {
-    public CreateMenuItemRequestDto(
+    public UpdateMenuItemRequestDto(
             UUID categoryId,
             String name,
             String description,

@@ -56,11 +56,15 @@ public class SecurityConfig {
                                                                 "/api/v1/storage/**",
                                                                 "/api/v1/debug/**")
                                                 .permitAll()
+                                                .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**")
+                                                .authenticated()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/restaurants",
                                                                 "/api/v1/restaurants/*")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews")
                                                 .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/menu/categories")
+                                                .authenticated()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                                                 .anyRequest().authenticated())
@@ -78,8 +82,6 @@ public class SecurityConfig {
                                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
-        }
-
         }
 
         private void writeError(HttpServletResponse response, int status, ErrorCode code, String message)

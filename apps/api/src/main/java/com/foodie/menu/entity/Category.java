@@ -36,6 +36,15 @@ public class Category extends BaseEntity {
         return category;
     }
 
+    public void update(String name, Integer displayOrder) {
+        if (name != null && !name.isBlank()) {
+            this.name = name;
+        }
+        if (displayOrder != null) {
+            this.displayOrder = displayOrder;
+        }
+    }
+
     public void softDelete() {
         this.deletedAt = Instant.now();
     }
