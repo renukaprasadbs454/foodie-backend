@@ -20,6 +20,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <start-class>com.foodie.FoodieApplication</start-class>
         <springdoc.version>2.6.0</springdoc.version>
         <testcontainers.version>1.20.3</testcontainers.version>
         <jjwt.version>0.12.6</jjwt.version>
@@ -182,6 +183,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.foodie.FoodieApplication</mainClass>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

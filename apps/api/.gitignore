@@ -43,4 +43,3 @@ jacoco.exec
 # Local object storage (Module 2+)
 .local-object-storage/
 .m2-docker/
-dump.rdb
