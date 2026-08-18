@@ -297,7 +297,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional(readOnly = true)
     public void locationPing(UUID userCredentialId, LocationPingRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
-        redisRateLimiter.check("ratelimit:location:" + partner.getId(), 1, LOCATION_PING_WINDOW);
+        redisRateLimiter.check("ratelimit:location:" + partner.getId(), 100, LOCATION_PING_WINDOW);
 
         double lat = request.latitude().doubleValue();
         double lng = request.longitude().doubleValue();

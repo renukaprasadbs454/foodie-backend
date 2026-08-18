@@ -33,11 +33,11 @@ public class AuditLog {
     private UUID resourceId;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "before_state", columnDefinition = "jsonb")
+    @Column(name = "before_state")
     private String beforeState;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "after_state", columnDefinition = "jsonb")
+    @Column(name = "after_state")
     private String afterState;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -52,8 +52,7 @@ public class AuditLog {
             String resourceType,
             UUID resourceId,
             String beforeStateJson,
-            String afterStateJson
-    ) {
+            String afterStateJson) {
         AuditLog log = new AuditLog();
         log.adminUserId = adminUserId;
         log.action = action;
