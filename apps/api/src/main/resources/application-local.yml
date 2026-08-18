@@ -1,12 +1,14 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/postgres
-    username: postgres
+    url: jdbc:h2:file:./data/foodie-db;MODE=PostgreSQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;NON_KEYWORDS=VALUE
+    username: sa
     password: ""
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: org.h2.Driver
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+  flyway:
+    enabled: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -14,6 +16,13 @@ spring:
       timeout: 2s
   jpa:
     show-sql: true
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+        type:
+          preferred_enum_jdbc_type: VARCHAR
+    hibernate:
+      ddl-auto: update
 
 logging:
   level:

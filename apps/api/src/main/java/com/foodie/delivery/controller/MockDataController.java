@@ -119,4 +119,38 @@ public class MockDataController {
                         return "Mock Error: " + e.getMessage() + "\n" + java.util.Arrays.toString(e.getStackTrace());
                 }
         }
+
+        @PostMapping("/setup-partner/{phone}")
+        @Transactional
+        public String setupPartner(@PathVariable String phone) {
+                try {
+                        String searchPhone = phone.startsWith("+") ? phone : "+91" + phone;
+                        UserCredential uc = ucRepo.findByPhoneNumberAndUserType(searchPhone, UserType.DELIVERY_PARTNER)
+                                        .orElseGet(() -> ucRepo
+                                                        .findByPhoneNumberAndUserType(phone, UserType.DELIVERY_PARTNER)
+                                                        .orElse(null));
+
+                        if (uc == null) {
+                                uc = UserCredential.phoneSignup(searchPhone, UserType.DELIVERY_PARTNER);
+                                ucRepo.save(uc);
+                        }
+
+                        com.foodie.delivery.entity.DeliveryPartner partner = partnerRepo
+                                        .findByUserCredentialId(uc.getId())
+                                        .orElse(null);
+
+                        if (partner == null) {
+                                partner = com.foodie.delivery.entity.DeliveryPartner.create(uc.getId(), "Test Partner",
+                                                com.foodie.common.enums.VehicleType.CYCLE, "BLA");
+                                partnerRepo.save(partner);
+                        }
+
+                        partner.verifyKyc();
+                        partnerRepo.save(partner);
+
+                        return "KYC Verified! " + seedOffer(uc.getId());
+                } catch (Exception e) {
+                        return "Mock Error: " + e.getMessage();
+                }
+        }
 }

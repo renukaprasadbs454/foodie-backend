@@ -80,8 +80,6 @@ public class SecurityConfig {
                 return http.build();
         }
 
-        }
-
         private void writeError(HttpServletResponse response, int status, ErrorCode code, String message)
                         throws java.io.IOException {
                 response.setStatus(status);
