@@ -70,20 +70,25 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @PostMapping("/otp/request")
-    @Operation(summary = "Request OTP", description = "Generate and dispatch a one-time password via SMS.")
+    @PostMapping({"/send-otp", "/otp/request"})
+    @Operation(summary = "Request WhatsApp OTP", description = "Generate and dispatch a 6-digit OTP via WhatsApp Cloud API.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP dispatched"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid phone"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid phone or missing user type"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limited")
     })
     public ResponseEntity<ApiResponse<Void>> requestOtp(@Valid @RequestBody RequestOtpRequestDto request) {
-        authService.requestOtp(request.phoneNumber());
+        authService.requestOtp(request);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @PostMapping("/otp/verify")
-    @Operation(summary = "Verify OTP and authenticate")
+    @PostMapping({"/verify-otp", "/otp/verify"})
+    @Operation(summary = "Verify WhatsApp OTP and authenticate user")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP verified, tokens issued"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid OTP or missing parameters"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Max verification attempts exceeded")
+    })
     public ResponseEntity<ApiResponse<TokenPairResponseDto>> verifyOtp(
             @Valid @RequestBody VerifyOtpRequestDto request
     ) {
@@ -101,8 +106,7 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(
             summary = "Admin email/password login",
-            description = "Authenticates ADMIN credentials. Reuses the platform JWT + refresh-token pair. "
-                    + "Customer/Restaurant/Delivery must not call this endpoint."
+            description = "Authenticates ADMIN credentials. Reuses the platform JWT + refresh-token pair."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authenticated"),

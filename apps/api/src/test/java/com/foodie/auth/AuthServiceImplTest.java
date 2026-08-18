@@ -9,19 +9,20 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.foodie.auth.dto.request.AdminLoginRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
+import com.foodie.auth.dto.request.RequestOtpRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
 import com.foodie.auth.entity.UserCredential;
-import com.foodie.auth.exception.InvalidOtpException;
-import com.foodie.auth.exception.OtpExpiredException;
+import com.foodie.auth.enums.OtpPurpose;
+import com.foodie.auth.enums.OtpUserType;
 import com.foodie.auth.repository.RefreshTokenRepository;
 import com.foodie.auth.repository.UserCredentialRepository;
+import com.foodie.auth.service.OtpService;
 import com.foodie.auth.service.impl.AuthServiceImpl;
 import com.foodie.common.enums.UserType;
 import com.foodie.common.exception.BadRequestException;
@@ -29,7 +30,6 @@ import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ForbiddenException;
 import com.foodie.common.exception.UnauthorizedException;
 import com.foodie.infrastructure.google.GoogleTokenVerifier;
-import com.foodie.infrastructure.sms.SmsSender;
 import com.foodie.security.jwt.JwtTokenProvider;
 import com.foodie.security.ratelimit.RedisRateLimiter;
 import com.foodie.shared.contract.AdminIdentityQueryPort;
@@ -40,7 +40,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -58,7 +57,7 @@ class AuthServiceImplTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private RedisRateLimiter rateLimiter;
-    @Mock private SmsSender smsSender;
+    @Mock private OtpService otpService;
     @Mock private GoogleTokenVerifier googleTokenVerifier;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -76,7 +75,7 @@ class AuthServiceImplTest {
                 redisTemplate,
                 rateLimiter,
                 passwordEncoder,
-                smsSender,
+                otpService,
                 googleTokenVerifier,
                 jwtTokenProvider,
                 eventPublisher,
@@ -85,52 +84,24 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void requestOtp_storesHashedOtpAndDispatchesSms() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+    void requestOtp_delegatesToOtpService() {
+        authService.requestOtp(new RequestOtpRequestDto("+919876543210", OtpUserType.CUSTOMER, OtpPurpose.REGISTRATION));
 
-        authService.requestOtp("+919876543210");
-
-        ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
-        verify(valueOperations).set(eq("otp:+919876543210"), hashCaptor.capture(), eq(Duration.ofMinutes(5)));
-        assertThat(hashCaptor.getValue()).startsWith("$2");
-        verify(smsSender, timeout(2000)).sendOtp(eq("+919876543210"), anyString());
+        verify(otpService).generateAndSendOtp("+919876543210", OtpUserType.CUSTOMER, OtpPurpose.REGISTRATION);
     }
 
     @Test
-    void verifyOtp_expiredOtp_throwsOtpExpiredException() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-        when(valueOperations.get("otp:+919876543210")).thenReturn(null);
+    void requestOtp_adminSelfRegister_throwsBadRequest() {
+        when(userCredentialRepository.findAllByPhoneNumber("+919876543210")).thenReturn(java.util.List.of());
 
-        assertThatThrownBy(() -> authService.verifyOtp(
-                new VerifyOtpRequestDto("+919876543210", "123456", UserType.CUSTOMER, null)
-        )).isInstanceOf(OtpExpiredException.class);
+        assertThatThrownBy(() -> authService.requestOtp(
+                new RequestOtpRequestDto("+919876543210", OtpUserType.ADMIN, OtpPurpose.REGISTRATION)
+        )).isInstanceOf(BadRequestException.class);
     }
 
     @Test
-    void verifyOtp_invalidOtp_throwsInvalidOtpException() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-        when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("111111"));
-
-        assertThatThrownBy(() -> authService.verifyOtp(
-                new VerifyOtpRequestDto("+919876543210", "999999", UserType.CUSTOMER, null)
-        )).isInstanceOf(InvalidOtpException.class);
-    }
-
-    @Test
-    void verifyOtp_newUserWithoutUserType_throwsUserTypeRequired() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-
-        assertThatThrownBy(() -> authService.verifyOtp(
-                new VerifyOtpRequestDto("+919876543210", "123456", null, null)
-        )).isInstanceOf(BadRequestException.class)
-                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.USER_TYPE_REQUIRED);
-    }
-
-    @Test
-    void verifyOtp_existingUserSameType_issuesTokenPair() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-        when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("123456"));
+    void verifyOtp_existingUserSameType_issuesTokenPairAndMarksPhoneVerified() {
+        doNothing().when(otpService).verifyOtp("+919876543210", "123456", OtpUserType.CUSTOMER, OtpPurpose.REGISTRATION);
 
         UUID userId = UUID.randomUUID();
         UserCredential credential = UserCredential.phoneSignup("+919876543210", UserType.CUSTOMER);
@@ -146,22 +117,20 @@ class AuthServiceImplTest {
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TokenPairResponseDto response = authService.verifyOtp(
-                new VerifyOtpRequestDto("+919876543210", "123456", UserType.CUSTOMER, "device")
+                new VerifyOtpRequestDto("+919876543210", "123456", OtpUserType.CUSTOMER, OtpPurpose.REGISTRATION, "device")
         );
 
         assertThat(response.accessToken()).isEqualTo("access");
         assertThat(response.userType()).isEqualTo(UserType.CUSTOMER);
         assertThat(response.isNewUser()).isFalse();
         assertThat(response.userId()).isEqualTo(userId);
-        assertThat(response.role()).isNull();
-        assertThat(response.refreshToken()).isNotBlank();
-        verify(redisTemplate).delete("otp:+919876543210");
+        assertThat(credential.isPhoneVerified()).isTrue();
+        verify(userCredentialRepository).save(credential);
     }
 
     @Test
     void verifyOtp_samePhoneDifferentType_createsSecondCredential() {
-        doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-        when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("123456"));
+        doNothing().when(otpService).verifyOtp("+919876543210", "123456", OtpUserType.RESTAURANT, OtpPurpose.REGISTRATION);
 
         UserCredential customer = UserCredential.phoneSignup("+919876543210", UserType.CUSTOMER);
         ReflectionTestUtils.setField(customer, "id", UUID.randomUUID());
@@ -181,7 +150,7 @@ class AuthServiceImplTest {
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TokenPairResponseDto response = authService.verifyOtp(
-                new VerifyOtpRequestDto("+919876543210", "123456", UserType.RESTAURANT, "device")
+                new VerifyOtpRequestDto("+919876543210", "123456", OtpUserType.RESTAURANT, OtpPurpose.REGISTRATION, "device")
         );
 
         assertThat(response.isNewUser()).isTrue();

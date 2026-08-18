@@ -56,6 +56,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/maps/geocode",
+                                "/api/v1/maps/reverse-geocode",
+                                "/api/v1/maps/validate-coordinate"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

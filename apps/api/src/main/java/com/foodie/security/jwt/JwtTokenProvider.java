@@ -67,7 +67,7 @@ public class JwtTokenProvider {
     public long refreshTtlSeconds(UserType userType) {
         return switch (userType) {
             case CUSTOMER -> properties.refreshTokenTtlCustomerSeconds();
-            case RESTAURANT, DELIVERY_PARTNER -> properties.refreshTokenTtlPartnerSeconds();
+            case RESTAURANT, RESTAURANT_ADMIN, DELIVERY_PARTNER -> properties.refreshTokenTtlPartnerSeconds();
             case ADMIN -> properties.refreshTokenTtlAdminSeconds();
         };
     }

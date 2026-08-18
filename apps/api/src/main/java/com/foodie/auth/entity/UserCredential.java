@@ -32,6 +32,9 @@ public class UserCredential extends BaseEntity {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "phone_verified", nullable = false)
+    private boolean phoneVerified = false;
+
     protected UserCredential() {
     }
 
@@ -111,6 +114,14 @@ public class UserCredential extends BaseEntity {
 
     public boolean isActive() {
         return active;
+    }
+
+    public boolean isPhoneVerified() {
+        return phoneVerified;
+    }
+
+    public void markPhoneVerified() {
+        this.phoneVerified = true;
     }
 
     public void deactivate() {

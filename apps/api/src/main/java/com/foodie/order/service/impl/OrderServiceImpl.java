@@ -418,7 +418,7 @@ public class OrderServiceImpl implements OrderService {
                     throw new ResourceNotFoundException("Order not found.");
                 }
             }
-            case RESTAURANT -> {
+            case RESTAURANT, RESTAURANT_ADMIN -> {
                 UUID restaurantId = restaurantSummaryProvider.findByOwnerUserCredentialId(userCredentialId)
                         .map(RestaurantSummaryProvider.RestaurantSummary::restaurantId)
                         .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
@@ -477,7 +477,7 @@ public class OrderServiceImpl implements OrderService {
     private static OrderActorType toActorType(UserType userType) {
         return switch (userType) {
             case CUSTOMER -> OrderActorType.CUSTOMER;
-            case RESTAURANT -> OrderActorType.RESTAURANT;
+            case RESTAURANT, RESTAURANT_ADMIN -> OrderActorType.RESTAURANT;
             case DELIVERY_PARTNER -> OrderActorType.DELIVERY;
             case ADMIN -> OrderActorType.ADMIN;
         };

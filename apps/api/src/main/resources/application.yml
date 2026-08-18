@@ -84,6 +84,21 @@ foodie:
     project-id: ${FCM_PROJECT_ID:}
     credentials-path: ${FCM_CREDENTIALS_PATH:}
     max-attempts: ${FCM_MAX_ATTEMPTS:3}
+  maps:
+    provider: ${MAPS_PROVIDER:google}
+    api-key: ${GOOGLE_MAPS_API_KEY:}
+    base-url: ${MAPS_BASE_URL:https://maps.googleapis.com/maps/api}
+    timeout-ms: ${MAPS_TIMEOUT_MS:5000}
+    cache-ttl-hours: ${MAPS_CACHE_TTL_HOURS:24}
+
+whatsapp:
+  enabled: ${WHATSAPP_ENABLED:true}
+  access-token: ${WHATSAPP_ACCESS_TOKEN:}
+  phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+  business-account-id: ${WHATSAPP_BUSINESS_ACCOUNT_ID:}
+  api-version: ${WHATSAPP_API_VERSION:v18.0}
+  otp-template-name: ${WHATSAPP_OTP_TEMPLATE_NAME:foodie_otp_verify}
+  otp-template-language: ${WHATSAPP_OTP_TEMPLATE_LANGUAGE:en}
 
 logging:
   level:

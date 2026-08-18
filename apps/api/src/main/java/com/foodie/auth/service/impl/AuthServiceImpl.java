@@ -5,24 +5,26 @@ import com.foodie.auth.dto.request.CustomerLoginRequestDto;
 import com.foodie.auth.dto.request.CustomerRegisterRequestDto;
 import com.foodie.auth.dto.request.ForgotPasswordRequestDto;
 import com.foodie.auth.dto.request.GoogleAuthRequestDto;
+import com.foodie.auth.dto.request.RequestOtpRequestDto;
 import com.foodie.auth.dto.request.ResetPasswordRequestDto;
 import com.foodie.auth.dto.request.VerifyOtpRequestDto;
 import com.foodie.auth.dto.response.TokenPairResponseDto;
 import com.foodie.auth.entity.RefreshToken;
 import com.foodie.auth.entity.UserCredential;
-import com.foodie.auth.exception.InvalidOtpException;
-import com.foodie.auth.exception.OtpExpiredException;
+import com.foodie.auth.enums.OtpPurpose;
+import com.foodie.auth.enums.OtpUserType;
 import com.foodie.auth.repository.RefreshTokenRepository;
 import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.auth.service.AuthService;
+import com.foodie.auth.service.OtpService;
 import com.foodie.common.enums.UserType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ForbiddenException;
 import com.foodie.common.exception.UnauthorizedException;
 import com.foodie.common.util.HashUtils;
+import com.foodie.common.util.PhoneUtils;
 import com.foodie.infrastructure.google.GoogleTokenVerifier;
-import com.foodie.infrastructure.sms.SmsSender;
 import com.foodie.security.jwt.JwtTokenProvider;
 import com.foodie.security.ratelimit.RedisRateLimiter;
 import com.foodie.shared.contract.AdminIdentityQueryPort;
@@ -32,7 +34,6 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -46,11 +47,6 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
 
-    private static final Duration OTP_TTL = Duration.ofMinutes(5);
-    private static final Duration OTP_REQUEST_WINDOW = Duration.ofMinutes(10);
-    private static final Duration OTP_VERIFY_WINDOW = Duration.ofMinutes(10);
-    private static final int OTP_REQUEST_LIMIT = 5;
-    private static final int OTP_VERIFY_LIMIT = 10;
     private static final Duration ADMIN_LOGIN_WINDOW = Duration.ofMinutes(10);
     private static final int ADMIN_LOGIN_LIMIT = 10;
 
@@ -59,7 +55,7 @@ public class AuthServiceImpl implements AuthService {
     private final StringRedisTemplate redisTemplate;
     private final RedisRateLimiter rateLimiter;
     private final PasswordEncoder passwordEncoder;
-    private final SmsSender smsSender;
+    private final OtpService otpService;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final JwtTokenProvider jwtTokenProvider;
     private final ApplicationEventPublisher eventPublisher;
@@ -71,7 +67,7 @@ public class AuthServiceImpl implements AuthService {
             StringRedisTemplate redisTemplate,
             RedisRateLimiter rateLimiter,
             PasswordEncoder passwordEncoder,
-            SmsSender smsSender,
+            OtpService otpService,
             GoogleTokenVerifier googleTokenVerifier,
             JwtTokenProvider jwtTokenProvider,
             ApplicationEventPublisher eventPublisher,
@@ -82,7 +78,7 @@ public class AuthServiceImpl implements AuthService {
         this.redisTemplate = redisTemplate;
         this.rateLimiter = rateLimiter;
         this.passwordEncoder = passwordEncoder;
-        this.smsSender = smsSender;
+        this.otpService = otpService;
         this.googleTokenVerifier = googleTokenVerifier;
         this.jwtTokenProvider = jwtTokenProvider;
         this.eventPublisher = eventPublisher;
@@ -90,49 +86,50 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void requestOtp(String phoneNumber) {
-        rateLimiter.check("ratelimit:otp-request:" + phoneNumber, OTP_REQUEST_LIMIT, OTP_REQUEST_WINDOW);
+    public void requestOtp(RequestOtpRequestDto request) {
+        if (request.userType() == null) {
+            throw new BadRequestException(ErrorCode.USER_TYPE_REQUIRED, "userType is required for OTP request.");
+        }
+        OtpPurpose purpose = request.purpose() != null ? request.purpose() : OtpPurpose.REGISTRATION;
+        String normalizedPhone = PhoneUtils.normalize(request.phoneNumber());
 
-        String otp = HashUtils.sixDigitOtp();
-        String otpHash = passwordEncoder.encode(otp);
-        redisTemplate.opsForValue().set(otpKey(phoneNumber), otpHash, OTP_TTL);
-
-        CompletableFuture.runAsync(() -> {
-            try {
-                smsSender.sendOtp(phoneNumber, otp);
-            } catch (Exception ex) {
-                log.error("SMS dispatch failed for OTP request", ex);
+        if (request.userType() == OtpUserType.ADMIN) {
+            boolean adminExists = userCredentialRepository.findAllByPhoneNumber(normalizedPhone)
+                    .stream().anyMatch(c -> c.getUserType() == UserType.ADMIN);
+            if (!adminExists) {
+                throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
             }
-        });
+        }
+
+        otpService.generateAndSendOtp(normalizedPhone, request.userType(), purpose);
+    }
+
+    @Override
+    public void requestOtp(String phoneNumber) {
+        requestOtp(new RequestOtpRequestDto(phoneNumber, OtpUserType.CUSTOMER, OtpPurpose.REGISTRATION));
     }
 
     @Override
     @Transactional
     public TokenPairResponseDto verifyOtp(VerifyOtpRequestDto request) {
-        rateLimiter.check("ratelimit:otp-verify:" + request.phoneNumber(), OTP_VERIFY_LIMIT, OTP_VERIFY_WINDOW);
-
         if (request.userType() == null) {
             throw new BadRequestException(ErrorCode.USER_TYPE_REQUIRED, "userType is required for OTP verify.");
         }
-        if (request.userType() == UserType.ADMIN) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
-        }
 
-        String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
-        if (storedHash == null) {
-            throw new OtpExpiredException();
-        }
-        if (!passwordEncoder.matches(request.otp(), storedHash)) {
-            throw new InvalidOtpException();
-        }
-        redisTemplate.delete(otpKey(request.phoneNumber()));
+        String normalizedPhone = PhoneUtils.normalize(request.phoneNumber());
+        OtpPurpose purpose = request.purpose() != null ? request.purpose() : OtpPurpose.REGISTRATION;
+
+        // Centralized OTP verification (Redis hash check, attempt limits, single-use deletion)
+        otpService.verifyOtp(normalizedPhone, request.otp(), request.userType(), purpose);
+
+        UserType mappedUserType = mapOtpUserType(request.userType());
 
         // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays exclusive.
         boolean phoneUsedByAdmin = userCredentialRepository
-                .findAllByPhoneNumber(request.phoneNumber())
+                .findAllByPhoneNumber(normalizedPhone)
                 .stream()
                 .anyMatch(c -> c.getUserType() == UserType.ADMIN);
-        if (phoneUsedByAdmin) {
+        if (phoneUsedByAdmin && mappedUserType != UserType.ADMIN) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED,
                     "Phone number is reserved for an admin account."
@@ -140,15 +137,19 @@ public class AuthServiceImpl implements AuthService {
         }
 
         Optional<UserCredential> existing = userCredentialRepository.findByPhoneNumberAndUserType(
-                request.phoneNumber(),
-                request.userType()
+                normalizedPhone,
+                mappedUserType
         );
         boolean isNewUser = existing.isEmpty();
         UserCredential credential;
         if (isNewUser) {
+            if (mappedUserType == UserType.ADMIN) {
+                throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
+            }
             credential = userCredentialRepository.save(
-                    UserCredential.phoneSignup(request.phoneNumber(), request.userType())
+                    UserCredential.phoneSignup(normalizedPhone, mappedUserType)
             );
+            credential.markPhoneVerified();
             eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
                     credential.getId(),
                     credential.getUserType(),
@@ -157,10 +158,12 @@ public class AuthServiceImpl implements AuthService {
             ));
         } else {
             credential = existing.get();
+            credential.markPhoneVerified();
+            userCredentialRepository.save(credential);
         }
 
         assertActive(credential);
-        if (credential.getUserType() == UserType.RESTAURANT) {
+        if (credential.getUserType() == UserType.RESTAURANT || credential.getUserType() == UserType.RESTAURANT_ADMIN) {
             log.info("Restaurant login for userCredentialId={}", credential.getId());
         }
         return issueTokenPair(credential, request.deviceInfo(), isNewUser);
@@ -194,6 +197,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public TokenPairResponseDto registerCustomer(CustomerRegisterRequestDto request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String normalizedPhone = request.phoneNumber() != null ? PhoneUtils.normalize(request.phoneNumber()) : null;
+
         Optional<UserCredential> existingEmail = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.CUSTOMER);
         if (existingEmail.isPresent()) {
             throw new BadRequestException(ErrorCode.CONFLICT, "Email is already registered.");
@@ -201,7 +206,7 @@ public class AuthServiceImpl implements AuthService {
 
         String encodedPassword = passwordEncoder.encode(request.password());
         UserCredential credential = userCredentialRepository.save(
-                UserCredential.customerPasswordSignup(email, request.phoneNumber(), encodedPassword)
+                UserCredential.customerPasswordSignup(email, normalizedPhone, encodedPassword)
         );
 
         eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
@@ -274,7 +279,6 @@ public class AuthServiceImpl implements AuthService {
                 && !passwordHash.isBlank()
                 && passwordEncoder.matches(request.password(), passwordHash);
 
-        // Opaque failure for unknown email, missing password, or mismatch (no user enumeration).
         if (credential == null || !passwordOk) {
             throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
         }
@@ -393,8 +397,14 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private static String otpKey(String phoneNumber) {
-        return "otp:" + phoneNumber;
+    private static UserType mapOtpUserType(OtpUserType otpUserType) {
+        return switch (otpUserType) {
+            case CUSTOMER -> UserType.CUSTOMER;
+            case RESTAURANT -> UserType.RESTAURANT;
+            case RESTAURANT_ADMIN -> UserType.RESTAURANT_ADMIN;
+            case DELIVERY_PARTNER -> UserType.DELIVERY_PARTNER;
+            case ADMIN -> UserType.ADMIN;
+        };
     }
 
     private static String sessionKey(String tokenHash) {
