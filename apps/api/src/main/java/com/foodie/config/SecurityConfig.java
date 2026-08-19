@@ -94,7 +94,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-<<<<<<< HEAD
     private void writeError(
             HttpServletResponse response,
             int status,
@@ -108,12 +107,4 @@ public class SecurityConfig {
                 response.getOutputStream(),
                 ApiResponse.failure(code, message));
     }
-=======
-        private void writeError(HttpServletResponse response, int status, ErrorCode code, String message)
-                        throws java.io.IOException {
-                response.setStatus(status);
-                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(code, message));
-        }
->>>>>>> origin/main
 }

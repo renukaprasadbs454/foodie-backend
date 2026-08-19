@@ -59,6 +59,7 @@ class OrderServiceImplTest {
     @Mock private IdempotencyService idempotencyService;
     @Mock private OrderNumberGenerator orderNumberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private OrderServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();
@@ -87,7 +88,8 @@ class OrderServiceImplTest {
                 idempotencyService,
                 orderNumberGenerator,
                 props,
-                eventPublisher
+                eventPublisher,
+                jdbcTemplate
         );
     }
 
