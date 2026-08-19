@@ -4,10 +4,6 @@ spring:
     username: ${DB_USER:foodie}
     password: ${DB_PASSWORD:foodie}
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql:file:./data/foodie-db;MODE=PostgreSQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;NON_KEYWORDS=VALUE
-    username: sa
-    password: ""
-    driver-class-name: org.h2.Driver
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
