@@ -56,6 +56,14 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.foodie.tax.enums.PricingComponentType;
+import com.foodie.tax.model.TaxCalculationRequest;
+import com.foodie.tax.model.TaxCalculationResult;
+import com.foodie.tax.model.TaxComponentInput;
+import com.foodie.tax.model.TaxContext;
+import com.foodie.tax.service.RoundingPolicy;
+import com.foodie.tax.service.TaxEngineService;
+
 @Service
 public class OrderServiceImpl implements OrderService {
 
@@ -74,6 +82,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderNumberGenerator orderNumberGenerator;
     private final OrderProperties orderProperties;
     private final ApplicationEventPublisher eventPublisher;
+    private final TaxEngineService taxEngineService;
+    private final RoundingPolicy roundingPolicy;
 
     public OrderServiceImpl(
             OrderRepository orderRepository,
@@ -90,7 +100,9 @@ public class OrderServiceImpl implements OrderService {
             IdempotencyService idempotencyService,
             OrderNumberGenerator orderNumberGenerator,
             OrderProperties orderProperties,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            TaxEngineService taxEngineService,
+            RoundingPolicy roundingPolicy
     ) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -107,6 +119,8 @@ public class OrderServiceImpl implements OrderService {
         this.orderNumberGenerator = orderNumberGenerator;
         this.orderProperties = orderProperties;
         this.eventPublisher = eventPublisher;
+        this.taxEngineService = taxEngineService;
+        this.roundingPolicy = roundingPolicy;
     }
 
     @Override
@@ -178,9 +192,29 @@ public class OrderServiceImpl implements OrderService {
             appliedCouponId = applied.couponId();
         }
         BigDecimal deliveryFee = orderProperties.getDefaultDeliveryFee().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal taxAmount = subtotal.multiply(orderProperties.getTaxRate()).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
-                .setScale(2, RoundingMode.HALF_UP);
+
+        long subtotalPaise = roundingPolicy.roundToPaise(subtotal);
+        long discountPaise = roundingPolicy.roundToPaise(discount);
+        long deliveryFeePaise = roundingPolicy.roundToPaise(deliveryFee);
+
+        List<TaxComponentInput> taxComponents = List.of(
+                new TaxComponentInput(PricingComponentType.FOOD, "Food Subtotal", subtotalPaise, discountPaise),
+                new TaxComponentInput(PricingComponentType.DELIVERY, "Delivery Fee", deliveryFeePaise, 0L)
+        );
+
+        UUID tempOrderId = UUID.randomUUID();
+        TaxCalculationRequest taxReq = new TaxCalculationRequest(
+                tempOrderId,
+                null,
+                null,
+                TaxContext.intraState("DEFAULT"),
+                taxComponents,
+                List.of()
+        );
+
+        TaxCalculationResult taxResult = taxEngineService.calculateAndSnapshot(taxReq);
+        BigDecimal taxAmount = BigDecimal.valueOf(taxResult.totalTaxPaise()).movePointLeft(2).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = BigDecimal.valueOf(taxResult.grandTotalPaise()).movePointLeft(2).setScale(2, RoundingMode.HALF_UP);
 
         Order order = Order.place(
                 orderNumberGenerator.next(),

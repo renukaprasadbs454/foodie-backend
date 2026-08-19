@@ -7,7 +7,12 @@ import java.util.UUID;
 
 import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
 
+import com.foodie.payment.dto.request.CreatePaymentRequestDto;
+import com.foodie.payment.dto.response.PaymentCreateResponseDto;
+
 public interface PaymentService {
+
+    PaymentCreateResponseDto createPayment(UUID userCredentialId, CreatePaymentRequestDto request, String idempotencyKey);
 
     PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey);
 

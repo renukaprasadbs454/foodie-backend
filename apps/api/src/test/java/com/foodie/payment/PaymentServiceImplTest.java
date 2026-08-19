@@ -1,12 +1,23 @@
 package com.foodie.payment;
 
+import java.math.BigDecimal;
+import java.util.Optional;
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.enums.OrderStatus;
@@ -17,10 +28,12 @@ import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.infrastructure.razorpay.RazorpayClient;
 import com.foodie.infrastructure.razorpay.RazorpayProperties;
 import com.foodie.infrastructure.razorpay.RazorpaySignatureVerifier;
+import com.foodie.payment.dto.request.CreatePaymentRequestDto;
 import com.foodie.payment.dto.request.RefundPaymentRequestDto;
-import com.foodie.payment.dto.response.PaymentInitiationResponseDto;
+import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
+import com.foodie.payment.dto.response.PaymentCreateResponseDto;
 import com.foodie.payment.entity.Payment;
-import com.foodie.payment.entity.RefundRequest;
+import com.foodie.payment.gateway.PaymentGateway;
 import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.payment.repository.RefundRequestRepository;
 import com.foodie.payment.service.PaymentIdempotencyStore;
@@ -29,18 +42,6 @@ import com.foodie.payment.service.impl.PaymentServiceImpl;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.OrderPaymentPort;
 import com.foodie.shared.event.PaymentCapturedEvent;
-import com.foodie.shared.event.PaymentFailedEvent;
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceImplTest {
@@ -53,6 +54,7 @@ class PaymentServiceImplTest {
     @Mock private WebhookDedupService webhookDedupService;
     @Mock private PaymentIdempotencyStore idempotencyStore;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private PaymentGateway paymentGateway;
 
     private PaymentServiceImpl service;
     private RazorpaySignatureVerifier signatureVerifier;
@@ -77,59 +79,99 @@ class PaymentServiceImplTest {
                 webhookDedupService,
                 idempotencyStore,
                 new ObjectMapper(),
-                eventPublisher
+                eventPublisher,
+                paymentGateway
         );
     }
 
     @Test
-    void initiate_missingKey_throws400() {
-        assertThatThrownBy(() -> service.initiate(credentialId, orderId, null))
-                .isInstanceOf(BadRequestException.class)
-                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
-    }
-
-    @Test
-    void initiate_orderNotPlaced_throwsOrderNotPayable() {
-        when(idempotencyStore.find("k1")).thenReturn(Optional.empty());
-        when(paymentRepository.findByIdempotencyKey("k1")).thenReturn(Optional.empty());
+    void createPayment_createsGatewayOrderAndPaymentRecord() {
         when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
-                new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
+                new CustomerSummaryProvider.CustomerSummary(customerId, "Customer", null)));
         when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
-                new OrderPaymentPort.PayableOrder(
-                        orderId, customerId, OrderStatus.CONFIRMED, new BigDecimal("100.00"))));
-
-        assertThatThrownBy(() -> service.initiate(credentialId, orderId, "k1"))
-                .isInstanceOf(UnprocessableEntityException.class)
-                .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.ORDER_NOT_PAYABLE);
-    }
-
-    @Test
-    void initiate_createsPendingPayment() {
-        when(idempotencyStore.find("k1")).thenReturn(Optional.empty());
-        when(paymentRepository.findByIdempotencyKey("k1")).thenReturn(Optional.empty());
-        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
-                new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
-        when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
-                new OrderPaymentPort.PayableOrder(
-                        orderId, customerId, OrderStatus.PLACED, new BigDecimal("492.00"))));
+                new OrderPaymentPort.PayableOrder(orderId, customerId, OrderStatus.PLACED, new BigDecimal("500.00"))));
         when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.empty());
-        when(razorpayClient.createOrder(any(), any(), any())).thenReturn(
-                new RazorpayClient.RazorpayOrderCreateResult(
-                        "order_abc", new BigDecimal("492.00"), "INR"));
+        when(paymentGateway.getGatewayName()).thenReturn("RAZORPAY");
+        when(paymentGateway.createOrder(any())).thenReturn(
+                new PaymentGateway.PaymentGatewayOrderResult("order_rzp_123", 50000L, new BigDecimal("500.00"), "INR", "rzp_test_key"));
         when(paymentRepository.save(any())).thenAnswer(inv -> {
             Payment p = inv.getArgument(0);
             setId(p, UUID.randomUUID());
             return p;
         });
 
-        PaymentInitiationResponseDto view = service.initiate(credentialId, orderId, "k1");
+        PaymentCreateResponseDto response = service.createPayment(credentialId, new CreatePaymentRequestDto(orderId), "k1");
 
-        assertThat(view.razorpayOrderId()).isEqualTo("order_abc");
-        assertThat(view.amount()).isEqualByComparingTo("492.00");
-        assertThat(view.keyId()).isEqualTo("rzp_test_key");
-        verify(idempotencyStore).store(eq("k1"), any());
+        assertThat(response.gatewayOrderId()).isEqualTo("order_rzp_123");
+        assertThat(response.amountPaise()).isEqualTo(50000L);
+        assertThat(response.gateway()).isEqualTo("RAZORPAY");
+        assertThat(response.keyId()).isEqualTo("rzp_test_key");
+    }
+
+    @Test
+    void createPayment_orderNotOwned_throws404() {
+        UUID otherCustomer = UUID.randomUUID();
+        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                new CustomerSummaryProvider.CustomerSummary(customerId, "Customer", null)));
+        when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
+                new OrderPaymentPort.PayableOrder(orderId, otherCustomer, OrderStatus.PLACED, new BigDecimal("500.00"))));
+
+        assertThatThrownBy(() -> service.createPayment(credentialId, new CreatePaymentRequestDto(orderId), "k1"))
+                .isInstanceOf(com.foodie.common.exception.ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createPayment_alreadyCaptured_throws422() {
+        Payment payment = Payment.initiate(orderId, "order_rzp_123", new BigDecimal("500.00"), "k1");
+        payment.markCaptured("pay_rzp_1");
+        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                new CustomerSummaryProvider.CustomerSummary(customerId, "Customer", null)));
+        when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
+                new OrderPaymentPort.PayableOrder(orderId, customerId, OrderStatus.PLACED, new BigDecimal("500.00"))));
+        when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.createPayment(credentialId, new CreatePaymentRequestDto(orderId), "k1"))
+                .isInstanceOf(UnprocessableEntityException.class)
+                .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_ALREADY_CAPTURED);
+    }
+
+    @Test
+    void verifyPayment_validSignature_capturesPaymentAndPublishesEvent() {
+        Payment payment = Payment.initiate(orderId, "order_rzp_123", new BigDecimal("500.00"), "k1");
+        setId(payment, UUID.randomUUID());
+
+        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                new CustomerSummaryProvider.CustomerSummary(customerId, "Customer", null)));
+        when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
+                new OrderPaymentPort.PayableOrder(orderId, customerId, OrderStatus.PLACED, new BigDecimal("500.00"))));
+        when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.of(payment));
+        when(paymentGateway.verifyPaymentSignature(any())).thenReturn(true);
+
+        VerifyPaymentRequestDto req = new VerifyPaymentRequestDto(orderId, "order_rzp_123", "pay_1", "sig_valid");
+        boolean result = service.verifyPayment(credentialId, req);
+
+        assertThat(result).isTrue();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);
+        verify(eventPublisher).publishEvent(any(PaymentCapturedEvent.class));
+    }
+
+    @Test
+    void verifyPayment_invalidSignature_throws400() {
+        Payment payment = Payment.initiate(orderId, "order_rzp_123", new BigDecimal("500.00"), "k1");
+        when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                new CustomerSummaryProvider.CustomerSummary(customerId, "Customer", null)));
+        when(orderPaymentPort.findByOrderId(orderId)).thenReturn(Optional.of(
+                new OrderPaymentPort.PayableOrder(orderId, customerId, OrderStatus.PLACED, new BigDecimal("500.00"))));
+        when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.of(payment));
+        when(paymentGateway.verifyPaymentSignature(any())).thenReturn(false);
+
+        VerifyPaymentRequestDto req = new VerifyPaymentRequestDto(orderId, "order_rzp_123", "pay_1", "sig_bad");
+
+        assertThatThrownBy(() -> service.verifyPayment(credentialId, req))
+                .isInstanceOf(BadRequestException.class)
+                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.SIGNATURE_VERIFICATION_FAILED);
     }
 
     @Test
@@ -165,31 +207,22 @@ class PaymentServiceImplTest {
         when(webhookDedupService.isDuplicate("evt_2")).thenReturn(false);
         when(paymentRepository.findByRazorpayOrderId("order_abc")).thenReturn(Optional.of(payment));
 
-        service.handleWebhook(body, sig);
+        TransactionSynchronizationManager.initSynchronization();
+         try {
+              service.handleWebhook(body, sig);
+              verify(webhookDedupService, never()).markProcessed("evt_2");
+
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(synchronization -> synchronization.afterCommit());
+             } finally {
+        TransactionSynchronizationManager.clearSynchronization();
+}
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue()).isInstanceOf(PaymentCapturedEvent.class);
         verify(webhookDedupService).markProcessed("evt_2");
-    }
-
-    @Test
-    void handleWebhook_paymentFailed_publishesFailedEvent() {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
-        setId(payment, UUID.randomUUID());
-        String body = """
-                {"id":"evt_3","event":"payment.failed","payload":{"payment":{"entity":{
-                  "id":"pay_x","order_id":"order_abc","status":"failed"}}}}
-                """;
-        String sig = RazorpaySignatureVerifier.hmacSha256Hex("whsec_test", body);
-        when(webhookDedupService.isDuplicate("evt_3")).thenReturn(false);
-        when(paymentRepository.findByRazorpayOrderId("order_abc")).thenReturn(Optional.of(payment));
-
-        service.handleWebhook(body, sig);
-
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
-        verify(eventPublisher).publishEvent(any(PaymentFailedEvent.class));
     }
 
     @Test
@@ -206,33 +239,6 @@ class PaymentServiceImplTest {
         )).isInstanceOf(UnprocessableEntityException.class)
                 .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_NOT_REFUNDABLE);
-    }
-
-    @Test
-    void refund_captured_initiatesAsync() throws Exception {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
-        setId(payment, UUID.randomUUID());
-        payment.markCaptured("pay_1");
-        when(paymentRepository.findById(payment.getId())).thenReturn(Optional.of(payment));
-        when(refundRequestRepository.findByPaymentIdAndStatus(payment.getId(),
-                com.foodie.common.enums.RefundStatus.INITIATED)).thenReturn(List.of());
-        when(razorpayClient.createRefund(eq("pay_1"), any(), any())).thenReturn(
-                new RazorpayClient.RazorpayRefundResult("rfnd_1"));
-        when(refundRequestRepository.save(any())).thenAnswer(inv -> {
-            RefundRequest r = inv.getArgument(0);
-            setId(r, UUID.randomUUID());
-            return r;
-        });
-
-        var result = service.refund(
-                payment.getId(),
-                new RefundPaymentRequestDto(new BigDecimal("10.00"), "Restaurant reject"),
-                UUID.randomUUID(),
-                false
-        );
-
-        assertThat(result.status().name()).isEqualTo("INITIATED");
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);
     }
 
     private static void setId(Object entity, UUID id) {

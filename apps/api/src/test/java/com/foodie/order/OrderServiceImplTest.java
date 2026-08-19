@@ -43,6 +43,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import com.foodie.tax.model.TaxCalculationResult;
+import com.foodie.tax.service.PaiseRoundingPolicy;
+import com.foodie.tax.service.RoundingPolicy;
+import com.foodie.tax.service.TaxEngineService;
+
 @ExtendWith(MockitoExtension.class)
 class OrderServiceImplTest {
 
@@ -59,7 +64,9 @@ class OrderServiceImplTest {
     @Mock private IdempotencyService idempotencyService;
     @Mock private OrderNumberGenerator orderNumberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private TaxEngineService taxEngineService;
 
+    private final RoundingPolicy roundingPolicy = new PaiseRoundingPolicy();
     private OrderServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();
     private final UUID customerId = UUID.randomUUID();
@@ -87,7 +94,9 @@ class OrderServiceImplTest {
                 idempotencyService,
                 orderNumberGenerator,
                 props,
-                eventPublisher
+                eventPublisher,
+                taxEngineService,
+                roundingPolicy
         );
     }
 
@@ -137,6 +146,8 @@ class OrderServiceImplTest {
         when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
                         menuItemId, null, restaurantId, new BigDecimal("220.00"), true, "Paneer Tikka")));
+        when(taxEngineService.calculateAndSnapshot(any())).thenReturn(
+                new TaxCalculationResult(47000L, 1100L, 1100L, 0L, 0L, 2200L, 0L, 49200L, null, List.of()));
         when(orderNumberGenerator.next()).thenReturn("FD-20260801-000123");
         when(orderRepository.saveAndFlush(any())).thenAnswer(inv -> {
             Order order = inv.getArgument(0);
@@ -182,6 +193,8 @@ class OrderServiceImplTest {
         when(couponService.apply(eq("WELCOME50"), eq(customerId), eq(restaurantId), any()))
                 .thenReturn(new CouponService.DiscountResult(
                         couponId, "WELCOME50", new BigDecimal("50.00"), new BigDecimal("390.00")));
+        when(taxEngineService.calculateAndSnapshot(any())).thenReturn(
+                new TaxCalculationResult(42000L, 1100L, 1100L, 0L, 0L, 2200L, 0L, 44200L, null, List.of()));
         when(orderNumberGenerator.next()).thenReturn("FD-20260801-000999");
         when(orderRepository.saveAndFlush(any())).thenAnswer(inv -> {
             Order order = inv.getArgument(0);

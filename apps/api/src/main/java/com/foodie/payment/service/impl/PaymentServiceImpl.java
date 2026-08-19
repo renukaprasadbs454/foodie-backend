@@ -1,5 +1,17 @@
 package com.foodie.payment.service.impl;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.enums.OrderStatus;
@@ -12,29 +24,25 @@ import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.infrastructure.razorpay.RazorpayClient;
 import com.foodie.infrastructure.razorpay.RazorpayProperties;
 import com.foodie.infrastructure.razorpay.RazorpaySignatureVerifier;
+import com.foodie.payment.dto.request.CreatePaymentRequestDto;
 import com.foodie.payment.dto.request.RefundPaymentRequestDto;
+import com.foodie.payment.dto.response.PaymentCreateResponseDto;
 import com.foodie.payment.dto.response.PaymentInitiationResponseDto;
 import com.foodie.payment.dto.response.RefundInitiationResponseDto;
 import com.foodie.payment.entity.Payment;
 import com.foodie.payment.entity.RefundRequest;
+import com.foodie.payment.gateway.PaymentGateway;
 import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.payment.repository.RefundRequestRepository;
 import com.foodie.payment.service.PaymentIdempotencyStore;
 import com.foodie.payment.service.PaymentService;
 import com.foodie.payment.service.WebhookDedupService;
+import com.foodie.payment.state.PaymentStateMachine;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.OrderPaymentPort;
 import com.foodie.shared.event.PaymentCapturedEvent;
 import com.foodie.shared.event.PaymentFailedEvent;
 import com.foodie.shared.event.RefundProcessedEvent;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PaymentServiceImpl implements PaymentService {
@@ -53,6 +61,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentIdempotencyStore idempotencyStore;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final PaymentGateway paymentGateway;
 
     public PaymentServiceImpl(
             PaymentRepository paymentRepository,
@@ -65,7 +74,8 @@ public class PaymentServiceImpl implements PaymentService {
             WebhookDedupService webhookDedupService,
             PaymentIdempotencyStore idempotencyStore,
             ObjectMapper objectMapper,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            PaymentGateway paymentGateway
     ) {
         this.paymentRepository = paymentRepository;
         this.refundRequestRepository = refundRequestRepository;
@@ -78,6 +88,98 @@ public class PaymentServiceImpl implements PaymentService {
         this.idempotencyStore = idempotencyStore;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
+        this.paymentGateway = paymentGateway;
+    }
+
+    @Override
+    @Transactional
+    public PaymentCreateResponseDto createPayment(UUID userCredentialId, CreatePaymentRequestDto request, String idempotencyKey) {
+        UUID orderId = request.orderId();
+        if (orderId == null) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "orderId is required.");
+        }
+
+        UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
+
+        OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+
+        if (!order.customerId().equals(customerId)) {
+            throw new ResourceNotFoundException("Order not found.");
+        }
+        if (order.status() != OrderStatus.PLACED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ORDER_NOT_PAYABLE, "Order is not payable in its current status.");
+        }
+
+        BigDecimal amount = order.totalAmount().setScale(2, RoundingMode.HALF_UP);
+        long amountPaise = amount.movePointRight(2).longValueExact();
+
+        var existing = paymentRepository.findByOrderId(orderId);
+        if (existing.isPresent()) {
+            Payment payment = existing.get();
+            if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                throw new UnprocessableEntityException(
+                        ErrorCode.PAYMENT_ALREADY_CAPTURED, "Payment has already been captured.");
+            }
+            if (payment.getStatus() == PaymentStatus.PENDING) {
+                return new PaymentCreateResponseDto(
+                        payment.getId(),
+                        payment.getGateway(),
+                        payment.getRazorpayOrderId(),
+                        payment.getAmountPaise(),
+                        payment.getAmount(),
+                        payment.getCurrency(),
+                        razorpayProperties.getKeyId()
+                );
+            }
+            if (payment.getStatus() == PaymentStatus.FAILED) {
+                String effectiveKey = idempotencyKey != null ? idempotencyKey : UUID.randomUUID().toString();
+                var gatewayResult = paymentGateway.createOrder(new PaymentGateway.PaymentGatewayOrderCommand(
+                        orderId, amountPaise, amount, "INR", shortReceipt(orderId)));
+                payment.reinitiate(gatewayResult.gatewayOrderId(), effectiveKey, amount);
+                Payment saved = paymentRepository.save(payment);
+                return new PaymentCreateResponseDto(
+                        saved.getId(),
+                        saved.getGateway(),
+                        saved.getRazorpayOrderId(),
+                        saved.getAmountPaise(),
+                        saved.getAmount(),
+                        saved.getCurrency(),
+                        razorpayProperties.getKeyId()
+                );
+            }
+            throw new UnprocessableEntityException(
+                    ErrorCode.ORDER_NOT_PAYABLE, "Order already has an active payment state.");
+        }
+
+        String effectiveKey = idempotencyKey != null ? idempotencyKey : UUID.randomUUID().toString();
+        var gatewayResult = paymentGateway.createOrder(new PaymentGateway.PaymentGatewayOrderCommand(
+                orderId, amountPaise, amount, "INR", shortReceipt(orderId)));
+
+        Payment payment = paymentRepository.save(Payment.initiate(
+                orderId,
+                paymentGateway.getGatewayName(),
+                gatewayResult.gatewayOrderId(),
+                amount,
+                amountPaise,
+                "INR",
+                effectiveKey
+        ));
+
+        PaymentStateMachine.validateTransition(PaymentStatus.CREATED, PaymentStatus.PENDING);
+
+        return new PaymentCreateResponseDto(
+                payment.getId(),
+                payment.getGateway(),
+                payment.getRazorpayOrderId(),
+                payment.getAmountPaise(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                razorpayProperties.getKeyId()
+        );
     }
 
     @Override
@@ -147,26 +249,47 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public boolean verifyPayment(UUID userCredentialId, com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
-        boolean valid = signatureVerifier.isValidPaymentSignature(
-                request.razorpayOrderId(),
-                request.razorpayPaymentId(),
-                request.razorpaySignature()
-        );
-        if (!valid) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Invalid payment signature.");
+        UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
+
+        OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(request.orderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+
+        if (!order.customerId().equals(customerId)) {
+            throw new ResourceNotFoundException("Order not found.");
         }
 
         Payment payment = paymentRepository.findByOrderId(request.orderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for order."));
 
-        if (payment.getStatus() == PaymentStatus.PENDING) {
-            payment.markCaptured(request.razorpayPaymentId());
-            paymentRepository.save(payment);
-            eventPublisher.publishEvent(PaymentCapturedEvent.of(
-                    payment.getOrderId(),
-                    payment.getId()
-            ));
+        if (!payment.getRazorpayOrderId().equals(request.razorpayOrderId())) {
+            throw new BadRequestException(ErrorCode.INVALID_GATEWAY_ORDER, "Gateway order ID mismatch.");
         }
+
+        boolean valid = paymentGateway.verifyPaymentSignature(new PaymentGateway.PaymentGatewayVerifyCommand(
+                request.razorpayOrderId(),
+                request.razorpayPaymentId(),
+                request.razorpaySignature()
+        ));
+        if (!valid) {
+            throw new BadRequestException(ErrorCode.SIGNATURE_VERIFICATION_FAILED, "Invalid payment signature.");
+        }
+
+        if (payment.getStatus() == PaymentStatus.CAPTURED) {
+            return true; // Safe idempotent re-verification
+        }
+
+        PaymentStateMachine.validateTransition(payment.getStatus(), PaymentStatus.CAPTURED);
+
+        payment.markCaptured(request.razorpayPaymentId());
+        paymentRepository.save(payment);
+
+        eventPublisher.publishEvent(PaymentCapturedEvent.of(
+                payment.getOrderId(),
+                payment.getId()
+        ));
+
         return true;
     }
 
@@ -198,7 +321,16 @@ public class PaymentServiceImpl implements PaymentService {
             case "refund.processed" -> onRefundProcessed(root);
             default -> log.info("Unrecognized Razorpay webhook event acknowledged type={}", eventType);
         }
-        webhookDedupService.markProcessed(eventId);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+           TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+           @Override
+           public void afterCommit() {
+               webhookDedupService.markProcessed(eventId);
+              }
+           });
+        } else {
+               webhookDedupService.markProcessed(eventId);
+            }
     }
 
     @Override
@@ -266,10 +398,11 @@ public class PaymentServiceImpl implements PaymentService {
         if (payment.getStatus() == PaymentStatus.CAPTURED || payment.getStatus() == PaymentStatus.REFUNDED) {
             return;
         }
-        if (payment.getStatus() != PaymentStatus.PENDING && payment.getStatus() != PaymentStatus.FAILED) {
+        if (payment.getStatus() != PaymentStatus.PENDING) {
             log.warn("payment.captured ignored for status={}", payment.getStatus());
             return;
         }
+        payment.transitionTo(PaymentStatus.CAPTURED);
         payment.markCaptured(razorpayPaymentId);
         eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
         log.info("Payment CAPTURED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
@@ -289,6 +422,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (payment.getStatus() != PaymentStatus.PENDING) {
             return;
         }
+        payment.transitionTo(PaymentStatus.FAILED);
         payment.markFailed(razorpayPaymentId);
         eventPublisher.publishEvent(PaymentFailedEvent.of(payment.getOrderId(), payment.getId()));
         log.info("Payment FAILED paymentId={} orderId={}", payment.getId(), payment.getOrderId());

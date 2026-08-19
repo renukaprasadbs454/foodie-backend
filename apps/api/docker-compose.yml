@@ -51,8 +51,10 @@ services:
       REDIS_PORT: 6379
       SERVER_PORT: 8080
       FOODIE_LOCAL_STORAGE_ROOT: /tmp/foodie-object-storage
-      JWT_SECRET: local-dev-only-change-me-foodie-jwt-secret-key-32b
-      RAZORPAY_MODE: stub
+      RAZORPAY_ENABLED: ${RAZORPAY_ENABLED:-true}
+      RAZORPAY_MODE: ${RAZORPAY_MODE:-stub}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_local}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-local-razorpay-key-secret}
       FCM_MODE: stub
       MAPS_PROVIDER: ${MAPS_PROVIDER:-google}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}

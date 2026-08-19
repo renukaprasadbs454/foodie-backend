@@ -23,6 +23,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
 
+import com.foodie.payment.dto.request.CreatePaymentRequestDto;
+import com.foodie.payment.dto.response.PaymentCreateResponseDto;
+
 @RestController
 @RequestMapping("/api/v1/payments")
 @Tag(name = "Payment")
@@ -32,6 +35,18 @@ public class PaymentController {
 
     public PaymentController(PaymentService paymentService) {
         this.paymentService = paymentService;
+    }
+
+    @PostMapping("/create")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Create gateway payment order for a customer order")
+    public ResponseEntity<ApiResponse<PaymentCreateResponseDto>> createPayment(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody CreatePaymentRequestDto request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.createPayment(principal.userId(), request, idempotencyKey)));
     }
 
     @PostMapping("/orders/{orderId}/initiate")
