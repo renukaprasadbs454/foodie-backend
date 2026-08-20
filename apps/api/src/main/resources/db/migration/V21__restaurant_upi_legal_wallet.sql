@@ -1,13 +1,13 @@
--- V19: Restaurant UPI, Business/Legal Details, and Restaurant Wallet support
+-- V21: Restaurant UPI, Business/Legal Details, and Restaurant Wallet support
 
 -- Feature 1: Restaurant UPI fields
-ALTER TABLE restaurant ADD COLUMN upi_id VARCHAR(100);
-ALTER TABLE restaurant ADD COLUMN upi_name VARCHAR(150);
-ALTER TABLE restaurant ADD COLUMN upi_verified BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE restaurant ADD COLUMN upi_verified_at TIMESTAMPTZ;
+ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);
+ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS upi_name VARCHAR(150);
+ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS upi_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS upi_verified_at TIMESTAMPTZ;
 
 -- Feature 2: Restaurant Business/Legal Details table
-CREATE TABLE restaurant_legal_detail (
+CREATE TABLE IF NOT EXISTS restaurant_legal_detail (
     id                     UUID PRIMARY KEY,
     restaurant_id          UUID NOT NULL UNIQUE REFERENCES restaurant(id) ON DELETE CASCADE,
     gstin                  VARCHAR(20),
@@ -18,10 +18,10 @@ CREATE TABLE restaurant_legal_detail (
     contact_email          VARCHAR(255) NOT NULL,
     contact_phone          VARCHAR(20) NOT NULL,
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at             TIMESTAMPTZ NOT NULL
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_restaurant_legal_detail_restaurant ON restaurant_legal_detail(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_restaurant_legal_detail_restaurant ON restaurant_legal_detail(restaurant_id);
 
 -- Feature 4: Allow RESTAURANT in wallet_account owner_type constraint
 ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type;
