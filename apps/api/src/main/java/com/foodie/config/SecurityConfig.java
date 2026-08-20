@@ -33,7 +33,6 @@ public class SecurityConfig {
         this.objectMapper = objectMapper;
     }
 
-<<<<<<< HEAD
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -57,6 +56,8 @@ public class SecurityConfig {
                                 "/api/v1/storage/**",
                                 "/api/v1/debug/**")
                         .permitAll()
+                        .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**")
+                        .authenticated()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/restaurants",
@@ -66,6 +67,10 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/restaurants/*/reviews")
                         .permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/menu/categories")
+                        .authenticated()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/menu/**")
@@ -91,60 +96,10 @@ public class SecurityConfig {
                 .addFilterBefore(
                         jwtAuthFilter,
                         UsernamePasswordAuthenticationFilter.class);
-=======
-        @Bean
-        SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-                http
-                                .cors(cors -> {
-                                })
-                                .csrf(AbstractHttpConfigurer::disable)
-                                .httpBasic(AbstractHttpConfigurer::disable)
-                                .formLogin(AbstractHttpConfigurer::disable)
-                                .sessionManagement(session -> session
-                                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                                .authorizeHttpRequests(auth -> auth
-                                                .requestMatchers(
-                                                                "/actuator/health",
-                                                                "/actuator/health/**",
-                                                                "/actuator/info",
-                                                                "/v3/api-docs/**",
-                                                                "/swagger-ui/**",
-                                                                "/swagger-ui.html",
-                                                                "/api/v1/auth/**",
-                                                                "/api/v1/payments/webhook/razorpay",
-                                                                "/api/v1/storage/**",
-                                                                "/api/v1/debug/**")
-                                                .permitAll()
-                                                .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**")
-                                                .authenticated()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/restaurants",
-                                                                "/api/v1/restaurants/*")
-                                                .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews")
-                                                .permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/menu/categories")
-                                                .authenticated()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
-                                                .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
-                                                .anyRequest().authenticated())
-                                .exceptionHandling(ex -> ex
-                                                .authenticationEntryPoint((request, response,
-                                                                authException) -> writeError(response,
-                                                                                HttpServletResponse.SC_UNAUTHORIZED,
-                                                                                ErrorCode.UNAUTHORIZED,
-                                                                                "Authentication required."))
-                                                .accessDeniedHandler((request, response,
-                                                                accessDeniedException) -> writeError(response,
-                                                                                HttpServletResponse.SC_FORBIDDEN,
-                                                                                ErrorCode.FORBIDDEN,
-                                                                                "Access denied.")))
-                                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
->>>>>>> d71c2851deb16a3c6bdb52bb5c47fd6ab1f01cc4
 
         return http.build();
     }
 
-<<<<<<< HEAD
     private void writeError(
             HttpServletResponse response,
             int status,
@@ -158,12 +113,4 @@ public class SecurityConfig {
                 response.getOutputStream(),
                 ApiResponse.failure(code, message));
     }
-=======
-        private void writeError(HttpServletResponse response, int status, ErrorCode code, String message)
-                        throws java.io.IOException {
-                response.setStatus(status);
-                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(code, message));
-        }
->>>>>>> d71c2851deb16a3c6bdb52bb5c47fd6ab1f01cc4
 }
