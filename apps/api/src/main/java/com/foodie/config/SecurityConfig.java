@@ -53,7 +53,7 @@ public class SecurityConfig {
                                 "/api/v1/payments/webhook/razorpay"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants", "/api/v1/restaurants/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews", "/api/v1/restaurants/*/reviews/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(
