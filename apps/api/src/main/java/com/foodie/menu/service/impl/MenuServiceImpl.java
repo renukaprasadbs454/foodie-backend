@@ -12,6 +12,8 @@ import com.foodie.menu.dto.request.CreateCategoryRequestDto;
 import com.foodie.menu.dto.request.CreateMenuItemRequestDto;
 import com.foodie.menu.dto.request.CreateVariantRequestDto;
 import com.foodie.menu.dto.request.UpdateAvailabilityRequestDto;
+import com.foodie.menu.dto.request.UpdateCategoryRequestDto;
+import com.foodie.menu.dto.request.UpdateMenuItemRequestDto;
 import com.foodie.menu.dto.response.AvailabilityResponseDto;
 import com.foodie.menu.dto.response.CategoryResponseDto;
 import com.foodie.menu.dto.response.FullMenuResponseDto;
@@ -164,6 +166,15 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CategoryResponseDto> getCategories(UUID ownerCredentialId) {
+        UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
+        return categoryRepository.findByRestaurantIdOrderByDisplayOrderAscCreatedAtAsc(restaurantId).stream()
+                .map(menuMapper::toCategory)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public CategoryResponseDto createCategory(UUID ownerCredentialId, CreateCategoryRequestDto request) {
         UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
@@ -174,6 +185,32 @@ public class MenuServiceImpl implements MenuService {
         ));
         menuCacheService.evict(restaurantId);
         return menuMapper.toCategory(category);
+    }
+
+    @Override
+    @Transactional
+    public CategoryResponseDto updateCategory(UUID ownerCredentialId, UUID categoryId, UpdateCategoryRequestDto request) {
+        UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
+        Category category = categoryRepository.findByIdAndRestaurantId(categoryId, restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found."));
+        category.update(request.name(), request.displayOrder());
+        menuCacheService.evict(restaurantId);
+        return menuMapper.toCategory(category);
+    }
+
+    @Override
+    @Transactional
+    public void deleteCategory(UUID ownerCredentialId, UUID categoryId) {
+        UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
+        Category category = categoryRepository.findByIdAndRestaurantId(categoryId, restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found."));
+        category.softDelete();
+        List<MenuItem> items = menuItemRepository.findByCategoryIdOrderByCreatedAtAsc(categoryId);
+        for (MenuItem item : items) {
+            item.softDelete();
+            publishPriceChanged(restaurantId, item.getId());
+        }
+        menuCacheService.evict(restaurantId);
     }
 
     @Override
@@ -192,11 +229,56 @@ public class MenuServiceImpl implements MenuService {
                 request.name(),
                 request.description(),
                 request.basePrice(),
-                Boolean.TRUE.equals(request.isVeg())
+                request.resolveIsVeg(),
+                request.resolveFoodType()
         ));
         publishPriceChanged(restaurantId, item.getId());
         menuCacheService.evict(restaurantId);
         return menuMapper.toMenuItem(item, null);
+    }
+
+    @Override
+    @Transactional
+    public MenuItemResponseDto updateItem(UUID ownerCredentialId, UUID menuItemId, UpdateMenuItemRequestDto request) {
+        UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
+        MenuItem item = menuItemRepository.findByIdAndRestaurantId(menuItemId, restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found."));
+
+        UUID categoryId = request.categoryId();
+        if (categoryId != null && !categoryId.equals(item.getCategoryId())) {
+            categoryRepository.findByIdAndRestaurantId(categoryId, restaurantId)
+                    .orElseThrow(() -> new UnprocessableEntityException(
+                            ErrorCode.CATEGORY_NOT_OWNED,
+                            "Category does not belong to this restaurant."
+                    ));
+        }
+
+        boolean priceChanged = item.getBasePrice().compareTo(request.basePrice()) != 0;
+        item.update(
+                categoryId,
+                request.name(),
+                request.description(),
+                request.basePrice(),
+                request.resolveIsVeg(),
+                request.resolveFoodType()
+        );
+
+        if (priceChanged) {
+            publishPriceChanged(restaurantId, item.getId());
+        }
+        menuCacheService.evict(restaurantId);
+        return menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key()));
+    }
+
+    @Override
+    @Transactional
+    public void deleteItem(UUID ownerCredentialId, UUID menuItemId) {
+        UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
+        MenuItem item = menuItemRepository.findByIdAndRestaurantId(menuItemId, restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found."));
+        item.softDelete();
+        publishPriceChanged(restaurantId, item.getId());
+        menuCacheService.evict(restaurantId);
     }
 
     @Override
