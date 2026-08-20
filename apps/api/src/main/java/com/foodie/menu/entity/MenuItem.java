@@ -17,7 +17,7 @@ public class MenuItem extends BaseEntity {
     @Column(name = "restaurant_id", nullable = false, updatable = false)
     private UUID restaurantId;
 
-    @Column(name = "category_id", nullable = false, updatable = false)
+    @Column(name = "category_id", nullable = false)
     private UUID categoryId;
 
     @Column(name = "name", nullable = false)
@@ -38,6 +38,9 @@ public class MenuItem extends BaseEntity {
     @Column(name = "is_veg", nullable = false)
     private boolean veg;
 
+    @Column(name = "food_type", length = 20)
+    private String foodType;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -52,6 +55,18 @@ public class MenuItem extends BaseEntity {
             BigDecimal basePrice,
             boolean veg
     ) {
+        return create(restaurantId, categoryId, name, description, basePrice, veg, veg ? "VEG" : "NON_VEG");
+    }
+
+    public static MenuItem create(
+            UUID restaurantId,
+            UUID categoryId,
+            String name,
+            String description,
+            BigDecimal basePrice,
+            boolean veg,
+            String foodType
+    ) {
         MenuItem item = new MenuItem();
         item.restaurantId = restaurantId;
         item.categoryId = categoryId;
@@ -59,8 +74,30 @@ public class MenuItem extends BaseEntity {
         item.description = description;
         item.basePrice = basePrice;
         item.veg = veg;
+        item.foodType = foodType != null ? foodType : (veg ? "VEG" : "NON_VEG");
         item.available = true;
         return item;
+    }
+
+    public void update(
+            UUID categoryId,
+            String name,
+            String description,
+            BigDecimal basePrice,
+            Boolean veg,
+            String foodType
+    ) {
+        if (categoryId != null) this.categoryId = categoryId;
+        if (name != null) this.name = name;
+        this.description = description;
+        if (basePrice != null) this.basePrice = basePrice;
+        if (foodType != null) {
+            this.foodType = foodType;
+            this.veg = "VEG".equalsIgnoreCase(foodType);
+        } else if (veg != null) {
+            this.veg = veg;
+            this.foodType = veg ? "VEG" : "NON_VEG";
+        }
     }
 
     public void setAvailable(boolean available) {
@@ -105,6 +142,10 @@ public class MenuItem extends BaseEntity {
 
     public boolean isVeg() {
         return veg;
+    }
+
+    public String getFoodType() {
+        return foodType != null ? foodType : (veg ? "VEG" : "NON_VEG");
     }
 
     public Instant getDeletedAt() {

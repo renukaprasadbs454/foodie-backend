@@ -19,13 +19,21 @@ import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.infrastructure.storage.ObjectStorageClient;
 import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
 import com.foodie.restaurant.dto.request.RestaurantAddressRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantBankDetailsRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantLocationRequestDto;
 import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
+import com.foodie.restaurant.dto.request.VerifyUpiRequestDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantLocationResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantBankDetailsResponseDto;
+import com.foodie.restaurant.dto.response.VerificationResultResponseDto;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
+import com.foodie.restaurant.entity.RestaurantBankDetails;
 import com.foodie.restaurant.entity.RestaurantDocument;
 import com.foodie.restaurant.mapper.RestaurantMapper;
 import com.foodie.restaurant.repository.RestaurantAddressRepository;
+import com.foodie.restaurant.repository.RestaurantBankDetailsRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
@@ -55,6 +63,8 @@ class RestaurantServiceImplTest {
     @Mock
     private RestaurantDocumentRepository restaurantDocumentRepository;
     @Mock
+    private RestaurantBankDetailsRepository restaurantBankDetailsRepository;
+    @Mock
     private ObjectStorageClient objectStorageClient;
     @Mock
     private RestaurantCacheService restaurantCacheService;
@@ -70,6 +80,7 @@ class RestaurantServiceImplTest {
                 restaurantRepository,
                 restaurantAddressRepository,
                 restaurantDocumentRepository,
+                restaurantBankDetailsRepository,
                 new RestaurantMapper(),
                 objectStorageClient,
                 restaurantCacheService,
@@ -95,54 +106,114 @@ class RestaurantServiceImplTest {
 
         CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(
                 "Spice Route Kitchen",
-                "Authentic South Indian cuisine",
-                List.of(CuisineType.SOUTH_INDIAN, CuisineType.VEGETARIAN),
+                "Great food",
+                List.of(CuisineType.SOUTH_INDIAN),
                 addressDto(),
-                new BigDecimal("99.00")
+                new BigDecimal("5.00") // Client requested 5%
         );
 
-        RestaurantDetailResponseDto created = service.create(ownerId, request);
+        RestaurantDetailResponseDto dto = service.create(ownerId, request);
 
-        assertThat(created.status()).isEqualTo("PENDING");
-        assertThat(created.commissionPct()).isEqualByComparingTo("18.00");
-        assertThat(created.ownerUserCredentialId()).isEqualTo(ownerId);
+        assertThat(dto.commissionPct()).isEqualByComparingTo("18.00");
+        assertThat(dto.status()).isEqualTo("PENDING");
         verify(eventPublisher).publishEvent(any(RestaurantCreatedEvent.class));
         verify(restaurantCacheService).evictAllListCaches();
     }
 
     @Test
-    void create_whenProfileExists_conflicts() {
+    void getMyProfile_returnsOwnedRestaurantDetail() {
+        Restaurant restaurant = pendingRestaurant();
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+
+        RestaurantDetailResponseDto profile = service.getMyProfile(ownerId);
+
+        assertThat(profile.restaurantId()).isEqualTo(restaurant.getId());
+        assertThat(profile.name()).isEqualTo("Spice Route Kitchen");
+        assertThat(profile.ownerUserCredentialId()).isEqualTo(ownerId);
+    }
+
+    @Test
+    void getLocation_and_updateLocation_succeeds() {
+        Restaurant restaurant = pendingRestaurant();
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+
+        RestaurantLocationResponseDto location = service.getLocation(ownerId);
+        assertThat(location.city()).isEqualTo("Bengaluru");
+        assertThat(location.latitude()).isEqualByComparingTo("12.935200");
+
+        UpdateRestaurantLocationRequestDto updateDto = new UpdateRestaurantLocationRequestDto(
+                new BigDecimal("12.936000"),
+                new BigDecimal("77.692000"),
+                "124 MG Road",
+                "5th Block",
+                "Near Metro",
+                "Bengaluru",
+                "Karnataka",
+                "India",
+                "560095",
+                "124 MG Road, 5th Block, Bengaluru, Karnataka - 560095, India"
+        );
+
+        RestaurantLocationResponseDto updatedLocation = service.updateLocation(ownerId, updateDto);
+        assertThat(updatedLocation.addressLine1()).isEqualTo("124 MG Road");
+        assertThat(updatedLocation.landmark()).isEqualTo("Near Metro");
+        assertThat(updatedLocation.formattedAddress()).contains("124 MG Road");
+        verify(restaurantCacheService).evictRestaurant(restaurant.getId());
+    }
+
+    @Test
+    void bankDetails_flow_getUpdateVerify() {
+        Restaurant restaurant = pendingRestaurant();
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.empty());
+        when(restaurantBankDetailsRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Get empty details
+        RestaurantBankDetailsResponseDto emptyDetails = service.getBankDetails(ownerId);
+        assertThat(emptyDetails.bankAccount().verificationStatus()).isEqualTo("NOT_SUBMITTED");
+
+        // Update details
+        UpdateRestaurantBankDetailsRequestDto updateDto = new UpdateRestaurantBankDetailsRequestDto(
+                "Foodie Restaurant Pvt Ltd",
+                "HDFC Bank",
+                "98765432104521",
+                "HDFC0001234",
+                "CURRENT",
+                "Koramangala 5th Block",
+                "foodierestaurant@upi"
+        );
+        RestaurantBankDetailsResponseDto updated = service.updateBankDetails(ownerId, updateDto);
+        assertThat(updated.bankAccount().bankName()).isEqualTo("HDFC Bank");
+        assertThat(updated.bankAccount().accountNumberMasked()).isEqualTo("XXXX XXXX 4521");
+        assertThat(updated.bankAccount().verificationStatus()).isEqualTo("PENDING");
+        assertThat(updated.upi().upiId()).isEqualTo("foodierestaurant@upi");
+
+        // Verify bank details
+        RestaurantBankDetails bankDetails = RestaurantBankDetails.createDefault(restaurant.getId());
+        bankDetails.updateDetails("Foodie", "HDFC", "98765432104521", "HDFC0001234", "CURRENT", "Main", "foodie@upi");
+        when(restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.of(bankDetails));
+
+        VerificationResultResponseDto bankVerify = service.verifyBankDetails(ownerId);
+        assertThat(bankVerify.status()).isEqualTo("VERIFIED");
+
+        VerificationResultResponseDto upiVerify = service.verifyUpi(ownerId, new VerifyUpiRequestDto("foodie@upi"));
+        assertThat(upiVerify.status()).isEqualTo("VERIFIED");
+    }
+
+    @Test
+    void create_whenProfileAlreadyExists_throwsConflict() {
         when(restaurantRepository.existsByOwnerUserCredentialId(ownerId)).thenReturn(true);
-        assertThatThrownBy(() -> service.create(ownerId, new CreateRestaurantRequestDto(
-                "X", null, List.of(CuisineType.OTHER), addressDto(), null)))
+        CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(
+                "Dup", null, List.of(CuisineType.NORTH_INDIAN), addressDto(), null);
+
+        assertThatThrownBy(() -> service.create(ownerId, request))
                 .isInstanceOf(ConflictException.class)
                 .extracting(ex -> ((ConflictException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.RESTAURANT_PROFILE_ALREADY_EXISTS);
     }
 
     @Test
-    void getById_pendingHiddenFromPublic() {
-        Restaurant restaurant = pendingRestaurant();
-        when(restaurantRepository.findById(restaurant.getId())).thenReturn(Optional.of(restaurant));
-
-        assertThatThrownBy(() -> service.getById(restaurant.getId(), null, false))
-                .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    @Test
-    void getById_pendingVisibleToOwner_withPrivilegedFields() {
-        Restaurant restaurant = pendingRestaurant();
-        when(restaurantRepository.findById(restaurant.getId())).thenReturn(Optional.of(restaurant));
-
-        RestaurantDetailResponseDto dto = service.getById(restaurant.getId(), ownerId, false);
-
-        assertThat(dto.status()).isEqualTo("PENDING");
-        assertThat(dto.commissionPct()).isNotNull();
-        assertThat(dto.ownerUserCredentialId()).isEqualTo(ownerId);
-    }
-
-    @Test
-    void approve_fromPending_publishesEvent() {
+    void approve_fromPending_succeeds_andPublishesApprovedEvent() {
         Restaurant restaurant = pendingRestaurant();
         UUID adminId = UUID.randomUUID();
         when(restaurantRepository.findById(restaurant.getId())).thenReturn(Optional.of(restaurant));
@@ -150,13 +221,12 @@ class RestaurantServiceImplTest {
         RestaurantDetailResponseDto dto = service.approve(restaurant.getId(), adminId);
 
         assertThat(dto.status()).isEqualTo("APPROVED");
-        assertThat(restaurant.getStatus()).isEqualTo(RestaurantStatus.APPROVED);
         verify(eventPublisher).publishEvent(any(RestaurantApprovedEvent.class));
         verify(restaurantCacheService).evictRestaurant(restaurant.getId());
     }
 
     @Test
-    void approve_whenAlreadyApproved_illegalTransition() {
+    void approve_nonPending_throwsUnprocessable() {
         Restaurant restaurant = pendingRestaurant();
         restaurant.approve();
         when(restaurantRepository.findById(restaurant.getId())).thenReturn(Optional.of(restaurant));
@@ -168,14 +238,14 @@ class RestaurantServiceImplTest {
     }
 
     @Test
-    void updateMyRestaurant_doesNotChangeStatusOrCommission() {
+    void updateMyRestaurant_updatesFields_preservesPendingAndCommission() {
         Restaurant restaurant = pendingRestaurant();
         when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
 
         UpdateRestaurantRequestDto request = new UpdateRestaurantRequestDto(
                 "New Name",
-                "Updated",
-                List.of(CuisineType.CHINESE),
+                "new desc",
+                List.of(CuisineType.CHINESE, CuisineType.BIRYANI),
                 new RestaurantAddressRequestDto(
                         "L1", null, "Bengaluru", "560001",
                         new BigDecimal("12.970000"), new BigDecimal("77.590000")

@@ -5,6 +5,8 @@ import com.foodie.menu.dto.request.CreateCategoryRequestDto;
 import com.foodie.menu.dto.request.CreateMenuItemRequestDto;
 import com.foodie.menu.dto.request.CreateVariantRequestDto;
 import com.foodie.menu.dto.request.UpdateAvailabilityRequestDto;
+import com.foodie.menu.dto.request.UpdateCategoryRequestDto;
+import com.foodie.menu.dto.request.UpdateMenuItemRequestDto;
 import com.foodie.menu.dto.response.AvailabilityResponseDto;
 import com.foodie.menu.dto.response.CategoryResponseDto;
 import com.foodie.menu.dto.response.FullMenuResponseDto;
@@ -23,10 +25,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -67,6 +71,15 @@ public class MenuController {
         return ResponseEntity.ok(ApiResponse.success(menuService.getItemsByRestaurant(restaurantId, categoryId, isVeg)));
     }
 
+    @GetMapping("/categories")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "List menu categories for my restaurant")
+    public ResponseEntity<ApiResponse<List<CategoryResponseDto>>> getCategories(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.getCategories(principal.userId())));
+    }
+
     @PostMapping("/categories")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Create a menu category for my restaurant")
@@ -78,6 +91,28 @@ public class MenuController {
                 .body(ApiResponse.success(menuService.createCategory(principal.userId(), request)));
     }
 
+    @PutMapping("/categories/{id}")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update a menu category")
+    public ResponseEntity<ApiResponse<CategoryResponseDto>> updateCategory(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateCategoryRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.updateCategory(principal.userId(), id, request)));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Delete a menu category")
+    public ResponseEntity<ApiResponse<Void>> deleteCategory(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        menuService.deleteCategory(principal.userId(), id);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(ApiResponse.success(null));
+    }
+
     @PostMapping("/items")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Create a menu item")
@@ -87,6 +122,28 @@ public class MenuController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(menuService.createItem(principal.userId(), request)));
+    }
+
+    @PutMapping("/items/{id}")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update a menu item")
+    public ResponseEntity<ApiResponse<MenuItemResponseDto>> updateItem(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateMenuItemRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.updateItem(principal.userId(), id, request)));
+    }
+
+    @DeleteMapping("/items/{id}")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Delete a menu item")
+    public ResponseEntity<ApiResponse<Void>> deleteItem(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        menuService.deleteItem(principal.userId(), id);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(ApiResponse.success(null));
     }
 
     @PatchMapping("/items/{id}/availability")

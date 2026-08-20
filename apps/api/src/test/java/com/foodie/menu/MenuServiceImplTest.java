@@ -15,6 +15,8 @@ import com.foodie.menu.dto.request.CreateCategoryRequestDto;
 import com.foodie.menu.dto.request.CreateMenuItemRequestDto;
 import com.foodie.menu.dto.request.CreateVariantRequestDto;
 import com.foodie.menu.dto.request.UpdateAvailabilityRequestDto;
+import com.foodie.menu.dto.request.UpdateCategoryRequestDto;
+import com.foodie.menu.dto.request.UpdateMenuItemRequestDto;
 import com.foodie.menu.dto.response.AvailabilityResponseDto;
 import com.foodie.menu.dto.response.CategoryResponseDto;
 import com.foodie.menu.dto.response.FullMenuResponseDto;
@@ -98,6 +100,25 @@ class MenuServiceImplTest {
     }
 
     @Test
+    void updateCategory_and_deleteCategory_succeeds() {
+        stubOwnedRestaurant();
+        Category category = Category.create(restaurantId, "Starters", 1);
+        setId(category, UUID.randomUUID());
+        when(categoryRepository.findByIdAndRestaurantId(category.getId(), restaurantId))
+                .thenReturn(Optional.of(category));
+
+        CategoryResponseDto updated = service.updateCategory(
+                ownerId, category.getId(), new UpdateCategoryRequestDto("Appetizers", 2));
+        assertThat(updated.name()).isEqualTo("Appetizers");
+        assertThat(updated.displayOrder()).isEqualTo(2);
+
+        when(menuItemRepository.findByCategoryIdOrderByCreatedAtAsc(category.getId())).thenReturn(List.of());
+        service.deleteCategory(ownerId, category.getId());
+        assertThat(category.getDeletedAt()).isNotNull();
+        verify(menuCacheService, org.mockito.Mockito.times(2)).evict(restaurantId);
+    }
+
+    @Test
     void createItem_categoryNotOwned_throws422() {
         stubOwnedRestaurant();
         UUID foreignCategory = UUID.randomUUID();
@@ -112,7 +133,7 @@ class MenuServiceImplTest {
     }
 
     @Test
-    void createItem_publishesPriceChangedEvent() {
+    void createItem_publishesPriceChangedEvent_andSupportsFoodType() {
         stubOwnedRestaurant();
         Category category = Category.create(restaurantId, "Starters", 1);
         setId(category, UUID.randomUUID());
@@ -124,13 +145,41 @@ class MenuServiceImplTest {
             return item;
         });
 
+        // Non-veg creation
         MenuItemResponseDto dto = service.createItem(ownerId, new CreateMenuItemRequestDto(
-                category.getId(), "Paneer Tikka", "Grilled", new BigDecimal("220.00"), true));
+                category.getId(), "Chicken Biryani", "Fragrant", new BigDecimal("320.00"), null, "NON_VEG"));
 
         assertThat(dto.isAvailable()).isTrue();
-        assertThat(dto.basePrice()).isEqualByComparingTo("220.00");
+        assertThat(dto.basePrice()).isEqualByComparingTo("320.00");
+        assertThat(dto.foodType()).isEqualTo("NON_VEG");
+        assertThat(dto.isVeg()).isFalse();
         verify(eventPublisher).publishEvent(any(MenuItemPriceChangedEvent.class));
         verify(menuCacheService).evict(restaurantId);
+    }
+
+    @Test
+    void updateItem_and_deleteItem_succeeds() {
+        stubOwnedRestaurant();
+        Category category = Category.create(restaurantId, "Starters", 1);
+        setId(category, UUID.randomUUID());
+        MenuItem item = MenuItem.create(
+                restaurantId, category.getId(), "Item", "Old Desc", new BigDecimal("100.00"), true);
+        setId(item, UUID.randomUUID());
+        when(menuItemRepository.findByIdAndRestaurantId(item.getId(), restaurantId))
+                .thenReturn(Optional.of(item));
+
+        UpdateMenuItemRequestDto updateReq = new UpdateMenuItemRequestDto(
+                category.getId(), "Updated Item", "New Desc", new BigDecimal("150.00"), null, "NON_VEG");
+        MenuItemResponseDto updatedDto = service.updateItem(ownerId, item.getId(), updateReq);
+
+        assertThat(updatedDto.name()).isEqualTo("Updated Item");
+        assertThat(updatedDto.basePrice()).isEqualByComparingTo("150.00");
+        assertThat(updatedDto.foodType()).isEqualTo("NON_VEG");
+        assertThat(updatedDto.isVeg()).isFalse();
+
+        service.deleteItem(ownerId, item.getId());
+        assertThat(item.getDeletedAt()).isNotNull();
+        verify(menuCacheService, org.mockito.Mockito.times(2)).evict(restaurantId);
     }
 
     @Test
@@ -216,6 +265,7 @@ class MenuServiceImplTest {
         assertThat(menu.categories().getFirst().items()).hasSize(1);
         assertThat(menu.categories().getFirst().items().getFirst().isAvailable()).isFalse();
         assertThat(menu.categories().getFirst().items().getFirst().variants()).hasSize(1);
+        assertThat(menu.categories().getFirst().items().getFirst().foodType()).isEqualTo("VEG");
         verify(menuCacheService).put(any(), any());
     }
 

@@ -26,6 +26,7 @@ public class MenuMapper {
                 item.getDescription(),
                 item.getBasePrice(),
                 item.isVeg(),
+                item.getFoodType(),
                 item.isAvailable(),
                 imageUrl
         );
@@ -50,6 +51,7 @@ public class MenuMapper {
                 item.getDescription(),
                 item.getBasePrice(),
                 item.isVeg(),
+                item.getFoodType(),
                 item.isAvailable(),
                 imageUrl,
                 variants
