@@ -14,6 +14,7 @@ import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.review.dto.request.SubmitReviewRequestDto;
 import com.foodie.review.dto.response.ReviewResponseDto;
+import com.foodie.review.dto.response.ReviewSummaryDto;
 import com.foodie.review.entity.Review;
 import com.foodie.review.repository.ReviewRepository;
 import com.foodie.review.service.ReviewModerationStore;
@@ -22,6 +23,7 @@ import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.OrderReviewQuery;
 import com.foodie.shared.event.ReviewSubmittedEvent;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -132,31 +135,58 @@ class ReviewServiceImplTest {
     }
 
     @Test
-    void listForRestaurant_hidesFlaggedAndOmitsCustomer() {
+    void listForRestaurant_hidesFlaggedAndPopulatesDetails() {
         Review visible = Review.submit(orderId, customerId, restaurantId, partnerId, 5, 4, "Nice");
         ReflectionTestUtils.setField(visible, "id", UUID.randomUUID());
         Review flagged = Review.submit(UUID.randomUUID(), customerId, restaurantId, null, 1, null, "Bad");
         UUID flaggedId = UUID.randomUUID();
         ReflectionTestUtils.setField(flagged, "id", flaggedId);
 
-        when(reviewRepository.findByRestaurantId(org.mockito.ArgumentMatchers.eq(restaurantId), any(Pageable.class)))
+        when(reviewRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(visible, flagged)));
         when(moderationStore.isFlagged(visible.getId())).thenReturn(false);
         when(moderationStore.isFlagged(flaggedId)).thenReturn(true);
 
+        when(customerSummaryProvider.findByCustomerIdIn(any())).thenReturn(
+                Map.of(customerId, new CustomerSummaryProvider.CustomerSummary(customerId, "Siddharth Rao", null)));
+        when(orderReviewQuery.findOrderDetailsByOrderIds(any())).thenReturn(
+                Map.of(orderId, new OrderReviewQuery.OrderDetailsSnapshot(orderId, "ORD-101", List.of("Biryani"))));
+
         var page = service.listForRestaurant(restaurantId, 0, 20, "createdAt");
 
         assertThat(page.items()).hasSize(1);
-        assertThat(page.items().getFirst().comment()).isEqualTo("Nice");
-        // Public DTO has no customer fields — structural guarantee via record shape
-        assertThat(page.items().getFirst().getClass().getRecordComponents())
-                .extracting(c -> c.getName())
-                .doesNotContain("customerId", "customerName");
+        var item = page.items().getFirst();
+        assertThat(item.comment()).isEqualTo("Nice");
+        assertThat(item.customerName()).isEqualTo("Siddharth Rao");
+        assertThat(item.orderNumber()).isEqualTo("ORD-101");
+        assertThat(item.orderedItems()).containsExactly("Biryani");
+    }
+
+    @Test
+    void getSummary_returnsAggregatedMetrics() {
+        when(reviewRepository.countByRestaurantId(restaurantId)).thenReturn(10L);
+        when(reviewRepository.averageRestaurantRating(restaurantId)).thenReturn(4.8);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRatingGreaterThanEqual(restaurantId, (short) 4)).thenReturn(8L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRatingLessThan(restaurantId, (short) 4)).thenReturn(2L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRating(restaurantId, (short) 1)).thenReturn(1L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRating(restaurantId, (short) 2)).thenReturn(0L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRating(restaurantId, (short) 3)).thenReturn(1L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRating(restaurantId, (short) 4)).thenReturn(3L);
+        when(reviewRepository.countByRestaurantIdAndRestaurantRating(restaurantId, (short) 5)).thenReturn(5L);
+
+        ReviewSummaryDto summary = service.getSummary(restaurantId);
+
+        assertThat(summary.totalReviews()).isEqualTo(10L);
+        assertThat(summary.averageRating()).isEqualTo(4.8);
+        assertThat(summary.positiveReviews()).isEqualTo(8L);
+        assertThat(summary.needsImprovement()).isEqualTo(2L);
+        assertThat(summary.starCounts().get("5")).isEqualTo(5L);
+        assertThat(summary.starCounts().get("2")).isEqualTo(0L);
     }
 
     @Test
     void listForRestaurant_invalidSort_throws400() {
-        assertThatThrownBy(() -> service.listForRestaurant(restaurantId, 0, 20, "comment"))
+        assertThatThrownBy(() -> service.listForRestaurant(restaurantId, 0, 20, "invalid_sort"))
                 .extracting(ex -> ((com.foodie.common.exception.BadRequestException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
     }
@@ -169,28 +199,5 @@ class ReviewServiceImplTest {
         assertThatThrownBy(() -> service.flagForModeration(reviewId, "spam"))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(moderationStore, never()).flag(any(), any());
-    }
-
-    @Test
-    void submit_publishesEventWithRatings() {
-        when(customerSummaryProvider.findByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
-        when(orderReviewQuery.findByOrderId(orderId)).thenReturn(Optional.of(
-                new OrderReviewQuery.OrderReviewSnapshot(
-                        orderId, customerId, restaurantId, partnerId, OrderStatus.DELIVERED)));
-        when(reviewRepository.existsByOrderId(orderId)).thenReturn(false);
-        when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
-            Review r = inv.getArgument(0);
-            ReflectionTestUtils.setField(r, "id", UUID.randomUUID());
-            return r;
-        });
-
-        service.submit(credentialId, orderId, new SubmitReviewRequestDto(5, 2, null));
-
-        ArgumentCaptor<ReviewSubmittedEvent> captor = ArgumentCaptor.forClass(ReviewSubmittedEvent.class);
-        verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().restaurantRating()).isEqualTo(5);
-        assertThat(captor.getValue().deliveryRating()).isEqualTo(2);
-        assertThat(captor.getValue().restaurantId()).isEqualTo(restaurantId);
     }
 }

@@ -1,5 +1,8 @@
 package com.foodie.shared.contract;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,6 +13,10 @@ import java.util.UUID;
 public interface CustomerSummaryProvider {
 
     Optional<CustomerSummary> findByCustomerId(UUID customerId);
+
+    Map<UUID, CustomerSummary> findByCustomerIdIn(Collection<UUID> customerIds);
+
+    List<UUID> findCustomerIdsByNameContaining(String name);
 
     /** Used by Cart (and similar) to resolve the caller's customer without reading User tables. */
     Optional<CustomerSummary> findByUserCredentialId(UUID userCredentialId);

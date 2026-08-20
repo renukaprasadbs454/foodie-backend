@@ -1,6 +1,7 @@
 package com.foodie.order.repository;
 
 import com.foodie.order.entity.OrderItem;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,4 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
     List<OrderItem> findByOrderIdOrderByCreatedAtAsc(UUID orderId);
+
+    List<OrderItem> findByOrderIdIn(Collection<UUID> orderIds);
+
+    List<OrderItem> findByMenuItemIdIn(Collection<UUID> menuItemIds);
 }

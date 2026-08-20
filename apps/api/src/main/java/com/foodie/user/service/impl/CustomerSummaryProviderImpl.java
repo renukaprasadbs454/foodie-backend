@@ -2,8 +2,12 @@ package com.foodie.user.service.impl;
 
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.user.repository.CustomerRepository;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +24,27 @@ public class CustomerSummaryProviderImpl implements CustomerSummaryProvider {
     @Transactional(readOnly = true)
     public Optional<CustomerSummary> findByCustomerId(UUID customerId) {
         return customerRepository.findById(customerId).map(this::toSummary);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, CustomerSummary> findByCustomerIdIn(Collection<UUID> customerIds) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepository.findAllById(customerIds).stream()
+                .collect(Collectors.toMap(com.foodie.user.entity.Customer::getId, this::toSummary, (a, b) -> a));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findCustomerIdsByNameContaining(String name) {
+        if (name == null || name.isBlank()) {
+            return List.of();
+        }
+        return customerRepository.findByFullNameContainingIgnoreCase(name.trim()).stream()
+                .map(com.foodie.user.entity.Customer::getId)
+                .toList();
     }
 
     @Override

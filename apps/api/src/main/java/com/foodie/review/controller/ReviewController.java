@@ -4,13 +4,16 @@ import com.foodie.common.dto.ApiResponse;
 import com.foodie.review.dto.request.SubmitReviewRequestDto;
 import com.foodie.review.dto.response.RestaurantReviewItemDto;
 import com.foodie.review.dto.response.ReviewResponseDto;
+import com.foodie.review.dto.response.ReviewSummaryDto;
 import com.foodie.review.service.ReviewService;
 import com.foodie.security.principal.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,9 +55,21 @@ public class ReviewController {
             @PathVariable("id") UUID restaurantId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) List<Integer> rating,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to
     ) {
-        var result = reviewService.listForRestaurant(restaurantId, page, size, sort);
+        var result = reviewService.listForRestaurant(restaurantId, page, size, sort, rating, search, from, to);
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
+    }
+
+    @GetMapping("/restaurants/{id}/reviews/summary")
+    @Operation(summary = "Get review summary statistics for a restaurant")
+    public ResponseEntity<ApiResponse<ReviewSummaryDto>> getSummary(
+            @PathVariable("id") UUID restaurantId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(reviewService.getSummary(restaurantId)));
     }
 }
