@@ -31,6 +31,6 @@ public record RestaurantLegalDetailRequestDto(
         String contactEmail,
 
         @NotBlank(message = "Contact phone is required")
-        @Pattern(regexp = "^[0-9]{10,15}$", message = "Invalid contact phone number format")
+        @Pattern(regexp = "^\\+?[0-9\\s\\-]{10,20}$", message = "Invalid contact phone number format")
         String contactPhone
 ) {}

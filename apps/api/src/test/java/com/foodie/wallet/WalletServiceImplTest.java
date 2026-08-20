@@ -74,178 +74,179 @@ class WalletServiceImplTest {
         );
     }
 
-    @Test
-    void getBalance_returnsCachedBalance() {
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        account.applyCredit(new BigDecimal("120.50"));
-        when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(partnerId));
-        when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(account));
+        @Test
+        void getBalance_returnsCachedBalance() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                account.applyCredit(new BigDecimal("120.50"));
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
 
-        WalletBalanceResponseDto balance = service.getBalance(credentialId);
+                WalletBalanceResponseDto balance = service.getBalance(credentialId);
 
-        assertThat(balance.balance()).isEqualByComparingTo("120.50");
-        assertThat(balance.walletAccountId()).isEqualTo(account.getId());
-    }
+                assertThat(balance.balance()).isEqualByComparingTo("120.50");
+                assertThat(balance.walletAccountId()).isEqualTo(account.getId());
+        }
 
-    @Test
-    void credit_appendsLedgerAndUpdatesCache() {
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        UUID assignmentId = UUID.randomUUID();
-        when(deliveryPartnerLookup.existsById(partnerId)).thenReturn(true);
-        when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(
-                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId))
-                .thenReturn(Optional.empty());
-        when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
-                OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(account));
-        when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        @Test
+        void credit_appendsLedgerAndUpdatesCache() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                UUID assignmentId = UUID.randomUUID();
+                when(deliveryPartnerLookup.existsById(partnerId)).thenReturn(true);
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId))
+                                .thenReturn(Optional.empty());
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        LedgerEntryResponseDto result = service.credit(
-                OwnerType.DELIVERY_PARTNER,
-                partnerId,
-                new BigDecimal("30.00"),
-                LedgerReferenceType.DELIVERY_ASSIGNMENT,
-                assignmentId
-        );
+                LedgerEntryResponseDto result = service.credit(
+                                OwnerType.DELIVERY_PARTNER,
+                                partnerId,
+                                new BigDecimal("30.00"),
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT,
+                                assignmentId);
 
-        assertThat(result.entryType()).isEqualTo(LedgerEntryType.CREDIT);
-        assertThat(result.amount()).isEqualByComparingTo("30.00");
-        assertThat(account.getBalance()).isEqualByComparingTo("30.00");
-        verify(eventPublisher).publishEvent(any(WalletCreditedEvent.class));
-    }
+                assertThat(result.entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                assertThat(result.amount()).isEqualByComparingTo("30.00");
+                assertThat(account.getBalance()).isEqualByComparingTo("30.00");
+                verify(eventPublisher).publishEvent(any(WalletCreditedEvent.class));
+        }
 
-    @Test
-    void credit_idempotentOnSameReference() {
-        UUID assignmentId = UUID.randomUUID();
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        LedgerEntry existing = LedgerEntry.credit(
-                account.getId(), new BigDecimal("30.00"),
-                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId);
-        when(deliveryPartnerLookup.existsById(partnerId)).thenReturn(true);
-        when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(
-                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId))
-                .thenReturn(Optional.of(existing));
+        @Test
+        void credit_idempotentOnSameReference() {
+                UUID assignmentId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                LedgerEntry existing = LedgerEntry.credit(
+                                account.getId(), new BigDecimal("30.00"),
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId);
+                when(deliveryPartnerLookup.existsById(partnerId)).thenReturn(true);
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT, assignmentId))
+                                .thenReturn(Optional.of(existing));
 
-        LedgerEntryResponseDto result = service.credit(
-                OwnerType.DELIVERY_PARTNER,
-                partnerId,
-                new BigDecimal("30.00"),
-                LedgerReferenceType.DELIVERY_ASSIGNMENT,
-                assignmentId
-        );
+                LedgerEntryResponseDto result = service.credit(
+                                OwnerType.DELIVERY_PARTNER,
+                                partnerId,
+                                new BigDecimal("30.00"),
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT,
+                                assignmentId);
 
-        assertThat(result.amount()).isEqualByComparingTo("30.00");
-        verify(ledgerEntryRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
-    }
+                assertThat(result.amount()).isEqualByComparingTo("30.00");
+                verify(ledgerEntryRepository, never()).save(any());
+                verify(eventPublisher, never()).publishEvent(any());
+        }
 
-    @Test
-    void credit_platformRefund() {
-        UUID refundId = UUID.randomUUID();
-        WalletAccount platform = WalletAccount.open(OwnerType.PLATFORM, WalletConstants.PLATFORM_OWNER_ID);
-        when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.REFUND, refundId))
-                .thenReturn(Optional.empty());
-        when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
-                OwnerType.PLATFORM, WalletConstants.PLATFORM_OWNER_ID))
-                .thenReturn(Optional.of(platform));
-        when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        @Test
+        void credit_platformRefund() {
+                UUID refundId = UUID.randomUUID();
+                WalletAccount platform = WalletAccount.open(OwnerType.PLATFORM, WalletConstants.PLATFORM_OWNER_ID);
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.REFUND, refundId))
+                                .thenReturn(Optional.empty());
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                                OwnerType.PLATFORM, WalletConstants.PLATFORM_OWNER_ID))
+                                .thenReturn(Optional.of(platform));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        LedgerEntryResponseDto result = service.credit(
-                OwnerType.PLATFORM,
-                WalletConstants.PLATFORM_OWNER_ID,
-                new BigDecimal("99.00"),
-                LedgerReferenceType.REFUND,
-                refundId
-        );
+                LedgerEntryResponseDto result = service.credit(
+                                OwnerType.PLATFORM,
+                                WalletConstants.PLATFORM_OWNER_ID,
+                                new BigDecimal("99.00"),
+                                LedgerReferenceType.REFUND,
+                                refundId);
 
-        assertThat(result.referenceType()).isEqualTo(LedgerReferenceType.REFUND);
-        assertThat(platform.getBalance()).isEqualByComparingTo("99.00");
-    }
+                assertThat(result.referenceType()).isEqualTo(LedgerReferenceType.REFUND);
+                assertThat(platform.getBalance()).isEqualByComparingTo("99.00");
+        }
 
-    @Test
-    void requestPayout_insufficientBalance_throws422() {
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        account.applyCredit(new BigDecimal("10.00"));
-        when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(partnerId));
-        when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
-                OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(account));
-        when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
-                .thenReturn(BigDecimal.ZERO);
+        @Test
+        void requestPayout_insufficientBalance_throws422() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                account.applyCredit(new BigDecimal("10.00"));
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
+                                .thenReturn(BigDecimal.ZERO);
 
-        assertThatThrownBy(() -> service.requestPayout(
-                credentialId, new PayoutRequestDto(new BigDecimal("50.00")), null))
-                .isInstanceOf(UnprocessableEntityException.class)
-                .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.INSUFFICIENT_BALANCE);
-        verify(payoutRepository, never()).save(any());
-    }
+                assertThatThrownBy(() -> service.requestPayout(
+                                credentialId,
+                                new PayoutRequestDto(new BigDecimal("50.00"), "John Doe", "1234567890", "IFSC0001234",
+                                                "Bank"),
+                                null))
+                                .isInstanceOf(UnprocessableEntityException.class)
+                                .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.INSUFFICIENT_BALANCE);
+                verify(payoutRepository, never()).save(any());
+        }
 
-    @Test
-    void requestPayout_createsRequestedWithoutLedgerDebit() {
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        account.applyCredit(new BigDecimal("100.00"));
-        when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(partnerId));
-        when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
-                OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(account));
-        when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+        @Test
+        void requestPayout_createsRequestedWithoutLedgerDebit() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                account.applyCredit(new BigDecimal("100.00"));
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
+                                .thenReturn(BigDecimal.ZERO);
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PayoutResponseDto response = service.requestPayout(
-                credentialId, new PayoutRequestDto(new BigDecimal("40.00")), "pay-key-1");
+                PayoutResponseDto response = service.requestPayout(
+                                credentialId, new PayoutRequestDto(new BigDecimal("40.00"), "John Doe", "1234567890",
+                                                "IFSC0001234", "Bank"),
+                                "pay-key-1");
 
-        assertThat(response.status()).isEqualTo(PayoutStatus.REQUESTED);
-        assertThat(response.amount()).isEqualByComparingTo("40.00");
-        assertThat(account.getBalance()).isEqualByComparingTo("100.00");
-        verify(ledgerEntryRepository, never()).save(any());
-        verify(eventPublisher).publishEvent(any(PayoutRequestedEvent.class));
-        verify(payoutIdempotencyStore).store(eq("pay-key-1"), any());
-    }
+                assertThat(response.status()).isEqualTo(PayoutStatus.REQUESTED);
+                assertThat(response.amount()).isEqualByComparingTo("40.00");
+                assertThat(account.getBalance()).isEqualByComparingTo("100.00");
+                verify(ledgerEntryRepository, never()).save(any());
+                verify(eventPublisher).publishEvent(any(PayoutRequestedEvent.class));
+                verify(payoutIdempotencyStore).store(eq("pay-key-1"), any());
+        }
 
-    @Test
-    void getLedger_invalidSort_throws400() {
-        when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(partnerId));
-        when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId)));
+        @Test
+        void getLedger_invalidSort_throws400() {
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId)));
 
-        assertThatThrownBy(() -> service.getLedger(credentialId, 0, 20, "amount", null, null))
-                .isInstanceOf(BadRequestException.class)
-                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
-    }
+                assertThatThrownBy(() -> service.getLedger(credentialId, 0, 20, "amount", null, null))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
+        }
 
-    @Test
-    void getLedger_filtersAndPages() {
-        WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-        LedgerEntry entry = LedgerEntry.credit(
-                account.getId(),
-                new BigDecimal("30.00"),
-                LedgerReferenceType.DELIVERY_ASSIGNMENT,
-                UUID.randomUUID()
-        );
-        when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                .thenReturn(Optional.of(partnerId));
-        when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
-                .thenReturn(Optional.of(account));
-        when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(entry)));
+        @Test
+        void getLedger_filtersAndPages() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                LedgerEntry entry = LedgerEntry.credit(
+                                account.getId(),
+                                new BigDecimal("30.00"),
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT,
+                                UUID.randomUUID());
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
+                                .thenReturn(new PageImpl<>(List.of(entry)));
 
-        var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
+                var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
 
-        assertThat(page.items()).hasSize(1);
-        assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
-        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
-        assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
-                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
-    }
+                assertThat(page.items()).hasSize(1);
+                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+                verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
+                assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
+                                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        }
 }

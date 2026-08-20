@@ -7,6 +7,8 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+  flyway:
+    enabled: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -14,6 +16,13 @@ spring:
       timeout: 2s
   jpa:
     show-sql: true
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+        type:
+          preferred_enum_jdbc_type: VARCHAR
+    hibernate:
+      ddl-auto: update
 
 logging:
   level:

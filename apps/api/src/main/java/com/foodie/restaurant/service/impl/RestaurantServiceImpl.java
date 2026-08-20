@@ -101,8 +101,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             RestaurantCacheService restaurantCacheService,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
-            @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct
-    ) {
+            @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
         this.restaurantDocumentRepository = restaurantDocumentRepository;
@@ -127,8 +126,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             Double lng,
             int page,
             int size,
-            String sort
-    ) {
+            String sort) {
         validateCuisineFilter(cuisineType);
         BigDecimal minRatingDecimal = minRating != null ? BigDecimal.valueOf(minRating) : null;
         String cacheKey = RestaurantCacheService.geoBucket(lat, lng)
@@ -154,7 +152,8 @@ public class RestaurantServiceImpl implements RestaurantService {
                     emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, lat, lng, pageable);
         } else {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
-            result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, pageable);
+            result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType),
+                    minRatingDecimal, pageable);
         }
 
         List<RestaurantSummaryResponseDto> items = result.getContent().stream()
@@ -164,14 +163,12 @@ public class RestaurantServiceImpl implements RestaurantService {
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        );
+                result.getTotalPages());
         PageResult<RestaurantSummaryResponseDto> pageResult = new PageResult<>(items, pagination);
         try {
             restaurantCacheService.putListJson(
                     cacheKey,
-                    objectMapper.writeValueAsString(new CachedPage(items, pagination))
-            );
+                    objectMapper.writeValueAsString(new CachedPage(items, pagination)));
         } catch (JsonProcessingException ex) {
             log.warn("Failed to cache restaurant list", ex);
         }
@@ -207,8 +204,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
-                privileged
-        );
+                privileged);
         if (restaurant.getStatus() == RestaurantStatus.APPROVED && !privileged) {
             try {
                 restaurantCacheService.putDetailJson(restaurantId, objectMapper.writeValueAsString(dto));
@@ -225,19 +221,18 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (restaurantRepository.existsByOwnerUserCredentialId(ownerCredentialId)) {
             throw new ConflictException(
                     ErrorCode.RESTAURANT_PROFILE_ALREADY_EXISTS,
-                    "A restaurant profile already exists for this account."
-            );
+                    "A restaurant profile already exists for this account.");
         }
         RestaurantAddress address = restaurantAddressRepository.save(toAddress(request.address()));
-        // commissionPct from client is ignored — platform default only (API Contracts §3.3).
+        // commissionPct from client is ignored — platform default only (API Contracts
+        // §3.3).
         Restaurant restaurant = restaurantRepository.save(Restaurant.createPending(
                 ownerCredentialId,
                 request.name(),
                 request.description(),
                 toCuisineArray(request.cuisineTypes()),
                 address,
-                defaultCommissionPct
-        ));
+                defaultCommissionPct));
         eventPublisher.publishEvent(RestaurantCreatedEvent.of(
                 restaurant.getId(), ownerCredentialId, restaurant.getName()));
         restaurantCacheService.evictAllListCaches();
@@ -245,8 +240,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 restaurant,
                 null,
                 null,
-                true
-        );
+                true);
     }
 
     @Override
@@ -260,16 +254,14 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.address().city(),
                 request.address().pincode(),
                 request.address().latitude(),
-                request.address().longitude()
-        );
+                request.address().longitude());
         restaurant.syncGeoFromAddress();
         restaurantCacheService.evictRestaurant(restaurant.getId());
         return restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
-                true
-        );
+                true);
     }
 
     @Override
@@ -277,8 +269,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantDocumentResponseDto uploadDocument(
             UUID ownerCredentialId,
             RestaurantDocType docType,
-            MultipartFile file
-    ) {
+            MultipartFile file) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         byte[] bytes = readBytes(file, MAX_DOCUMENT_BYTES, "Document must be at most 10 MB.");
         DocumentMagicBytes.DetectedDocument detected = DocumentMagicBytes.detect(
@@ -296,8 +287,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantImageUploadResponseDto uploadImage(
             UUID ownerCredentialId,
             RestaurantImageType imageType,
-            MultipartFile file
-    ) {
+            MultipartFile file) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         byte[] bytes = readBytes(file, MAX_IMAGE_BYTES, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
@@ -346,19 +336,30 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Transactional
     public RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
-        if (restaurantLegalDetailRepository.existsByRestaurantId(restaurant.getId())) {
-            throw new ConflictException(ErrorCode.CONFLICT, "Legal details already exist for this restaurant.");
+        RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
+                .orElse(null);
+        if (detail != null) {
+            detail.update(
+                    request.gstin(),
+                    request.pan(),
+                    request.fssaiLicenseNumber(),
+                    request.legalName(),
+                    request.businessType(),
+                    request.contactEmail(),
+                    request.contactPhone()
+            );
+        } else {
+            detail = restaurantLegalDetailRepository.save(RestaurantLegalDetail.create(
+                    restaurant,
+                    request.gstin(),
+                    request.pan(),
+                    request.fssaiLicenseNumber(),
+                    request.legalName(),
+                    request.businessType(),
+                    request.contactEmail(),
+                    request.contactPhone()
+            ));
         }
-        RestaurantLegalDetail detail = restaurantLegalDetailRepository.save(RestaurantLegalDetail.create(
-                restaurant,
-                request.gstin(),
-                request.pan(),
-                request.fssaiLicenseNumber(),
-                request.legalName(),
-                request.businessType(),
-                request.contactEmail(),
-                request.contactPhone()
-        ));
         return restaurantMapper.toLegalDetailResponse(detail);
     }
 
@@ -366,27 +367,15 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Transactional(readOnly = true)
     public RestaurantLegalDetailResponseDto getLegalDetails(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
-        RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Legal details not found for this restaurant."));
-        return restaurantMapper.toLegalDetailResponse(detail);
+        return restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
+                .map(restaurantMapper::toLegalDetailResponse)
+                .orElse(null);
     }
 
     @Override
     @Transactional
     public RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
-        Restaurant restaurant = requireOwned(ownerCredentialId);
-        RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Legal details not found for this restaurant."));
-        detail.update(
-                request.gstin(),
-                request.pan(),
-                request.fssaiLicenseNumber(),
-                request.legalName(),
-                request.businessType(),
-                request.contactEmail(),
-                request.contactPhone()
-        );
-        return restaurantMapper.toLegalDetailResponse(detail);
+        return createLegalDetails(ownerCredentialId, request);
     }
 
     @Override
@@ -459,8 +448,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (restaurant.getStatus() != RestaurantStatus.PENDING) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Only PENDING restaurants can be approved."
-            );
+                    "Only PENDING restaurants can be approved.");
         }
         restaurant.approve();
         eventPublisher.publishEvent(RestaurantApprovedEvent.of(restaurantId, adminId));
@@ -469,8 +457,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
-                true
-        );
+                true);
     }
 
     @Override
@@ -481,8 +468,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (restaurant.getStatus() == RestaurantStatus.SUSPENDED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Restaurant is already suspended."
-            );
+                    "Restaurant is already suspended.");
         }
         restaurant.suspend();
         eventPublisher.publishEvent(RestaurantSuspendedEvent.of(restaurantId, adminId, reason));
@@ -492,8 +478,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
-                true
-        );
+                true);
     }
 
     @Override
@@ -535,8 +520,8 @@ public class RestaurantServiceImpl implements RestaurantService {
         String field = sort == null || sort.isBlank() ? "createdAt" : sort;
         return switch (field) {
             case "name" -> Sort.by(Sort.Direction.ASC, "name");
-            case "avgRating" -> Sort.by(Sort.Direction.DESC, "avg_rating");
-            case "createdAt" -> Sort.by(Sort.Direction.DESC, "created_at");
+            case "avgRating" -> Sort.by(Sort.Direction.DESC, "avgRating");
+            case "createdAt" -> Sort.by(Sort.Direction.DESC, "createdAt");
             default -> throw new BadRequestException(
                     ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: name, avgRating, createdAt.");
         };

@@ -23,11 +23,17 @@ public final class WalletMapper {
                 entry.getAmount(),
                 entry.getReferenceType(),
                 entry.getReferenceId(),
-                entry.getCreatedAt()
-        );
+                entry.getCreatedAt());
     }
 
     public static PayoutResponseDto toPayout(Payout payout) {
-        return new PayoutResponseDto(payout.getId(), payout.getStatus(), payout.getAmount());
+        return new PayoutResponseDto(
+                payout.getId(),
+                payout.getStatus(),
+                payout.getAmount(),
+                payout.getAccountHolderName(),
+                payout.getAccountNumber(),
+                payout.getIfscCode(),
+                payout.getBankName());
     }
 }

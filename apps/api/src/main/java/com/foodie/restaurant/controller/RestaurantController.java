@@ -165,7 +165,7 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.verifyUpiDetails(principal.userId())));
     }
 
-    @PostMapping("/me/legal-details")
+    @PostMapping(value = {"/me/legal-details", "/me/business-details"})
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Create business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> createLegalDetails(
@@ -176,7 +176,7 @@ public class RestaurantController {
                 .body(ApiResponse.success(restaurantService.createLegalDetails(principal.userId(), request)));
     }
 
-    @GetMapping("/me/legal-details")
+    @GetMapping(value = {"/me/legal-details", "/me/business-details"})
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Get business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> getLegalDetails(
@@ -185,7 +185,7 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getLegalDetails(principal.userId())));
     }
 
-    @PutMapping("/me/legal-details")
+    @PutMapping(value = {"/me/legal-details", "/me/business-details"})
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Update business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> updateLegalDetails(

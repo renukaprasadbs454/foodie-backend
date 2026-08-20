@@ -233,6 +233,42 @@ class RestaurantServiceImplTest {
         verify(restaurantRepository, never()).searchApproved(any(), any(), any(), any());
     }
 
+    @Test
+    void getLegalDetails_whenMissing_returnsNull() {
+        Restaurant restaurant = pendingRestaurant();
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.empty());
+
+        var response = service.getLegalDetails(ownerId);
+
+        assertThat(response).isNull();
+    }
+
+    @Test
+    void createLegalDetails_whenExisting_updatesAndReturnsDto() {
+        Restaurant restaurant = pendingRestaurant();
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        com.foodie.restaurant.entity.RestaurantLegalDetail existingDetail = com.foodie.restaurant.entity.RestaurantLegalDetail.create(
+                restaurant, "29ABCDE1234F1Z5", "ABCDE1234F", "12345678901234",
+                "Spice Legal", com.foodie.common.enums.RestaurantBusinessType.PRIVATE_LIMITED,
+                "contact@spice.com", "+919876543210"
+        );
+        setId(existingDetail, UUID.randomUUID());
+        when(restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.of(existingDetail));
+
+        var request = new com.foodie.restaurant.dto.request.RestaurantLegalDetailRequestDto(
+                "29ABCDE1234F1Z5", "ABCDE1234F", "12345678901234",
+                "Updated Spice Legal", com.foodie.common.enums.RestaurantBusinessType.PRIVATE_LIMITED,
+                "updated@spice.com", "+919876543210"
+        );
+
+        var response = service.createLegalDetails(ownerId, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.legalName()).isEqualTo("Updated Spice Legal");
+        assertThat(response.contactEmail()).isEqualTo("updated@spice.com");
+    }
+
     private Restaurant pendingRestaurant() {
         RestaurantAddress address = RestaurantAddress.create(
                 "L1", null, "Bengaluru", "560103",

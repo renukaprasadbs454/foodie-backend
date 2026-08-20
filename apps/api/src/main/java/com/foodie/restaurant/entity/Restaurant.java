@@ -29,7 +29,7 @@ public class Restaurant extends BaseEntity {
     private String description;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(name = "cuisine_types", columnDefinition = "text[]", nullable = false)
+    @Column(name = "cuisine_types", nullable = false)
     private String[] cuisineTypes;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
@@ -79,8 +79,7 @@ public class Restaurant extends BaseEntity {
             String description,
             String[] cuisineTypes,
             RestaurantAddress address,
-            BigDecimal commissionPct
-    ) {
+            BigDecimal commissionPct) {
         Restaurant restaurant = new Restaurant();
         restaurant.ownerUserCredentialId = ownerUserCredentialId;
         restaurant.name = name;
