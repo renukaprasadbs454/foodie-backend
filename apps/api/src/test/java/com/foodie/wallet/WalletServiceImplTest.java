@@ -1,5 +1,6 @@
 package com.foodie.wallet;
 
+import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -233,20 +234,43 @@ class WalletServiceImplTest {
                                 new BigDecimal("30.00"),
                                 LedgerReferenceType.DELIVERY_ASSIGNMENT,
                                 UUID.randomUUID());
+                Instant from = Instant.now().minusSeconds(3600);
+                Instant to = Instant.now();
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
-                when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
+                when(ledgerEntryRepository.findHistory(eq(account.getId()), eq(from), eq(to), any(Pageable.class)))
+                                .thenReturn(new PageImpl<>(List.of(entry)));
+
+                var page = service.getLedger(credentialId, 0, 20, "createdAt", from, to);
+
+                assertThat(page.items()).hasSize(1);
+                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+                verify(ledgerEntryRepository).findHistory(eq(account.getId()), eq(from), eq(to), pageableCaptor.capture());
+                assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
+                                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        }
+
+        @Test
+        void getLedger_withoutDateFilters_callsFindByWalletAccountId() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                LedgerEntry entry = LedgerEntry.credit(
+                                account.getId(),
+                                new BigDecimal("30.00"),
+                                LedgerReferenceType.DELIVERY_ASSIGNMENT,
+                                UUID.randomUUID());
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(ledgerEntryRepository.findByWalletAccountId(eq(account.getId()), any(Pageable.class)))
                                 .thenReturn(new PageImpl<>(List.of(entry)));
 
                 var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
 
                 assertThat(page.items()).hasSize(1);
-                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
-                ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-                verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
-                assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
-                                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+                verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), any(Pageable.class));
         }
 }
