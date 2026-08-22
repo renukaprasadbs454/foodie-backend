@@ -1,12 +1,23 @@
 package com.foodie.admin;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.admin.dto.request.OverrideOrderStatusRequestDto;
@@ -29,16 +40,6 @@ import com.foodie.order.service.OrderService;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.service.RestaurantService;
 import com.foodie.review.service.ReviewService;
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AdminOperationsServiceImplTest {
@@ -175,7 +176,7 @@ class AdminOperationsServiceImplTest {
         return new RestaurantDetailResponseDto(
                 UUID.randomUUID(), "R", null, List.of("INDIAN"), null,
                 BigDecimal.ONE, BigDecimal.ONE, null, null, BigDecimal.ZERO,
-                status, new BigDecimal("18.00"), UUID.randomUUID());
+                status,false,false, new BigDecimal("18.00"), UUID.randomUUID());
     }
 
     private static OrderResponseDto order(UUID orderId, OrderStatus status) {

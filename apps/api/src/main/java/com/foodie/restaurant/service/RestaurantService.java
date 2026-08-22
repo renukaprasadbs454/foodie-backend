@@ -1,5 +1,10 @@
 package com.foodie.restaurant.service;
 
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.web.multipart.MultipartFile;
+
 import com.foodie.common.dto.PaginationMeta;
 import com.foodie.common.enums.RestaurantDocType;
 import com.foodie.common.enums.RestaurantImageType;
@@ -9,9 +14,6 @@ import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
-import java.util.List;
-import java.util.UUID;
-import org.springframework.web.multipart.MultipartFile;
 
 public interface RestaurantService {
 
@@ -55,4 +57,10 @@ public interface RestaurantService {
 
     /** Document verification for Admin Ops — sets verified_at. */
     RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
+    
+    RestaurantDetailResponseDto getMyStatus(UUID ownerCredentialId);
+
+   RestaurantDetailResponseDto updateActiveStatus(UUID ownerCredentialId, boolean active);
+
+   RestaurantDetailResponseDto updateOnlineStatus(UUID ownerCredentialId, boolean online);
 }

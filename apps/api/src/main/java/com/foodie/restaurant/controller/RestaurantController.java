@@ -1,24 +1,8 @@
 package com.foodie.restaurant.controller;
 
-import com.foodie.common.dto.ApiResponse;
-import com.foodie.common.enums.RestaurantDocType;
-import com.foodie.common.enums.RestaurantImageType;
-import com.foodie.common.enums.UserType;
-import com.foodie.common.exception.BadRequestException;
-import com.foodie.common.exception.ErrorCode;
-import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
-import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
-import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
-import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
-import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
-import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
-import com.foodie.restaurant.service.RestaurantService;
-import com.foodie.security.principal.AuthPrincipal;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +18,27 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.foodie.common.dto.ApiResponse;
+import com.foodie.common.enums.RestaurantDocType;
+import com.foodie.common.enums.RestaurantImageType;
+import com.foodie.common.enums.UserType;
+import com.foodie.common.exception.BadRequestException;
+import com.foodie.common.exception.ErrorCode;
+import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantActiveStatusRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantOnlineStatusRequestDto;
+import com.foodie.restaurant.dto.request.UpdateRestaurantRequestDto;
+import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantImageUploadResponseDto;
+import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
+import com.foodie.restaurant.service.RestaurantService;
+import com.foodie.security.principal.AuthPrincipal;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/restaurants")
@@ -92,6 +97,34 @@ public class RestaurantController {
             @Valid @RequestBody UpdateRestaurantRequestDto request
     ) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateMyRestaurant(principal.userId(), request)));
+    }
+    @GetMapping("/me/status")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get my restaurant active/online status")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getMyStatus(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyStatus(principal.userId())));
+    }
+
+    @PutMapping("/me/status/active")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update my restaurant active/inactive status")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> updateActiveStatus(
+          @AuthenticationPrincipal AuthPrincipal principal,
+          @Valid @RequestBody UpdateRestaurantActiveStatusRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateActiveStatus(principal.userId(),request.active())));
+    }
+
+    @PutMapping("/me/status/online")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update my restaurant online/offline status")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> updateOnlineStatus(
+          @AuthenticationPrincipal AuthPrincipal principal,
+          @Valid @RequestBody UpdateRestaurantOnlineStatusRequestDto request
+    ) {
+         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateOnlineStatus(principal.userId(),request.online())));
     }
 
     @PostMapping(value = "/me/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -1,5 +1,26 @@
 package com.foodie.restaurant.service.impl;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.dto.PaginationMeta;
@@ -34,25 +55,6 @@ import com.foodie.restaurant.service.RestaurantService;
 import com.foodie.shared.event.RestaurantApprovedEvent;
 import com.foodie.shared.event.RestaurantCreatedEvent;
 import com.foodie.shared.event.RestaurantSuspendedEvent;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class RestaurantServiceImpl implements RestaurantService {
@@ -345,6 +347,78 @@ public class RestaurantServiceImpl implements RestaurantService {
         log.info("Restaurant document {} verified by admin {}", documentId, adminId);
         return restaurantMapper.toDocument(document);
     }
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantDetailResponseDto getMyStatus(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+
+        return restaurantMapper.toDetail(
+            restaurant,
+            signedOrNull(restaurant.getLogoImageKey()),
+            signedOrNull(restaurant.getCoverImageKey()),
+            true
+       );
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto updateActiveStatus(UUID ownerCredentialId, boolean active) {
+       Restaurant restaurant = requireOwned(ownerCredentialId);
+
+        if (active) {
+            if (restaurant.getStatus() != RestaurantStatus.APPROVED) {
+                throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Only APPROVED restaurants can be activated."
+            );
+        }
+        restaurant.activate();
+    } else {
+        restaurant.deactivate();
+    }
+
+    restaurantCacheService.evictRestaurant(restaurant.getId());
+
+    return restaurantMapper.toDetail(
+            restaurant,
+            signedOrNull(restaurant.getLogoImageKey()),
+            signedOrNull(restaurant.getCoverImageKey()),
+            true
+    );
+}
+
+@Override
+@Transactional
+public RestaurantDetailResponseDto updateOnlineStatus(UUID ownerCredentialId, boolean online) {
+    Restaurant restaurant = requireOwned(ownerCredentialId);
+
+    if (online) {
+        if (!restaurant.isActive()) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Restaurant must be ACTIVE before going ONLINE."
+            );
+        }
+
+        if (restaurant.getStatus() != RestaurantStatus.APPROVED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Only APPROVED restaurants can go ONLINE."
+            );
+        }
+    }
+
+    restaurant.setOnline(online);
+
+    restaurantCacheService.evictRestaurant(restaurant.getId());
+
+    return restaurantMapper.toDetail(
+            restaurant,
+            signedOrNull(restaurant.getLogoImageKey()),
+            signedOrNull(restaurant.getCoverImageKey()),
+            true
+    );
+}
 
     private Restaurant requireOwned(UUID ownerCredentialId) {
         return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)

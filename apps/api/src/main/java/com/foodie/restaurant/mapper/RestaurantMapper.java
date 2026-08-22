@@ -1,5 +1,10 @@
 package com.foodie.restaurant.mapper;
 
+import java.util.Arrays;
+import java.util.List;
+
+import org.springframework.stereotype.Component;
+
 import com.foodie.restaurant.dto.response.RestaurantAddressResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto;
@@ -7,9 +12,6 @@ import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.entity.RestaurantAddress;
 import com.foodie.restaurant.entity.RestaurantDocument;
-import java.util.Arrays;
-import java.util.List;
-import org.springframework.stereotype.Component;
 
 @Component
 public class RestaurantMapper {
@@ -52,6 +54,8 @@ public class RestaurantMapper {
                 coverUrl,
                 restaurant.getAvgRating(),
                 restaurant.getStatus().name(),
+                restaurant.isActive(),
+                restaurant.isOnline(),
                 privileged ? restaurant.getCommissionPct() : null,
                 privileged ? restaurant.getOwnerUserCredentialId() : null
         );

@@ -1,7 +1,14 @@
 package com.foodie.restaurant.entity;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.foodie.common.entity.BaseEntity;
 import com.foodie.common.enums.RestaurantStatus;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,10 +17,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
-import java.util.UUID;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "restaurant")
@@ -54,6 +57,12 @@ public class Restaurant extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private RestaurantStatus status;
+
+    @Column(name = "is_active", nullable = false)
+    private boolean active = false;
+
+    @Column(name = "is_online", nullable = false)
+    private boolean online = false;
 
     @Column(name = "commission_pct", nullable = false, precision = 4, scale = 2)
     private BigDecimal commissionPct;
@@ -100,6 +109,18 @@ public class Restaurant extends BaseEntity {
 
     public void suspend() {
         this.status = RestaurantStatus.SUSPENDED;
+    }
+    public void activate() {
+       this.active = true;
+    }
+
+   public void deactivate() {
+       this.active = false;
+       this.online = false;
+    }
+
+   public void setOnline(boolean online) {
+      this.online = online;
     }
 
     public void setLogoImageKey(String logoImageKey) {
@@ -159,6 +180,14 @@ public class Restaurant extends BaseEntity {
 
     public RestaurantStatus getStatus() {
         return status;
+    }
+
+    public boolean isActive() {
+       return active;
+   }
+
+   public boolean isOnline() {
+       return online; 
     }
 
     public BigDecimal getCommissionPct() {
