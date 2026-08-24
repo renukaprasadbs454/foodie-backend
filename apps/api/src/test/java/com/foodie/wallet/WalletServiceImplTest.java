@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+
 import com.foodie.common.enums.LedgerEntryType;
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
@@ -31,6 +32,7 @@ import com.foodie.wallet.repository.WalletAccountRepository;
 import com.foodie.wallet.service.PayoutIdempotencyStore;
 import com.foodie.wallet.service.impl.WalletServiceImpl;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -228,27 +230,60 @@ class WalletServiceImplTest {
         }
 
         @Test
-        void getLedger_filtersAndPages() {
-                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-                LedgerEntry entry = LedgerEntry.credit(
-                                account.getId(),
-                                new BigDecimal("30.00"),
-                                LedgerReferenceType.DELIVERY_ASSIGNMENT,
-                                UUID.randomUUID());
-                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
-                                .thenReturn(Optional.of(partnerId));
-                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
-                                .thenReturn(Optional.of(account));
-                when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
-                                .thenReturn(new PageImpl<>(List.of(entry)));
+void getLedger_filtersAndPages() {
+    WalletAccount account = WalletAccount.open(
+            OwnerType.DELIVERY_PARTNER,
+            partnerId);
 
-                var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
+    LedgerEntry entry = LedgerEntry.credit(
+            account.getId(),
+            new BigDecimal("30.00"),
+            LedgerReferenceType.DELIVERY_ASSIGNMENT,
+            UUID.randomUUID());
 
-                assertThat(page.items()).hasSize(1);
-                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
-                ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-                verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
-                assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
-                                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+    when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+            .thenReturn(Optional.of(partnerId));
+
+    when(walletAccountRepository.findByOwnerTypeAndOwnerId(
+            OwnerType.DELIVERY_PARTNER,
+            partnerId))
+            .thenReturn(Optional.of(account));
+
+    Instant from = Instant.parse("2026-01-01T00:00:00Z");
+    Instant to = Instant.parse("2026-12-31T23:59:59Z");
+
+    when(ledgerEntryRepository.findHistory(
+            eq(account.getId()),
+            eq(from),
+            eq(to),
+            any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(entry)));
+
+    var page = service.getLedger(
+            credentialId,
+            0,
+            20,
+            "createdAt",
+            from,
+            to);
+
+    assertThat(page.items()).hasSize(1);
+    assertThat(page.items().getFirst().entryType())
+            .isEqualTo(LedgerEntryType.CREDIT);
+
+    ArgumentCaptor<Pageable> pageableCaptor =
+            ArgumentCaptor.forClass(Pageable.class);
+
+    verify(ledgerEntryRepository).findHistory(
+            eq(account.getId()),
+            eq(from),
+            eq(to),
+            pageableCaptor.capture());
+
+    assertThat(pageableCaptor.getValue()
+            .getSort()
+            .getOrderFor("createdAt")
+            .getDirection())
+            .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
 }

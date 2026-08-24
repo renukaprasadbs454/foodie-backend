@@ -16,13 +16,13 @@ spring:
       timeout: 2s
   jpa:
     show-sql: true
+    hibernate:
+      ddl-auto: update
     properties:
       hibernate:
         globally_quoted_identifiers: true
         type:
           preferred_enum_jdbc_type: VARCHAR
-    hibernate:
-      ddl-auto: update
 
 logging:
   level:
