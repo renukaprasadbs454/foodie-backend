@@ -78,6 +78,20 @@ foodie:
     key-secret: ${RAZORPAY_KEY_SECRET:local-razorpay-key-secret}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
+  payout:
+    provider: ${PAYMENT_PROVIDER:RAZORPAY}
+    mode: ${PAYOUT_MODE:live}
+    razorpay:
+      account-number: ${RAZORPAYX_ACCOUNT_NUMBER:2323230041387700}
+      key-id: ${RAZORPAY_KEY_ID:rzp_test_TR9mlA2zOImhpF}
+      key-secret: ${RAZORPAY_KEY_SECRET:W6q8k3NDFXHcYrsaBjcgsWfN}
+      webhook-secret: ${RAZORPAY_PAYOUT_WEBHOOK_SECRET:local-razorpay-payout-webhook-secret}
+      api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
+    cashfree:
+      client-id: ${CASHFREE_CLIENT_ID:local_cashfree_client_id}
+      client-secret: ${CASHFREE_CLIENT_SECRET:local_cashfree_client_secret}
+      webhook-secret: ${CASHFREE_WEBHOOK_SECRET:local-cashfree-webhook-secret}
+      api-base-url: ${CASHFREE_API_BASE_URL:https://payout-api.cashfree.com/payout/v1.2}
   delivery:
     offer-radius-km: ${FOODIE_DELIVERY_OFFER_RADIUS_KM:5.0}
   fcm:

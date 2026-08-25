@@ -239,7 +239,7 @@ class WalletServiceImplTest {
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
-                when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
+                when(ledgerEntryRepository.findByWalletAccountId(eq(account.getId()), any(Pageable.class)))
                                 .thenReturn(new PageImpl<>(List.of(entry)));
 
                 var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
@@ -247,7 +247,7 @@ class WalletServiceImplTest {
                 assertThat(page.items()).hasSize(1);
                 assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
                 ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-                verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
+                verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), pageableCaptor.capture());
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
                                 .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
