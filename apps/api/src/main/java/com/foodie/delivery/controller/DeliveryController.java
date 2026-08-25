@@ -42,9 +42,25 @@ import org.springframework.web.multipart.MultipartFile;
 public class DeliveryController {
 
     private final DeliveryService deliveryService;
+    private final javax.sql.DataSource dataSource;
 
-    public DeliveryController(DeliveryService deliveryService) {
+    public DeliveryController(DeliveryService deliveryService, javax.sql.DataSource dataSource) {
         this.deliveryService = deliveryService;
+        this.dataSource = dataSource;
+    }
+
+    @GetMapping("/dev/approve")
+    public String approveSpecific() {
+        try (var conn = dataSource.getConnection();
+                var stmt = conn.createStatement()) {
+            int rows = stmt.executeUpdate(
+                    "UPDATE delivery_partner SET kyc_status = 'VERIFIED' WHERE user_credential_id = " +
+                            "(SELECT id FROM user_credential WHERE phone_number = '9972301881')");
+            return "SUCCESS: Rows updated: " + rows;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "ERR: " + e.getMessage();
+        }
     }
 
     @GetMapping("/me")

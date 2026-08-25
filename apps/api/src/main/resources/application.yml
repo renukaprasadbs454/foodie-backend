@@ -31,7 +31,7 @@ spring:
       max-request-size: 12MB
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8082}
   error:
     include-message: never
     include-stacktrace: never
@@ -72,9 +72,9 @@ foodie:
     default-delivery-fee: ${FOODIE_DEFAULT_DELIVERY_FEE:30.00}
     tax-rate: ${FOODIE_ORDER_TAX_RATE:0.05}
   razorpay:
-    mode: ${RAZORPAY_MODE:stub}
-    key-id: ${RAZORPAY_KEY_ID:rzp_test_local}
-    key-secret: ${RAZORPAY_KEY_SECRET:local-razorpay-key-secret}
+    mode: ${RAZORPAY_MODE:test}
+    key-id: ${RAZORPAY_KEY_ID:rzp_test_TR9mlA2zOImhpF}
+    key-secret: ${RAZORPAY_KEY_SECRET:W6q8k3NDFXHcYrsaBjcgsWfN}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
   delivery:
