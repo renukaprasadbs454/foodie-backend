@@ -27,6 +27,12 @@ public interface WalletService {
 
     PayoutResponseDto requestPayout(UUID userCredentialId, PayoutRequestDto request, String idempotencyKey);
 
+    PageResult<PayoutResponseDto> getPayoutHistory(UUID userCredentialId, int page, int size);
+
+    PayoutResponseDto getPayoutDetail(UUID userCredentialId, UUID payoutId);
+
+    PayoutResponseDto updatePayoutStatus(UUID payoutId, com.foodie.common.enums.PayoutStatus status, String bankRef, String failureReason);
+
     WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId);
 
     PageResult<LedgerEntryResponseDto> getRestaurantLedger(

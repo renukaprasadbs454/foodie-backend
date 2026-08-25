@@ -78,11 +78,25 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public WalletBalanceResponseDto getBalance(UUID userCredentialId) {
         UUID partnerId = requirePartnerId(userCredentialId);
         WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
-        return WalletMapper.toBalance(account);
+        BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
+                account.getId(), OPEN_PAYOUT_STATUSES);
+        BigDecimal available = account.getBalance().subtract(openPayouts);
+        if (available.compareTo(BigDecimal.ZERO) < 0) {
+            available = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal totalEarnings = ledgerEntryRepository.sumCreditAmountByWalletAccountId(account.getId());
+        BigDecimal totalPayouts = payoutRepository.sumCompletedAmountByWalletAccountId(account.getId());
+
+        return WalletMapper.toBalance(
+                account,
+                available.setScale(2, RoundingMode.HALF_UP),
+                openPayouts.setScale(2, RoundingMode.HALF_UP),
+                totalEarnings.setScale(2, RoundingMode.HALF_UP),
+                totalPayouts.setScale(2, RoundingMode.HALF_UP));
     }
 
     @Override
@@ -155,6 +169,78 @@ public class WalletServiceImpl implements WalletService {
             payoutIdempotencyStore.store(idempotencyKey.trim(), response);
         }
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<PayoutResponseDto> getPayoutHistory(UUID userCredentialId, int page, int size) {
+        UUID partnerId = requirePartnerId(userCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Payout> result = payoutRepository.findByWalletAccountId(account.getId(), pageable);
+        List<PayoutResponseDto> items = result.getContent().stream()
+                .map(WalletMapper::toPayout)
+                .toList();
+        PaginationMeta meta = new PaginationMeta(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages());
+        return new PageResult<>(items, meta);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PayoutResponseDto getPayoutDetail(UUID userCredentialId, UUID payoutId) {
+        UUID partnerId = requirePartnerId(userCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
+        Payout payout = payoutRepository.findByIdAndWalletAccountId(payoutId, account.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payout request not found."));
+        return WalletMapper.toPayout(payout);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto updatePayoutStatus(
+            UUID payoutId,
+            PayoutStatus newStatus,
+            String bankRef,
+            String failureReason) {
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found with id: " + payoutId));
+
+        if (payout.getStatus() == PayoutStatus.COMPLETED || payout.getStatus() == PayoutStatus.FAILED) {
+            log.info("Payout {} already in terminal status {}", payoutId, payout.getStatus());
+            return WalletMapper.toPayout(payout);
+        }
+
+        WalletAccount account = walletAccountRepository.findById(payout.getWalletAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("Associated wallet account not found."));
+
+        // Pessimistic write lock on wallet account to prevent concurrent mutations
+        walletAccountRepository.findByOwnerTypeAndOwnerIdForPessimisticUpdate(
+                account.getOwnerType(), account.getOwnerId());
+
+        if (newStatus == PayoutStatus.COMPLETED) {
+            payout.complete(bankRef);
+            payout = payoutRepository.save(payout);
+
+            debit(
+                    account.getOwnerType(),
+                    account.getOwnerId(),
+                    payout.getAmount(),
+                    LedgerReferenceType.PAYOUT,
+                    payout.getId());
+
+        } else if (newStatus == PayoutStatus.FAILED) {
+            payout.fail(bankRef);
+            payout = payoutRepository.save(payout);
+        } else if (newStatus == PayoutStatus.PROCESSING) {
+            payout.markProcessing();
+            payout = payoutRepository.save(payout);
+        }
+
+        return WalletMapper.toPayout(payout);
     }
 
     @Override

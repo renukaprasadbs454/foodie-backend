@@ -64,6 +64,25 @@ public class Payout extends BaseEntity {
         return payout;
     }
 
+    public void complete(String bankRef) {
+        this.status = PayoutStatus.COMPLETED;
+        if (bankRef != null && !bankRef.isBlank()) {
+            this.bankRef = bankRef.trim();
+        }
+        this.completedAt = Instant.now();
+    }
+
+    public void fail(String bankRef) {
+        this.status = PayoutStatus.FAILED;
+        if (bankRef != null && !bankRef.isBlank()) {
+            this.bankRef = bankRef.trim();
+        }
+    }
+
+    public void markProcessing() {
+        this.status = PayoutStatus.PROCESSING;
+    }
+
     public UUID getWalletAccountId() {
         return walletAccountId;
     }

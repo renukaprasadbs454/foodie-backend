@@ -25,15 +25,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.foodie.wallet.dto.request.PayoutReconciliationRequestDto;
+import com.foodie.wallet.dto.request.PayoutStatusUpdateRequestDto;
+import com.foodie.wallet.dto.response.PayoutReconciliationResultDto;
+import com.foodie.wallet.service.PayoutReconciliationService;
+import java.util.UUID;
+import org.springframework.web.bind.annotation.PathVariable;
+
 @RestController
 @RequestMapping("/api/v1/wallet")
 @Tag(name = "Wallet")
 public class WalletController {
 
     private final WalletService walletService;
+    private final PayoutReconciliationService payoutReconciliationService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(WalletService walletService, PayoutReconciliationService payoutReconciliationService) {
         this.walletService = walletService;
+        this.payoutReconciliationService = payoutReconciliationService;
     }
 
     @GetMapping("/balance")
@@ -65,7 +74,7 @@ public class WalletController {
 
     @PostMapping("/payout-requests")
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
-    @Operation(summary = "Request a payout (REQUESTED only — bank settlement out of Module 9 scope)")
+    @Operation(summary = "Request a payout")
     public ResponseEntity<ApiResponse<PayoutResponseDto>> requestPayout(
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody PayoutRequestDto request,
@@ -74,5 +83,47 @@ public class WalletController {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.success(
                         walletService.requestPayout(principal.userId(), request, idempotencyKey)));
+    }
+
+    @GetMapping("/payouts")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Get my payout request history")
+    public ResponseEntity<ApiResponse<List<PayoutResponseDto>>> getPayoutHistory(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        var result = walletService.getPayoutHistory(principal.userId(), page, size);
+        return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
+    }
+
+    @GetMapping("/payouts/{id}")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Get payout request details")
+    public ResponseEntity<ApiResponse<PayoutResponseDto>> getPayoutDetail(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getPayoutDetail(principal.userId(), id)));
+    }
+
+    @PostMapping("/payouts/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM')")
+    @Operation(summary = "Handle provider status update for a payout (COMPLETED or FAILED)")
+    public ResponseEntity<ApiResponse<PayoutResponseDto>> updatePayoutStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody PayoutStatusUpdateRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                walletService.updatePayoutStatus(id, request.status(), request.bankRef(), request.failureReason())));
+    }
+
+    @PostMapping("/payouts/reconcile")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM')")
+    @Operation(summary = "Reconcile provider settlement records against internal payouts")
+    public ResponseEntity<ApiResponse<PayoutReconciliationResultDto>> reconcilePayouts(
+            @Valid @RequestBody PayoutReconciliationRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(payoutReconciliationService.reconcile(request.records())));
     }
 }

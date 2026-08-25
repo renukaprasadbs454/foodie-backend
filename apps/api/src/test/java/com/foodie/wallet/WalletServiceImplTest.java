@@ -32,6 +32,7 @@ import com.foodie.wallet.repository.WalletAccountRepository;
 import com.foodie.wallet.service.PayoutIdempotencyStore;
 import com.foodie.wallet.service.impl.WalletServiceImpl;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -82,10 +83,20 @@ class WalletServiceImplTest {
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
+                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
+                                .thenReturn(new BigDecimal("20.00"));
+                when(ledgerEntryRepository.sumCreditAmountByWalletAccountId(account.getId()))
+                                .thenReturn(new BigDecimal("200.00"));
+                when(payoutRepository.sumCompletedAmountByWalletAccountId(account.getId()))
+                                .thenReturn(new BigDecimal("79.50"));
 
                 WalletBalanceResponseDto balance = service.getBalance(credentialId);
 
                 assertThat(balance.balance()).isEqualByComparingTo("120.50");
+                assertThat(balance.availableBalance()).isEqualByComparingTo("100.50");
+                assertThat(balance.pendingBalance()).isEqualByComparingTo("20.00");
+                assertThat(balance.totalEarnings()).isEqualByComparingTo("200.00");
+                assertThat(balance.totalPayouts()).isEqualByComparingTo("79.50");
                 assertThat(balance.walletAccountId()).isEqualTo(account.getId());
         }
 
@@ -233,20 +244,103 @@ class WalletServiceImplTest {
                                 new BigDecimal("30.00"),
                                 LedgerReferenceType.DELIVERY_ASSIGNMENT,
                                 UUID.randomUUID());
+                Instant from = Instant.now().minusSeconds(3600);
+                Instant to = Instant.now();
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
-                when(ledgerEntryRepository.findHistory(eq(account.getId()), any(), any(), any(Pageable.class)))
+                when(ledgerEntryRepository.findHistory(eq(account.getId()), eq(from), eq(to), any(Pageable.class)))
                                 .thenReturn(new PageImpl<>(List.of(entry)));
 
-                var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
+                var page = service.getLedger(credentialId, 0, 20, "createdAt", from, to);
 
                 assertThat(page.items()).hasSize(1);
                 assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
                 ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-                verify(ledgerEntryRepository).findHistory(eq(account.getId()), any(), any(), pageableCaptor.capture());
+                verify(ledgerEntryRepository).findHistory(eq(account.getId()), eq(from), eq(to), pageableCaptor.capture());
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
                                 .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        }
+
+        @Test
+        void getPayoutHistory_returnsPaginatedPayouts() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                Payout payout = Payout.request(account.getId(), new BigDecimal("50.00"));
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findByWalletAccountId(eq(account.getId()), any(Pageable.class)))
+                                .thenReturn(new PageImpl<>(List.of(payout)));
+
+                var result = service.getPayoutHistory(credentialId, 0, 20);
+
+                assertThat(result.items()).hasSize(1);
+                assertThat(result.items().getFirst().amount()).isEqualByComparingTo("50.00");
+        }
+
+        @Test
+        void getPayoutDetail_returnsPayoutDetails() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                Payout payout = Payout.request(account.getId(), new BigDecimal("75.00"));
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findByIdAndWalletAccountId(payout.getId(), account.getId()))
+                                .thenReturn(Optional.of(payout));
+
+                PayoutResponseDto response = service.getPayoutDetail(credentialId, payout.getId());
+
+                assertThat(response.payoutId()).isEqualTo(payout.getId());
+                assertThat(response.amount()).isEqualByComparingTo("75.00");
+        }
+
+        @Test
+        void updatePayoutStatus_completed_finalizesDebit() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                account.applyCredit(new BigDecimal("100.00"));
+                Payout payout = Payout.request(account.getId(), new BigDecimal("40.00"));
+
+                when(deliveryPartnerLookup.existsById(partnerId)).thenReturn(true);
+                when(payoutRepository.findById(payout.getId())).thenReturn(Optional.of(payout));
+                when(walletAccountRepository.findById(account.getId())).thenReturn(Optional.of(account));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForPessimisticUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                PayoutResponseDto response = service.updatePayoutStatus(
+                                payout.getId(), PayoutStatus.COMPLETED, "BANK12345", null);
+
+                assertThat(response.status()).isEqualTo(PayoutStatus.COMPLETED);
+                assertThat(account.getBalance()).isEqualByComparingTo("60.00");
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+        }
+
+        @Test
+        void updatePayoutStatus_failed_releasesReservedAmountWithoutDebit() {
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                account.applyCredit(new BigDecimal("100.00"));
+                Payout payout = Payout.request(account.getId(), new BigDecimal("40.00"));
+
+                when(payoutRepository.findById(payout.getId())).thenReturn(Optional.of(payout));
+                when(walletAccountRepository.findById(account.getId())).thenReturn(Optional.of(account));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForPessimisticUpdate(
+                                OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                PayoutResponseDto response = service.updatePayoutStatus(
+                                payout.getId(), PayoutStatus.FAILED, null, "Account invalid");
+
+                assertThat(response.status()).isEqualTo(PayoutStatus.FAILED);
+                assertThat(account.getBalance()).isEqualByComparingTo("100.00");
+                verify(ledgerEntryRepository, never()).save(any());
         }
 }
