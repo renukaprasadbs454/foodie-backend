@@ -21,4 +21,10 @@ public interface PayoutRepository extends JpaRepository<Payout, UUID> {
             @Param("walletAccountId") UUID walletAccountId,
             @Param("statuses") Collection<PayoutStatus> statuses
     );
+
+    java.util.Optional<Payout> findByProviderPayoutId(String providerPayoutId);
+
+    java.util.Optional<Payout> findByProviderAndProviderPayoutId(String provider, String providerPayoutId);
+
+    java.util.Optional<Payout> findByProviderReferenceId(String providerReferenceId);
 }

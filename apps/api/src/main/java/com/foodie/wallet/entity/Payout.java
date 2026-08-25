@@ -44,6 +44,24 @@ public class Payout extends BaseEntity {
     @Column(name = "bank_name")
     private String bankName;
 
+    @Column(name = "provider", length = 30)
+    private String provider;
+
+    @Column(name = "provider_payout_id", length = 100)
+    private String providerPayoutId;
+
+    @Column(name = "provider_reference_id", length = 100)
+    private String providerReferenceId;
+
+    @Column(name = "provider_status", length = 50)
+    private String providerStatus;
+
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
+
+    @Column(name = "processed_at")
+    private Instant processedAt;
+
     protected Payout() {
     }
 
@@ -62,6 +80,40 @@ public class Payout extends BaseEntity {
         payout.ifscCode = ifscCode;
         payout.bankName = bankName;
         return payout;
+    }
+
+    public void markProcessing(String provider, String providerPayoutId, String providerReferenceId, String providerStatus) {
+        this.status = PayoutStatus.PROCESSING;
+        this.provider = provider;
+        if (providerPayoutId != null && !providerPayoutId.isBlank()) {
+            this.providerPayoutId = providerPayoutId;
+        }
+        if (providerReferenceId != null && !providerReferenceId.isBlank()) {
+            this.providerReferenceId = providerReferenceId;
+            this.bankRef = providerReferenceId;
+        }
+        this.providerStatus = providerStatus;
+        this.processedAt = Instant.now();
+    }
+
+    public void markCompleted(String providerReferenceId, String providerStatus) {
+        this.status = PayoutStatus.COMPLETED;
+        if (providerReferenceId != null && !providerReferenceId.isBlank()) {
+            this.providerReferenceId = providerReferenceId;
+            this.bankRef = providerReferenceId;
+        }
+        if (providerStatus != null && !providerStatus.isBlank()) {
+            this.providerStatus = providerStatus;
+        }
+        this.completedAt = Instant.now();
+    }
+
+    public void markFailed(String failureReason, String providerStatus) {
+        this.status = PayoutStatus.FAILED;
+        this.failureReason = failureReason;
+        if (providerStatus != null && !providerStatus.isBlank()) {
+            this.providerStatus = providerStatus;
+        }
     }
 
     public UUID getWalletAccountId() {
@@ -98,5 +150,29 @@ public class Payout extends BaseEntity {
 
     public String getBankName() {
         return bankName;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public String getProviderPayoutId() {
+        return providerPayoutId;
+    }
+
+    public String getProviderReferenceId() {
+        return providerReferenceId;
+    }
+
+    public String getProviderStatus() {
+        return providerStatus;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public Instant getProcessedAt() {
+        return processedAt;
     }
 }

@@ -271,6 +271,11 @@ class WalletServiceImplTest {
                 var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
 
                 assertThat(page.items()).hasSize(1);
-                verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), any(Pageable.class));
+                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+                verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), pageableCaptor.capture());
+                assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
+                                .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        }
         }
 }

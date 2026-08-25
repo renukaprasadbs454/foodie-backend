@@ -53,6 +53,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/api/v1/auth/**",
                                 "/api/v1/payments/webhook/razorpay",
+                                "/api/v1/payouts/webhook/**",
                                 "/api/v1/storage/**",
                                 "/api/v1/debug/**")
                         .permitAll()
