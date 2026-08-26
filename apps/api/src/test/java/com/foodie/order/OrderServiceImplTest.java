@@ -42,6 +42,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceImplTest {
@@ -59,7 +60,7 @@ class OrderServiceImplTest {
     @Mock private IdempotencyService idempotencyService;
     @Mock private OrderNumberGenerator orderNumberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    @Mock private JdbcTemplate jdbcTemplate;
 
     private OrderServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();

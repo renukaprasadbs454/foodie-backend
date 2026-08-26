@@ -46,6 +46,16 @@ public class LocalObjectStorageClient implements ObjectStorageClient {
     }
 
     @Override
+    public byte[] getObject(String key) {
+        Path target = resolve(key);
+        try {
+            return Files.readAllBytes(target);
+        } catch (IOException ex) {
+            return new byte[0];
+        }
+    }
+
+    @Override
     public String createSignedGetUrl(String key, Duration ttl) {
         // Omitting expires= param natively prevents React Native Image cache busting on
         // re-renders

@@ -65,6 +65,8 @@ class PaymentServiceImplTest {
         RazorpayProperties props = new RazorpayProperties();
         props.setKeyId("rzp_test_key");
         props.setWebhookSecret("whsec_test");
+props.setMode("live");
+
         signatureVerifier = new RazorpaySignatureVerifier(props);
         service = new PaymentServiceImpl(
                 paymentRepository,

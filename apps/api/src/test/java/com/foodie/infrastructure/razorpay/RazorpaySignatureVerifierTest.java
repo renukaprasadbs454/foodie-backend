@@ -12,6 +12,7 @@ class RazorpaySignatureVerifierTest {
     @BeforeEach
     void setUp() {
         RazorpayProperties props = new RazorpayProperties();
+        props.setMode("live");
         props.setWebhookSecret("whsec_test");
         verifier = new RazorpaySignatureVerifier(props);
     }

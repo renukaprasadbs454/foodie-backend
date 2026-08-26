@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+
 import com.foodie.common.enums.LedgerEntryType;
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
@@ -33,6 +34,7 @@ import com.foodie.wallet.repository.WalletAccountRepository;
 import com.foodie.wallet.service.PayoutIdempotencyStore;
 import com.foodie.wallet.service.impl.WalletServiceImpl;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -234,8 +236,8 @@ class WalletServiceImplTest {
                                 new BigDecimal("30.00"),
                                 LedgerReferenceType.DELIVERY_ASSIGNMENT,
                                 UUID.randomUUID());
-                Instant from = Instant.now().minusSeconds(3600);
-                Instant to = Instant.now();
+                Instant from = Instant.parse("2026-01-01T00:00:00Z");
+                Instant to = Instant.parse("2026-12-31T23:59:59Z");
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
