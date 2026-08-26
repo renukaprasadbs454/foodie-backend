@@ -30,16 +30,13 @@ Modular monolith backend for the Foodie food-delivery platform.
 
 **Module 10 — Notification** tagged `v0.11.0-notification` (frozen).
 
-**Module 11 — Review** implemented (pending review):
+**Module 11 — Review** implemented (pending review).
 
-- Submit review for DELIVERED orders only; one review per order (`POST /api/v1/orders/{id}/review`)
-- Public restaurant history (`GET /api/v1/restaurants/{id}/reviews`) — no customer identity
-- Restaurant + optional delivery-partner ratings on the same `review` row
-- Rating aggregation: `ReviewSubmittedEvent` → Restaurant recalculates `avg_rating` via shared contracts
-- Moderation flags: Redis-backed (no Phase3 DB columns); public list hides flagged
-- Flyway: `V12__review.sql`
+**Module 12 — Coupon** implemented.
 
-**Not yet implemented:** Coupon, Admin, Analytics.
+**Module 13 — Admin** implemented.
+
+**Module 14 — Analytics** implemented.
 
 ## Prerequisites
 

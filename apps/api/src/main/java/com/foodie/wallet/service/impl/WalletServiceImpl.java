@@ -8,6 +8,8 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
+import com.foodie.restaurant.entity.Restaurant;
+import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
@@ -47,13 +49,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class WalletServiceImpl implements WalletService {
 
     private static final Logger log = LoggerFactory.getLogger(WalletServiceImpl.class);
-    private static final EnumSet<PayoutStatus> OPEN_PAYOUT_STATUSES =
-            EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING);
+    private static final EnumSet<PayoutStatus> OPEN_PAYOUT_STATUSES = EnumSet.of(PayoutStatus.REQUESTED,
+            PayoutStatus.PROCESSING);
 
     private final WalletAccountRepository walletAccountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final PayoutRepository payoutRepository;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
+    private final RestaurantRepository restaurantRepository;
     private final PayoutIdempotencyStore payoutIdempotencyStore;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -62,13 +65,14 @@ public class WalletServiceImpl implements WalletService {
             LedgerEntryRepository ledgerEntryRepository,
             PayoutRepository payoutRepository,
             DeliveryPartnerLookup deliveryPartnerLookup,
+            RestaurantRepository restaurantRepository,
             PayoutIdempotencyStore payoutIdempotencyStore,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher) {
         this.walletAccountRepository = walletAccountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.payoutRepository = payoutRepository;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
+        this.restaurantRepository = restaurantRepository;
         this.payoutIdempotencyStore = payoutIdempotencyStore;
         this.eventPublisher = eventPublisher;
     }
@@ -89,13 +93,19 @@ public class WalletServiceImpl implements WalletService {
             int size,
             String sort,
             Instant createdAtFrom,
-            Instant createdAtTo
-    ) {
+            Instant createdAtTo) {
         UUID partnerId = requirePartnerId(userCredentialId);
         WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
-        Page<LedgerEntry> result = ledgerEntryRepository.findHistory(
-                account.getId(), createdAtFrom, createdAtTo, pageable);
+        Page<LedgerEntry> result;
+
+        if (createdAtFrom == null && createdAtTo == null) {
+            result = ledgerEntryRepository.findByWalletAccountId(account.getId(), pageable);
+        } else {
+            result = ledgerEntryRepository.findHistory(
+                    account.getId(), createdAtFrom, createdAtTo, pageable);
+        }
+
         List<LedgerEntryResponseDto> items = result.getContent().stream()
                 .map(WalletMapper::toLedger)
                 .toList();
@@ -103,8 +113,7 @@ public class WalletServiceImpl implements WalletService {
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        );
+                result.getTotalPages());
         return new PageResult<>(items, meta);
     }
 
@@ -113,8 +122,7 @@ public class WalletServiceImpl implements WalletService {
     public PayoutResponseDto requestPayout(
             UUID userCredentialId,
             PayoutRequestDto request,
-            String idempotencyKey
-    ) {
+            String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var cached = payoutIdempotencyStore.find(idempotencyKey.trim());
             if (cached.isPresent()) {
@@ -132,12 +140,13 @@ public class WalletServiceImpl implements WalletService {
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.INSUFFICIENT_BALANCE,
-                    "Requested payout exceeds available wallet balance."
-            );
+                    "Requested payout exceeds available wallet balance.");
         }
 
-        // REQUESTED does not debit the ledger — bank settlement (out of Module 9 scope) will.
-        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount));
+        // REQUESTED does not debit the ledger — bank settlement (out of Module 9 scope)
+        // will.
+        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount, request.accountHolderName(),
+                request.accountNumber(), request.ifscCode(), request.bankName()));
         PayoutResponseDto response = WalletMapper.toPayout(payout);
         eventPublisher.publishEvent(PayoutRequestedEvent.of(
                 payout.getId(), account.getId(), partnerId, amount));
@@ -155,8 +164,7 @@ public class WalletServiceImpl implements WalletService {
             UUID ownerId,
             BigDecimal amount,
             LedgerReferenceType referenceType,
-            UUID referenceId
-    ) {
+            UUID referenceId) {
         validateAmount(amount);
         validateOwner(ownerType, ownerId);
 
@@ -187,8 +195,7 @@ public class WalletServiceImpl implements WalletService {
                 scaled,
                 referenceType,
                 referenceId,
-                entry.getId()
-        ));
+                entry.getId()));
         return WalletMapper.toLedger(entry);
     }
 
@@ -199,8 +206,7 @@ public class WalletServiceImpl implements WalletService {
             UUID ownerId,
             BigDecimal amount,
             LedgerReferenceType referenceType,
-            UUID referenceId
-    ) {
+            UUID referenceId) {
         validateAmount(amount);
         validateOwner(ownerType, ownerId);
 
@@ -215,8 +221,7 @@ public class WalletServiceImpl implements WalletService {
         if (account.getBalance().compareTo(scaled) < 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.INSUFFICIENT_BALANCE,
-                    "Wallet balance is insufficient for debit."
-            );
+                    "Wallet balance is insufficient for debit.");
         }
 
         LedgerEntry entry = ledgerEntryRepository.save(
@@ -231,9 +236,82 @@ public class WalletServiceImpl implements WalletService {
                 scaled,
                 referenceType,
                 referenceId,
-                entry.getId()
-        ));
+                entry.getId()));
         return WalletMapper.toLedger(entry);
+    }
+
+    @Override
+    @Transactional
+    public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        return WalletMapper.toBalance(account);
+    }
+
+    @Override
+    @Transactional
+    public PageResult<LedgerEntryResponseDto> getRestaurantLedger(
+            UUID ownerCredentialId,
+            int page,
+            int size,
+            String sort,
+            Instant createdAtFrom,
+            Instant createdAtTo
+    ) {
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
+        Page<LedgerEntry> result = ledgerEntryRepository.findHistory(
+                account.getId(), createdAtFrom, createdAtTo, pageable);
+        List<LedgerEntryResponseDto> items = result.getContent().stream()
+                .map(WalletMapper::toLedger)
+                .toList();
+        PaginationMeta meta = new PaginationMeta(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages()
+        );
+        return new PageResult<>(items, meta);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto requestRestaurantPayout(
+            UUID ownerCredentialId,
+            PayoutRequestDto request,
+            String idempotencyKey
+    ) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var cached = payoutIdempotencyStore.find(idempotencyKey.trim());
+            if (cached.isPresent()) {
+                return cached.get();
+            }
+        }
+
+        UUID restaurantId = requireRestaurantId(ownerCredentialId);
+        WalletAccount account = getOrCreateForUpdate(OwnerType.RESTAURANT, restaurantId);
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
+                account.getId(), OPEN_PAYOUT_STATUSES);
+        BigDecimal available = account.getBalance().subtract(openPayouts);
+        if (amount.compareTo(available) > 0) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.INSUFFICIENT_BALANCE,
+                    "Requested payout exceeds available wallet balance."
+            );
+        }
+
+        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount));
+        PayoutResponseDto response = WalletMapper.toPayout(payout);
+        eventPublisher.publishEvent(PayoutRequestedEvent.of(
+                payout.getId(), account.getId(), restaurantId, amount));
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            payoutIdempotencyStore.store(idempotencyKey.trim(), response);
+        }
+        return response;
     }
 
     private UUID requirePartnerId(UUID userCredentialId) {
@@ -241,9 +319,18 @@ public class WalletServiceImpl implements WalletService {
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner profile not found."));
     }
 
+    private UUID requireRestaurantId(UUID ownerCredentialId) {
+        return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
+                .map(Restaurant::getId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
+    }
+
     private void validateOwner(OwnerType ownerType, UUID ownerId) {
         if (ownerType == OwnerType.DELIVERY_PARTNER && !deliveryPartnerLookup.existsById(ownerId)) {
             throw new ResourceNotFoundException("Delivery partner not found for wallet credit.");
+        }
+        if (ownerType == OwnerType.RESTAURANT && !restaurantRepository.existsById(ownerId)) {
+            throw new ResourceNotFoundException("Restaurant not found for wallet credit.");
         }
         if (ownerType == OwnerType.PLATFORM && !WalletConstants.PLATFORM_OWNER_ID.equals(ownerId)) {
             throw new BadRequestException(

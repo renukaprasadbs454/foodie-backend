@@ -71,8 +71,7 @@ public class AuthServiceImpl implements AuthService {
             GoogleTokenVerifier googleTokenVerifier,
             JwtTokenProvider jwtTokenProvider,
             ApplicationEventPublisher eventPublisher,
-            AdminIdentityQueryPort adminIdentityQueryPort
-    ) {
+            AdminIdentityQueryPort adminIdentityQueryPort) {
         this.userCredentialRepository = userCredentialRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.redisTemplate = redisTemplate;
@@ -124,7 +123,8 @@ public class AuthServiceImpl implements AuthService {
 
         UserType mappedUserType = mapOtpUserType(request.userType());
 
-        // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays exclusive.
+        // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays
+        // exclusive.
         boolean phoneUsedByAdmin = userCredentialRepository
                 .findAllByPhoneNumber(normalizedPhone)
                 .stream()
@@ -132,8 +132,7 @@ public class AuthServiceImpl implements AuthService {
         if (phoneUsedByAdmin && mappedUserType != UserType.ADMIN) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED,
-                    "Phone number is reserved for an admin account."
-            );
+                    "Phone number is reserved for an admin account.");
         }
 
         Optional<UserCredential> existing = userCredentialRepository.findByPhoneNumberAndUserType(
@@ -154,8 +153,7 @@ public class AuthServiceImpl implements AuthService {
                     credential.getId(),
                     credential.getUserType(),
                     credential.getPhoneNumber(),
-                    credential.getEmail()
-            ));
+                    credential.getEmail()));
         } else {
             credential = existing.get();
             credential.markPhoneVerified();
@@ -178,14 +176,12 @@ public class AuthServiceImpl implements AuthService {
         UserCredential credential;
         if (isNewUser) {
             credential = userCredentialRepository.save(
-                    UserCredential.googleSignup(identity.googleId(), identity.email())
-            );
+                    UserCredential.googleSignup(identity.googleId(), identity.email()));
             eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
                     credential.getId(),
                     credential.getUserType(),
                     credential.getPhoneNumber(),
-                    credential.getEmail()
-            ));
+                    credential.getEmail()));
         } else {
             credential = existing.get();
         }
@@ -270,8 +266,8 @@ public class AuthServiceImpl implements AuthService {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         rateLimiter.check("ratelimit:admin-login:" + email, ADMIN_LOGIN_LIMIT, ADMIN_LOGIN_WINDOW);
 
-        Optional<UserCredential> found =
-                userCredentialRepository.findByEmailIgnoreCaseAndUserType(email, UserType.ADMIN);
+        Optional<UserCredential> found = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email,
+                UserType.ADMIN);
 
         UserCredential credential = found.orElse(null);
         String passwordHash = credential == null ? null : credential.getPasswordHash();
@@ -279,6 +275,11 @@ public class AuthServiceImpl implements AuthService {
                 && !passwordHash.isBlank()
                 && passwordEncoder.matches(request.password(), passwordHash);
 
+<<<<<<< HEAD
+=======
+        // Opaque failure for unknown email, missing password, or mismatch (no user
+        // enumeration).
+>>>>>>> origin/main
         if (credential == null || !passwordOk) {
             throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Invalid email or password.");
         }
@@ -289,8 +290,7 @@ public class AuthServiceImpl implements AuthService {
                 .findRoleNameByUserCredentialId(credential.getId())
                 .orElseThrow(() -> new ForbiddenException(
                         ErrorCode.FORBIDDEN,
-                        "Admin profile is not provisioned."
-                ));
+                        "Admin profile is not provisioned."));
 
         return issueTokenPair(credential, request.deviceInfo(), false, role);
     }
@@ -307,7 +307,8 @@ public class AuthServiceImpl implements AuthService {
         if (existing.isRevoked()) {
             log.warn("Refresh token reuse detected for userCredentialId={}", existing.getUserCredential().getId());
             revokeAllForUser(existing.getUserCredential().getId());
-            throw new UnauthorizedException(ErrorCode.TOKEN_REUSE_DETECTED, "Refresh token reuse detected. Please log in again.");
+            throw new UnauthorizedException(ErrorCode.TOKEN_REUSE_DETECTED,
+                    "Refresh token reuse detected. Please log in again.");
         }
         if (existing.getExpiresAt().isBefore(Instant.now())) {
             existing.revoke();
@@ -360,20 +361,17 @@ public class AuthServiceImpl implements AuthService {
             UserCredential credential,
             String deviceInfo,
             boolean isNewUser,
-            String role
-    ) {
+            String role) {
         String accessToken = jwtTokenProvider.createAccessToken(
                 credential.getId(),
                 credential.getUserType(),
-                role
-        );
+                role);
         String refreshRaw = HashUtils.randomToken();
         String refreshHash = HashUtils.sha256Hex(refreshRaw);
         Instant expiresAt = Instant.now().plusSeconds(jwtTokenProvider.refreshTtlSeconds(credential.getUserType()));
 
         RefreshToken refreshToken = refreshTokenRepository.save(
-                RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo)
-        );
+                RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo));
 
         Duration sessionTtl = Duration.between(Instant.now(), expiresAt);
         if (!sessionTtl.isNegative() && !sessionTtl.isZero()) {
@@ -387,8 +385,7 @@ public class AuthServiceImpl implements AuthService {
                 credential.getUserType(),
                 isNewUser,
                 credential.getId(),
-                role
-        );
+                role);
     }
 
     private void assertActive(UserCredential credential) {

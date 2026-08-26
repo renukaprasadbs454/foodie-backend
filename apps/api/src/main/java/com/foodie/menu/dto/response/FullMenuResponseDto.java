@@ -22,9 +22,32 @@ public record FullMenuResponseDto(
             String description,
             BigDecimal basePrice,
             boolean isVeg,
+            String foodType,
             boolean isAvailable,
             String imageUrl,
             List<VariantResponseDto> variants
     ) {
+        public MenuItemDto(
+                UUID menuItemId,
+                String name,
+                String description,
+                BigDecimal basePrice,
+                boolean isVeg,
+                boolean isAvailable,
+                String imageUrl,
+                List<VariantResponseDto> variants
+        ) {
+            this(
+                    menuItemId,
+                    name,
+                    description,
+                    basePrice,
+                    isVeg,
+                    isVeg ? "VEG" : "NON_VEG",
+                    isAvailable,
+                    imageUrl,
+                    variants
+            );
+        }
     }
 }

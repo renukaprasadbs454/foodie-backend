@@ -77,6 +77,58 @@ class RestaurantModuleIT extends AbstractIntegrationTest {
         assertThat(list.getBody().get("meta")).isNotNull();
     }
 
+    @Test
+    void businessAndLegalDetails_getAndSubmit_success() {
+        String accessToken = signup("+919833344455", "RESTAURANT");
+        HttpHeaders auth = bearer(accessToken);
+
+        // 1. Create restaurant
+        restTemplate.exchange("/api/v1/restaurants", HttpMethod.POST, new HttpEntity<>(createBody(), auth), Map.class);
+
+        // 2. GET business-details before creation -> 200 OK with data: null
+        ResponseEntity<Map> getBusinessBefore = restTemplate.exchange(
+                "/api/v1/restaurants/me/business-details", HttpMethod.GET, new HttpEntity<>(auth), Map.class);
+        assertThat(getBusinessBefore.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(getBusinessBefore.getBody().get("data")).isNull();
+
+        // 3. GET legal-details before creation -> 200 OK with data: null
+        ResponseEntity<Map> getLegalBefore = restTemplate.exchange(
+                "/api/v1/restaurants/me/legal-details", HttpMethod.GET, new HttpEntity<>(auth), Map.class);
+        assertThat(getLegalBefore.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(getLegalBefore.getBody().get("data")).isNull();
+
+        // 4. Submit business details with contactPhone "+919876543210"
+        Map<String, Object> legalBody = Map.of(
+                "gstin", "29ABCDE1234F1Z5",
+                "pan", "ABCDE1234F",
+                "fssaiLicenseNumber", "12345678901234",
+                "legalName", "Spice Food Ventures Private Limited",
+                "businessType", "PRIVATE_LIMITED",
+                "contactEmail", "legal@spicefood.com",
+                "contactPhone", "+919876543210"
+        );
+        ResponseEntity<Map> postBusiness = restTemplate.exchange(
+                "/api/v1/restaurants/me/business-details", HttpMethod.POST, new HttpEntity<>(legalBody, auth), Map.class);
+        assertThat(postBusiness.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> postData = (Map<?, ?>) postBusiness.getBody().get("data");
+        assertThat(postData.get("legalName")).isEqualTo("Spice Food Ventures Private Limited");
+        assertThat(postData.get("contactPhone")).isEqualTo("+919876543210");
+
+        // 5. GET business-details after creation -> 200 OK with data
+        ResponseEntity<Map> getBusinessAfter = restTemplate.exchange(
+                "/api/v1/restaurants/me/business-details", HttpMethod.GET, new HttpEntity<>(auth), Map.class);
+        assertThat(getBusinessAfter.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> businessData = (Map<?, ?>) getBusinessAfter.getBody().get("data");
+        assertThat(businessData.get("legalName")).isEqualTo("Spice Food Ventures Private Limited");
+
+        // 6. GET legal-details after creation -> 200 OK with data
+        ResponseEntity<Map> getLegalAfter = restTemplate.exchange(
+                "/api/v1/restaurants/me/legal-details", HttpMethod.GET, new HttpEntity<>(auth), Map.class);
+        assertThat(getLegalAfter.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> legalData = (Map<?, ?>) getLegalAfter.getBody().get("data");
+        assertThat(legalData.get("legalName")).isEqualTo("Spice Food Ventures Private Limited");
+    }
+
     private Map<String, Object> createBody() {
         return Map.of(
                 "name", "Spice Route Kitchen",

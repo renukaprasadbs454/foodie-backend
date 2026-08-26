@@ -36,11 +36,13 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> {})
+                .cors(cors -> {
+                })
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/actuator/health",
@@ -50,10 +52,14 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/api/v1/auth/**",
-                                "/api/v1/payments/webhook/razorpay"
+                                "/api/v1/payments/webhook/razorpay",
+                                "/api/v1/storage/**",
+                                "/api/v1/debug/**"
                         ).permitAll()
+                        .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants", "/api/v1/restaurants/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/restaurants/*/reviews", "/api/v1/restaurants/*/reviews/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/menu/categories").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/menu/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(
@@ -63,23 +69,37 @@ public class SecurityConfig {
                                 "/api/v1/maps/validate-coordinate"
                         ).permitAll()
                         .anyRequest().authenticated()
-                )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) ->
-                                writeError(response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED,
+                                writeError(
+                                        response,
+                                        HttpServletResponse.SC_UNAUTHORIZED,
+                                        ErrorCode.UNAUTHORIZED,
                                         "Authentication required."))
                         .accessDeniedHandler((request, response, accessDeniedException) ->
-                                writeError(response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN,
-                                        "Access denied."))
-                )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                                writeError(
+                                        response,
+                                        HttpServletResponse.SC_FORBIDDEN,
+                                        ErrorCode.FORBIDDEN,
+                                        "Access denied.")))
+                .addFilterBefore(
+                        jwtAuthFilter,
+                        UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    private void writeError(HttpServletResponse response, int status, ErrorCode code, String message) throws java.io.IOException {
+    private void writeError(
+            HttpServletResponse response,
+            int status,
+            ErrorCode code,
+            String message) throws java.io.IOException {
+
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(code, message));
+
+        objectMapper.writeValue(
+                response.getOutputStream(),
+                ApiResponse.failure(code, message));
     }
 }

@@ -12,6 +12,7 @@ import com.foodie.delivery.dto.response.AvailabilityResponseDto;
 import com.foodie.delivery.dto.response.DeliveryAssignmentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryOfferResponseDto;
+import com.foodie.delivery.dto.response.DeliveryProfileImageResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileResponseDto;
 import com.foodie.delivery.service.DeliveryService;
 import com.foodie.security.principal.AuthPrincipal;
@@ -31,7 +32,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,8 +51,7 @@ public class DeliveryController {
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     @Operation(summary = "Get my delivery partner profile")
     public ResponseEntity<ApiResponse<DeliveryProfileResponseDto>> getProfile(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.getOrCreateProfile(principal.userId())));
     }
 
@@ -60,8 +60,7 @@ public class DeliveryController {
     @Operation(summary = "Create or update my delivery partner profile")
     public ResponseEntity<ApiResponse<DeliveryProfileResponseDto>> upsertProfile(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody UpsertDeliveryProfileRequestDto request
-    ) {
+            @Valid @RequestBody UpsertDeliveryProfileRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.upsertProfile(principal.userId(), request)));
     }
 
@@ -70,20 +69,28 @@ public class DeliveryController {
     @Operation(summary = "Upload delivery partner KYC document (never self-verifies)")
     public ResponseEntity<ApiResponse<DeliveryDocumentResponseDto>> uploadDocument(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestPart("docType") String docType,
-            @RequestPart("file") MultipartFile file
-    ) {
+            @RequestParam("docType") String docType,
+            @RequestParam("file") MultipartFile file) {
         DeliveryDocType type;
         try {
             type = DeliveryDocType.valueOf(docType);
         } catch (IllegalArgumentException | NullPointerException ex) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED,
-                    "docType must be LICENSE, VEHICLE_RC, or IDENTITY."
-            );
+                    "docType must be LICENSE, VEHICLE_RC, or IDENTITY.");
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(deliveryService.uploadDocument(principal.userId(), type, file)));
+    }
+
+    @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Upload delivery partner profile image")
+    public ResponseEntity<ApiResponse<DeliveryProfileImageResponseDto>> uploadProfileImage(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(deliveryService.uploadProfileImage(principal.userId(), file)));
     }
 
     @PostMapping("/availability")
@@ -91,8 +98,7 @@ public class DeliveryController {
     @Operation(summary = "Set online/offline availability")
     public ResponseEntity<ApiResponse<AvailabilityResponseDto>> setAvailability(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody SetAvailabilityRequestDto request
-    ) {
+            @Valid @RequestBody SetAvailabilityRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.setAvailability(principal.userId(), request)));
     }
 
@@ -100,8 +106,7 @@ public class DeliveryController {
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     @Operation(summary = "List OFFERED delivery assignments for this partner")
     public ResponseEntity<ApiResponse<List<DeliveryOfferResponseDto>>> listOffers(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.listOffers(principal.userId())));
     }
 
@@ -110,8 +115,7 @@ public class DeliveryController {
     @Operation(summary = "Accept a delivery assignment offer")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> accept(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable UUID id
-    ) {
+            @PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.accept(principal.userId(), id)));
     }
 
@@ -121,8 +125,7 @@ public class DeliveryController {
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> verifyPickup(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id,
-            @Valid @RequestBody VerifyOtpRequestDto request
-    ) {
+            @Valid @RequestBody VerifyOtpRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(
                 deliveryService.verifyPickup(principal.userId(), id, request)));
     }
@@ -133,8 +136,7 @@ public class DeliveryController {
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> verifyDelivery(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id,
-            @Valid @RequestBody VerifyOtpRequestDto request
-    ) {
+            @Valid @RequestBody VerifyOtpRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(
                 deliveryService.verifyDelivery(principal.userId(), id, request)));
     }
@@ -144,9 +146,29 @@ public class DeliveryController {
     @Operation(summary = "Report live GPS location (Redis GEO only)")
     public ResponseEntity<Void> locationPing(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody LocationPingRequestDto request
-    ) {
+            @Valid @RequestBody LocationPingRequestDto request) {
         deliveryService.locationPing(principal.userId(), request);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/assignments/{id}/verify-face", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Verify delivery partner identity using selfie (per assignment)")
+    public ResponseEntity<ApiResponse<Boolean>> verifyFace(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(
+                deliveryService.verifyFace(principal.userId(), file)));
+    }
+
+    @PostMapping(value = "/me/verify-face", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Verify delivery partner identity using selfie (for go-online check)")
+    public ResponseEntity<ApiResponse<Boolean>> verifyFaceForOnline(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(
+                deliveryService.verifyFace(principal.userId(), file)));
     }
 }

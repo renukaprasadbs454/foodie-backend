@@ -23,4 +23,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     Page<Order> findByRestaurantIdAndStatus(UUID restaurantId, OrderStatus status, Pageable pageable);
 
     java.util.List<Order> findByOrderNumberContainingIgnoreCase(String orderNumber);
+
+    java.util.List<Order> findByRestaurantId(UUID restaurantId);
+
+    java.util.List<Order> findByRestaurantIdAndCreatedAtBetween(UUID restaurantId, java.time.Instant from, java.time.Instant to);
 }

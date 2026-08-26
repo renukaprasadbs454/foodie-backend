@@ -9,7 +9,7 @@ RUN chmod +x mvnw && ./mvnw -q -B dependency:go-offline
 
 COPY src ./src
 RUN ./mvnw -q -B -DskipTests package \
-    && cp target/foodie-backend-*.jar /workspace/app.jar
+    && cp target/foodie-backend.jar /workspace/app.jar
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
