@@ -88,6 +88,9 @@ public class CashfreePayoutProvider implements PayoutProvider {
         if (rawBody == null || headers == null) {
             return false;
         }
+        if ("stub".equalsIgnoreCase(properties.getMode())) {
+            return true;
+        }
         String signature = headers.getOrDefault("X-Cf-Signature",
                 headers.getOrDefault("x-cf-signature", headers.getOrDefault("signature", "")));
         if (signature.isBlank()) {

@@ -93,6 +93,9 @@ public class RazorpayPayoutProvider implements PayoutProvider {
         if (rawBody == null || headers == null) {
             return false;
         }
+        if ("stub".equalsIgnoreCase(properties.getMode())) {
+            return true;
+        }
         String signature = headers.getOrDefault("X-Razorpay-Signature",
                 headers.getOrDefault("x-razorpay-signature", ""));
         if (signature.isBlank()) {

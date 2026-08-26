@@ -68,6 +68,7 @@ class PayoutProviderTest {
 
     @Test
     void razorpayWebhookSignature_validatesCorrectly() {
+        properties.setMode("live");
         String payload = "{\"event\":\"payout.processed\",\"id\":\"evt_1\"}";
         // Calculate HMAC SHA256 using test secret "test_razorpay_secret"
         try {
@@ -90,6 +91,7 @@ class PayoutProviderTest {
 
     @Test
     void cashfreeWebhookSignature_validatesCorrectly() {
+        properties.setMode("live");
         String payload = "{\"transferId\":\"CF_1\",\"status\":\"SUCCESS\"}";
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");

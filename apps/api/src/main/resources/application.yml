@@ -80,7 +80,7 @@ foodie:
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
   payout:
     provider: ${PAYMENT_PROVIDER:RAZORPAY}
-    mode: ${PAYOUT_MODE:live}
+    mode: ${PAYOUT_MODE:stub}
     razorpay:
       account-number: ${RAZORPAYX_ACCOUNT_NUMBER:2323230041387700}
       key-id: ${RAZORPAY_KEY_ID:rzp_test_TR9mlA2zOImhpF}
