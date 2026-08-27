@@ -3,9 +3,13 @@ package com.foodie.wallet.service;
 import com.foodie.common.dto.PaginationMeta;
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
+import com.foodie.wallet.dto.request.CreateDepositOrderRequestDto;
 import com.foodie.wallet.dto.request.PayoutRequestDto;
+import com.foodie.wallet.dto.request.VerifyDepositRequestDto;
+import com.foodie.wallet.dto.response.DepositOrderResponseDto;
 import com.foodie.wallet.dto.response.LedgerEntryResponseDto;
 import com.foodie.wallet.dto.response.PayoutResponseDto;
+import com.foodie.wallet.dto.response.VerifyDepositResponseDto;
 import com.foodie.wallet.dto.response.WalletBalanceResponseDto;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -13,6 +17,14 @@ import java.util.List;
 import java.util.UUID;
 
 public interface WalletService {
+
+    DepositOrderResponseDto createDepositOrder(UUID userCredentialId, BigDecimal amount);
+
+    VerifyDepositResponseDto verifyAndProcessDeposit(UUID userCredentialId, VerifyDepositRequestDto request);
+
+    com.foodie.wallet.dto.response.CodBalanceResponseDto recordCodCashCollection(UUID userCredentialId, BigDecimal amount);
+
+    com.foodie.wallet.dto.response.CodBalanceResponseDto getCodBalance(UUID userCredentialId);
 
     WalletBalanceResponseDto getBalance(UUID userCredentialId);
 

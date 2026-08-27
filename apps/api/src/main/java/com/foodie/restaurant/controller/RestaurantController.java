@@ -228,7 +228,7 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateUpiDetails(principal.userId(), request)));
     }
 
-    @PostMapping("/me/upi/verify")
+    @PostMapping("/me/upi/verify-details")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Verify my restaurant UPI payment details")
     public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> verifyUpiDetails(

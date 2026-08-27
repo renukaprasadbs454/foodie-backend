@@ -6,9 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RazorpayProperties {
 
     /** stub (local/dev) or live */
-    private String mode = "stub";
-    private String keyId = "rzp_test_local";
-    private String keySecret = "local-razorpay-key-secret";
+    private String mode = "live";
+    private String keyId = "rzp_test_TR9mlA2zOImhpF";
+    private String keySecret = "W6q8k3NDFXHcYrsaBjcgsWfN";
     private String webhookSecret = "local-razorpay-webhook-secret";
     private String apiBaseUrl = "https://api.razorpay.com/v1";
 

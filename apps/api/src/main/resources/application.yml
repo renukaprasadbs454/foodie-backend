@@ -3,6 +3,11 @@ spring:
     name: foodie-backend
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:foodie}
+    username: ${DB_USER:foodie}
+    password: ${DB_PASSWORD:foodie}
+    driver-class-name: org.postgresql.Driver
   jpa:
     open-in-view: false
     hibernate:
@@ -73,9 +78,9 @@ foodie:
     default-delivery-fee: ${FOODIE_DEFAULT_DELIVERY_FEE:30.00}
     tax-rate: ${FOODIE_ORDER_TAX_RATE:0.05}
   razorpay:
-    mode: ${RAZORPAY_MODE:stub}
-    key-id: ${RAZORPAY_KEY_ID:rzp_test_local}
-    key-secret: ${RAZORPAY_KEY_SECRET:local-razorpay-key-secret}
+    mode: ${RAZORPAY_MODE:live}
+    key-id: ${RAZORPAY_KEY_ID:rzp_test_TR9mlA2zOImhpF}
+    key-secret: ${RAZORPAY_KEY_SECRET:W6q8k3NDFXHcYrsaBjcgsWfN}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
   delivery:

@@ -6,5 +6,7 @@ public enum LedgerReferenceType {
     REFUND,
     PAYOUT,
     INCENTIVE,
-    ADJUSTMENT
+    ADJUSTMENT,
+    COD_DEPOSIT,
+    COD_COLLECTED
 }

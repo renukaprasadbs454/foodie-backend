@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -69,15 +70,27 @@ public class DeliveryController {
     @Operation(summary = "Upload delivery partner KYC document (never self-verifies)")
     public ResponseEntity<ApiResponse<DeliveryDocumentResponseDto>> uploadDocument(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam("docType") String docType,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam(value = "docType", required = false) String docTypeParam,
+            @RequestPart(value = "docType", required = false) String docTypePart,
+            @RequestParam(value = "file", required = false) MultipartFile fileParam,
+            @RequestPart(value = "file", required = false) MultipartFile filePart) {
+        String docType = docTypeParam != null ? docTypeParam : docTypePart;
+        MultipartFile file = fileParam != null ? fileParam : filePart;
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "File parameter is required.");
+        }
         DeliveryDocType type;
         try {
-            type = DeliveryDocType.valueOf(docType);
+            String cleanType = docType != null ? docType.trim().toUpperCase(java.util.Locale.ROOT) : "";
+            if ("SELFIE".equals(cleanType) || "PROFILE_IMAGE".equals(cleanType) || "PROFILE".equals(cleanType)) {
+                type = DeliveryDocType.IDENTITY;
+            } else {
+                type = DeliveryDocType.valueOf(cleanType);
+            }
         } catch (IllegalArgumentException | NullPointerException ex) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED,
-                    "docType must be LICENSE, VEHICLE_RC, or IDENTITY.");
+                    "docType must be LICENSE, VEHICLE_RC, IDENTITY, or SELFIE.");
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(deliveryService.uploadDocument(principal.userId(), type, file)));
@@ -88,7 +101,12 @@ public class DeliveryController {
     @Operation(summary = "Upload delivery partner profile image")
     public ResponseEntity<ApiResponse<DeliveryProfileImageResponseDto>> uploadProfileImage(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam(value = "file", required = false) MultipartFile fileParam,
+            @RequestPart(value = "file", required = false) MultipartFile filePart) {
+        MultipartFile file = fileParam != null ? fileParam : filePart;
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "File parameter is required.");
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(deliveryService.uploadProfileImage(principal.userId(), file)));
     }

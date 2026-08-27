@@ -180,7 +180,7 @@ class WalletServiceImplTest {
                 account.applyCredit(new BigDecimal("10.00"));
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
-                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForPessimisticUpdate(
                                 OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
                 when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
@@ -203,7 +203,7 @@ class WalletServiceImplTest {
                 account.applyCredit(new BigDecimal("100.00"));
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
-                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForPessimisticUpdate(
                                 OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
                 when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))

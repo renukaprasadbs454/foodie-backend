@@ -39,4 +39,14 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
                           and e.entryType = 'CREDIT'
                         """)
         java.math.BigDecimal sumCreditAmountByWalletAccountId(@Param("walletAccountId") UUID walletAccountId);
+
+        @Query("""
+                        select coalesce(sum(e.amount), 0)
+                        from LedgerEntry e
+                        where e.walletAccountId = :walletAccountId
+                          and e.referenceType = :referenceType
+                        """)
+        java.math.BigDecimal sumAmountByWalletAccountIdAndReferenceType(
+                        @Param("walletAccountId") UUID walletAccountId,
+                        @Param("referenceType") LedgerReferenceType referenceType);
 }
