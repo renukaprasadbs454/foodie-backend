@@ -4,5 +4,6 @@ public enum LedgerReferenceType {
     DELIVERY_ASSIGNMENT,
     REFUND,
     PAYOUT,
-    INCENTIVE
+    INCENTIVE,
+    ORDER_PAYMENT
 }

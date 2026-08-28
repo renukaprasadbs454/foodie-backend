@@ -34,8 +34,7 @@ public class AdminRestaurantController {
     @Operation(summary = "Approve a PENDING restaurant")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> approve(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable("id") UUID restaurantId
-    ) {
+            @PathVariable("id") UUID restaurantId) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.approveRestaurant(principal.userId(), restaurantId)));
     }
@@ -46,9 +45,19 @@ public class AdminRestaurantController {
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> suspend(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable("id") UUID restaurantId,
-            @Valid @RequestBody SuspendRestaurantRequestDto request
-    ) {
+            @Valid @RequestBody SuspendRestaurantRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.suspendRestaurant(principal.userId(), restaurantId, request)));
+    }
+
+    @PatchMapping("/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Reject a PENDING restaurant onboarding submission")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> reject(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID restaurantId,
+            @Valid @RequestBody SuspendRestaurantRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.rejectRestaurant(principal.userId(), restaurantId, request.reason())));
     }
 }

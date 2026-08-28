@@ -24,6 +24,7 @@ import com.foodie.payment.entity.RefundRequest;
 import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.payment.repository.RefundRequestRepository;
 import com.foodie.payment.service.PaymentIdempotencyStore;
+import com.foodie.wallet.service.WalletService;
 import com.foodie.payment.service.WebhookDedupService;
 import com.foodie.payment.service.impl.PaymentServiceImpl;
 import com.foodie.shared.contract.CustomerSummaryProvider;
@@ -45,14 +46,24 @@ import org.springframework.context.ApplicationEventPublisher;
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceImplTest {
 
-    @Mock private PaymentRepository paymentRepository;
-    @Mock private RefundRequestRepository refundRequestRepository;
-    @Mock private OrderPaymentPort orderPaymentPort;
-    @Mock private CustomerSummaryProvider customerSummaryProvider;
-    @Mock private RazorpayClient razorpayClient;
-    @Mock private WebhookDedupService webhookDedupService;
-    @Mock private PaymentIdempotencyStore idempotencyStore;
-    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private PaymentRepository paymentRepository;
+    @Mock
+    private RefundRequestRepository refundRequestRepository;
+    @Mock
+    private OrderPaymentPort orderPaymentPort;
+    @Mock
+    private CustomerSummaryProvider customerSummaryProvider;
+    @Mock
+    private RazorpayClient razorpayClient;
+    @Mock
+    private WebhookDedupService webhookDedupService;
+    @Mock
+    private PaymentIdempotencyStore idempotencyStore;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private WalletService walletService;
 
     private PaymentServiceImpl service;
     private RazorpaySignatureVerifier signatureVerifier;
@@ -79,13 +90,13 @@ props.setMode("live");
                 webhookDedupService,
                 idempotencyStore,
                 new ObjectMapper(),
-                eventPublisher
-        );
+                eventPublisher,
+                walletService);
     }
 
     @Test
     void initiate_missingKey_throws400() {
-        assertThatThrownBy(() -> service.initiate(credentialId, orderId, null))
+        assertThatThrownBy(() -> service.initiate(credentialId, orderId, null, false))
                 .isInstanceOf(BadRequestException.class)
                 .extracting(ex -> ((BadRequestException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
@@ -101,7 +112,7 @@ props.setMode("live");
                 new OrderPaymentPort.PayableOrder(
                         orderId, customerId, OrderStatus.CONFIRMED, new BigDecimal("100.00"))));
 
-        assertThatThrownBy(() -> service.initiate(credentialId, orderId, "k1"))
+        assertThatThrownBy(() -> service.initiate(credentialId, orderId, "k1", false))
                 .isInstanceOf(UnprocessableEntityException.class)
                 .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.ORDER_NOT_PAYABLE);
@@ -126,7 +137,7 @@ props.setMode("live");
             return p;
         });
 
-        PaymentInitiationResponseDto view = service.initiate(credentialId, orderId, "k1");
+        PaymentInitiationResponseDto view = service.initiate(credentialId, orderId, "k1", false);
 
         assertThat(view.razorpayOrderId()).isEqualTo("order_abc");
         assertThat(view.amount()).isEqualByComparingTo("492.00");
@@ -157,7 +168,7 @@ props.setMode("live");
 
     @Test
     void handleWebhook_paymentCaptured_publishesEvent() {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
+        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), BigDecimal.ZERO, "k");
         setId(payment, UUID.randomUUID());
         String body = """
                 {"id":"evt_2","event":"payment.captured","payload":{"payment":{"entity":{
@@ -178,7 +189,7 @@ props.setMode("live");
 
     @Test
     void handleWebhook_paymentFailed_publishesFailedEvent() {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
+        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), BigDecimal.ZERO, "k");
         setId(payment, UUID.randomUUID());
         String body = """
                 {"id":"evt_3","event":"payment.failed","payload":{"payment":{"entity":{
@@ -196,7 +207,7 @@ props.setMode("live");
 
     @Test
     void refund_notCaptured_throws422() {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
+        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), BigDecimal.ZERO, "k");
         setId(payment, UUID.randomUUID());
         when(paymentRepository.findById(payment.getId())).thenReturn(Optional.of(payment));
 
@@ -204,15 +215,14 @@ props.setMode("live");
                 payment.getId(),
                 new RefundPaymentRequestDto(new BigDecimal("10.00"), "cancel"),
                 UUID.randomUUID(),
-                false
-        )).isInstanceOf(UnprocessableEntityException.class)
+                false)).isInstanceOf(UnprocessableEntityException.class)
                 .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_NOT_REFUNDABLE);
     }
 
     @Test
     void refund_captured_initiatesAsync() throws Exception {
-        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), "k");
+        Payment payment = Payment.initiate(orderId, "order_abc", new BigDecimal("10.00"), BigDecimal.ZERO, "k");
         setId(payment, UUID.randomUUID());
         payment.markCaptured("pay_1");
         when(paymentRepository.findById(payment.getId())).thenReturn(Optional.of(payment));
@@ -230,8 +240,7 @@ props.setMode("live");
                 payment.getId(),
                 new RefundPaymentRequestDto(new BigDecimal("10.00"), "Restaurant reject"),
                 UUID.randomUUID(),
-                false
-        );
+                false);
 
         assertThat(result.status().name()).isEqualTo("INITIATED");
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);

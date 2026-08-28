@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
@@ -28,45 +29,43 @@ import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
 @Tag(name = "Payment")
 public class PaymentController {
 
-    private final PaymentService paymentService;
+        private final PaymentService paymentService;
 
-    public PaymentController(PaymentService paymentService) {
-        this.paymentService = paymentService;
-    }
+        public PaymentController(PaymentService paymentService) {
+                this.paymentService = paymentService;
+        }
 
-    @PostMapping("/orders/{orderId}/initiate")
-    @PreAuthorize("hasRole('CUSTOMER')")
-    @Operation(summary = "Initiate Razorpay payment for an order (idempotent)")
-    public ResponseEntity<ApiResponse<PaymentInitiationResponseDto>> initiate(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable UUID orderId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                paymentService.initiate(principal.userId(), orderId, idempotencyKey)));
-    }
+        @PostMapping("/orders/{orderId}/initiate")
+        @PreAuthorize("hasRole('CUSTOMER')")
+        @Operation(summary = "Initiate Razorpay payment for an order (idempotent)")
+        public ResponseEntity<ApiResponse<PaymentInitiationResponseDto>> initiate(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable UUID orderId,
+                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                        @RequestParam(defaultValue = "false") boolean useWallet) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                paymentService.initiate(principal.userId(), orderId, idempotencyKey, useWallet)));
+        }
 
-    @PostMapping("/verify")
-    @PreAuthorize("hasRole('CUSTOMER')")
-    @Operation(summary = "Verify client-side Razorpay payment signature")
-    public ResponseEntity<ApiResponse<Boolean>> verify(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody VerifyPaymentRequestDto request
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(
-                paymentService.verifyPayment(principal.userId(), request)));
-    }
+        @PostMapping("/verify")
+        @PreAuthorize("hasRole('CUSTOMER')")
+        @Operation(summary = "Verify client-side Razorpay payment signature")
+        public ResponseEntity<ApiResponse<Boolean>> verify(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @Valid @RequestBody VerifyPaymentRequestDto request) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                paymentService.verifyPayment(principal.userId(), request)));
+        }
 
-    @PostMapping("/{paymentId}/refund")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Initiate refund (async; finalized by webhook)")
-    public ResponseEntity<ApiResponse<RefundInitiationResponseDto>> refund(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable UUID paymentId,
-            @Valid @RequestBody RefundPaymentRequestDto request
-    ) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(ApiResponse.success(paymentService.refund(
-                        paymentId, request, principal.userId(), false)));
-    }
+        @PostMapping("/{paymentId}/refund")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Initiate refund (async; finalized by webhook)")
+        public ResponseEntity<ApiResponse<RefundInitiationResponseDto>> refund(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable UUID paymentId,
+                        @Valid @RequestBody RefundPaymentRequestDto request) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED)
+                                .body(ApiResponse.success(paymentService.refund(
+                                                paymentId, request, principal.userId(), false)));
+        }
 }

@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-
 import com.foodie.common.enums.LedgerEntryType;
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
@@ -18,6 +17,8 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.restaurant.repository.RestaurantRepository;
+import com.foodie.common.enums.UserType;
+import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
@@ -51,31 +52,43 @@ import org.springframework.data.domain.Pageable;
 @ExtendWith(MockitoExtension.class)
 class WalletServiceImplTest {
 
-    @Mock private WalletAccountRepository walletAccountRepository;
-    @Mock private LedgerEntryRepository ledgerEntryRepository;
-    @Mock private PayoutRepository payoutRepository;
-    @Mock private DeliveryPartnerLookup deliveryPartnerLookup;
-    @Mock private RestaurantRepository restaurantRepository;
-    @Mock private PayoutIdempotencyStore payoutIdempotencyStore;
-    @Mock private ApplicationEventPublisher eventPublisher;
+        @Mock
+        private WalletAccountRepository walletAccountRepository;
+        @Mock
+        private LedgerEntryRepository ledgerEntryRepository;
+        @Mock
+        private PayoutRepository payoutRepository;
+        @Mock
+        private DeliveryPartnerLookup deliveryPartnerLookup;
+        @Mock
+        private RestaurantRepository restaurantRepository;
+        @Mock
+        private CustomerSummaryProvider customerSummaryProvider;
+        @Mock
+        private com.foodie.shared.contract.RestaurantSummaryProvider restaurantSummaryProvider;
+        @Mock
+        private PayoutIdempotencyStore payoutIdempotencyStore;
+        @Mock
+        private ApplicationEventPublisher eventPublisher;
 
-    private WalletServiceImpl service;
+        private WalletServiceImpl service;
 
-    private final UUID credentialId = UUID.randomUUID();
-    private final UUID partnerId = UUID.randomUUID();
+        private final UUID credentialId = UUID.randomUUID();
+        private final UUID partnerId = UUID.randomUUID();
 
-    @BeforeEach
-    void setUp() {
-        service = new WalletServiceImpl(
-                walletAccountRepository,
-                ledgerEntryRepository,
-                payoutRepository,
-                deliveryPartnerLookup,
-                restaurantRepository,
-                payoutIdempotencyStore,
-                eventPublisher
-        );
-    }
+        @BeforeEach
+        void setUp() {
+                service = new WalletServiceImpl(
+                                walletAccountRepository,
+                                ledgerEntryRepository,
+                                payoutRepository,
+                                deliveryPartnerLookup,
+                                restaurantRepository,
+                                customerSummaryProvider,
+                                restaurantSummaryProvider,
+                                payoutIdempotencyStore,
+                                eventPublisher);
+        }
 
         @Test
         void getBalance_returnsCachedBalance() {
@@ -86,7 +99,7 @@ class WalletServiceImplTest {
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
 
-                WalletBalanceResponseDto balance = service.getBalance(credentialId);
+                WalletBalanceResponseDto balance = service.getBalance(credentialId, UserType.DELIVERY_PARTNER);
 
                 assertThat(balance.balance()).isEqualByComparingTo("120.50");
                 assertThat(balance.walletAccountId()).isEqualTo(account.getId());
@@ -222,7 +235,8 @@ class WalletServiceImplTest {
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId)));
 
-                assertThatThrownBy(() -> service.getLedger(credentialId, 0, 20, "amount", null, null))
+                assertThatThrownBy(() -> service.getLedger(credentialId, UserType.DELIVERY_PARTNER, 0, 20, "amount",
+                                null, null))
                                 .isInstanceOf(BadRequestException.class)
                                 .extracting(ex -> ((BadRequestException) ex).getErrorCode())
                                 .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
@@ -245,12 +259,13 @@ class WalletServiceImplTest {
                 when(ledgerEntryRepository.findHistory(eq(account.getId()), eq(from), eq(to), any(Pageable.class)))
                                 .thenReturn(new PageImpl<>(List.of(entry)));
 
-                var page = service.getLedger(credentialId, 0, 20, "createdAt", from, to);
+                var page = service.getLedger(credentialId, UserType.DELIVERY_PARTNER, 0, 20, "createdAt", from, to);
 
                 assertThat(page.items()).hasSize(1);
                 assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
                 ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-                verify(ledgerEntryRepository).findHistory(eq(account.getId()), eq(from), eq(to), pageableCaptor.capture());
+                verify(ledgerEntryRepository).findHistory(eq(account.getId()), eq(from), eq(to),
+                                pageableCaptor.capture());
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
                                 .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
@@ -270,7 +285,7 @@ class WalletServiceImplTest {
                 when(ledgerEntryRepository.findByWalletAccountId(eq(account.getId()), any(Pageable.class)))
                                 .thenReturn(new PageImpl<>(List.of(entry)));
 
-                var page = service.getLedger(credentialId, 0, 20, "createdAt", null, null);
+                var page = service.getLedger(credentialId, UserType.DELIVERY_PARTNER, 0, 20, "createdAt", null, null);
 
                 assertThat(page.items()).hasSize(1);
                 verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), any(Pageable.class));

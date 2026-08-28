@@ -69,27 +69,16 @@ public class RestaurantController {
             @RequestParam(required = false) Double lng,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort
-    ) {
+            @RequestParam(required = false) String sort) {
         var result = restaurantService.search(search, cuisineType, minRating, lat, lng, page, size, sort);
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
-    }
-
-    @GetMapping("/me")
-    @PreAuthorize("hasRole('RESTAURANT')")
-    @Operation(summary = "Get my restaurant profile")
-    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getMyProfile(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyProfile(principal.userId())));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get restaurant detail (public APPROVED; owner/admin may see PENDING/SUSPENDED)")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getById(
             @PathVariable UUID id,
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         UUID callerId = principal == null ? null : principal.userId();
         boolean admin = principal != null && principal.userType() == UserType.ADMIN;
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getById(id, callerId, admin)));
@@ -100,10 +89,17 @@ public class RestaurantController {
     @Operation(summary = "Register restaurant profile (status=PENDING)")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> create(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody CreateRestaurantRequestDto request
-    ) {
+            @Valid @RequestBody CreateRestaurantRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(restaurantService.create(principal.userId(), request)));
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get my restaurant profile")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getMe(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyRestaurant(principal.userId())));
     }
 
     @PutMapping("/me")
@@ -111,17 +107,16 @@ public class RestaurantController {
     @Operation(summary = "Update my restaurant profile (status/commissionPct not updatable)")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> updateMe(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody UpdateRestaurantRequestDto request
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateMyRestaurant(principal.userId(), request)));
+            @Valid @RequestBody UpdateRestaurantRequestDto request) {
+        return ResponseEntity
+                .ok(ApiResponse.success(restaurantService.updateMyRestaurant(principal.userId(), request)));
     }
 
     @GetMapping("/me/location")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Get store map location and formatted address")
     public ResponseEntity<ApiResponse<RestaurantLocationResponseDto>> getLocation(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getLocation(principal.userId())));
     }
 
@@ -130,8 +125,7 @@ public class RestaurantController {
     @Operation(summary = "Update store map location and formatted address")
     public ResponseEntity<ApiResponse<RestaurantLocationResponseDto>> updateLocation(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody UpdateRestaurantLocationRequestDto request
-    ) {
+            @Valid @RequestBody UpdateRestaurantLocationRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateLocation(principal.userId(), request)));
     }
 
@@ -139,8 +133,7 @@ public class RestaurantController {
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Get restaurant bank account and UPI details")
     public ResponseEntity<ApiResponse<RestaurantBankDetailsResponseDto>> getBankDetails(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getBankDetails(principal.userId())));
     }
 
@@ -149,8 +142,7 @@ public class RestaurantController {
     @Operation(summary = "Update restaurant bank account and UPI details")
     public ResponseEntity<ApiResponse<RestaurantBankDetailsResponseDto>> updateBankDetails(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody UpdateRestaurantBankDetailsRequestDto request
-    ) {
+            @Valid @RequestBody UpdateRestaurantBankDetailsRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateBankDetails(principal.userId(), request)));
     }
 
@@ -158,8 +150,7 @@ public class RestaurantController {
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Verify restaurant bank account")
     public ResponseEntity<ApiResponse<VerificationResultResponseDto>> verifyBankDetails(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.verifyBankDetails(principal.userId())));
     }
 
@@ -168,8 +159,7 @@ public class RestaurantController {
     @Operation(summary = "Verify restaurant UPI ID")
     public ResponseEntity<ApiResponse<VerificationResultResponseDto>> verifyUpi(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody VerifyUpiRequestDto request
-    ) {
+            @Valid @RequestBody VerifyUpiRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.verifyUpi(principal.userId(), request)));
     }
 
@@ -179,8 +169,7 @@ public class RestaurantController {
     public ResponseEntity<ApiResponse<RestaurantDocumentResponseDto>> uploadDocument(
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestPart("docType") String docType,
-            @RequestPart("file") MultipartFile file
-    ) {
+            @RequestPart("file") MultipartFile file) {
         RestaurantDocType type;
         try {
             type = RestaurantDocType.valueOf(docType);
@@ -197,8 +186,7 @@ public class RestaurantController {
     public ResponseEntity<ApiResponse<RestaurantImageUploadResponseDto>> uploadImage(
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestPart("imageType") String imageType,
-            @RequestPart("file") MultipartFile file
-    ) {
+            @RequestPart("file") MultipartFile file) {
         RestaurantImageType type;
         try {
             type = RestaurantImageType.valueOf(imageType);
@@ -213,8 +201,7 @@ public class RestaurantController {
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Get my restaurant UPI payment details")
     public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> getUpiDetails(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getUpiDetails(principal.userId())));
     }
 
@@ -223,40 +210,36 @@ public class RestaurantController {
     @Operation(summary = "Add or update my restaurant UPI payment details")
     public ResponseEntity<ApiResponse<RestaurantUpiResponseDto>> updateUpiDetails(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody RestaurantUpiRequestDto request
-    ) {
+            @Valid @RequestBody RestaurantUpiRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.updateUpiDetails(principal.userId(), request)));
     }
 
-
-    @PostMapping(value = {"/me/legal-details", "/me/business-details"})
+    @PostMapping(value = { "/me/legal-details", "/me/business-details" })
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Create business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> createLegalDetails(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody RestaurantLegalDetailRequestDto request
-    ) {
+            @Valid @RequestBody RestaurantLegalDetailRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(restaurantService.createLegalDetails(principal.userId(), request)));
     }
 
-    @GetMapping(value = {"/me/legal-details", "/me/business-details"})
+    @GetMapping(value = { "/me/legal-details", "/me/business-details" })
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Get business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> getLegalDetails(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getLegalDetails(principal.userId())));
     }
 
-    @PutMapping(value = {"/me/legal-details", "/me/business-details"})
+    @PutMapping(value = { "/me/legal-details", "/me/business-details" })
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Update business and legal details for my restaurant")
     public ResponseEntity<ApiResponse<RestaurantLegalDetailResponseDto>> updateLegalDetails(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody RestaurantLegalDetailRequestDto request
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateLegalDetails(principal.userId(), request)));
+            @Valid @RequestBody RestaurantLegalDetailRequestDto request) {
+        return ResponseEntity
+                .ok(ApiResponse.success(restaurantService.updateLegalDetails(principal.userId(), request)));
     }
 
     @GetMapping("/me/dashboard-summary")
@@ -265,9 +248,16 @@ public class RestaurantController {
     public ResponseEntity<ApiResponse<RestaurantDashboardSummaryResponseDto>> getDashboardSummary(
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
-    ) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
         return ResponseEntity.ok(ApiResponse.success(
                 restaurantService.getDashboardSummary(principal.userId(), dateFrom, dateTo)));
+    }
+
+    @PostMapping("/me/resubmit")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Resubmit restaurant KYC application after corrections")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> resubmit(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.resubmit(principal.userId())));
     }
 }
