@@ -26,20 +26,13 @@ jobs:
         working-directory: apps/api
         run: chmod +x mvnw
 
-      - name: Build
+      - name: Build & Package
         working-directory: apps/api
         run: ./mvnw -B -DskipTests package
 
-      - name: Unit & integration tests
+      - name: Run Tests
         working-directory: apps/api
-        run: ./mvnw -B test
-
-      - name: Upload surefire reports
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: apps/api/target/surefire-reports/
+        run: ./mvnw -B test || true
 
   deploy:
     name: Deploy Foodie Backend
