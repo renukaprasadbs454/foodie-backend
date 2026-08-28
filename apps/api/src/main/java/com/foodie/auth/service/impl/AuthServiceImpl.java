@@ -113,8 +113,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public TokenPairResponseDto verifyOtp(VerifyOtpRequestDto request) {
-        rateLimiter.check("ratelimit:otp-verify:" + request.phoneNumber(), OTP_VERIFY_LIMIT, OTP_VERIFY_WINDOW);
-
         if (request.userType() == null) {
             throw new BadRequestException(ErrorCode.USER_TYPE_REQUIRED, "userType is required for OTP verify.");
         }
@@ -122,17 +120,18 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
         }
 
-        String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
         boolean isDevOtp = "123456".equals(request.otp()) || "000000".equals(request.otp());
         if (!isDevOtp) {
+            rateLimiter.check("ratelimit:otp-verify:" + request.phoneNumber(), OTP_VERIFY_LIMIT, OTP_VERIFY_WINDOW);
+            String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
             if (storedHash == null) {
                 throw new OtpExpiredException();
             }
             if (!passwordEncoder.matches(request.otp(), storedHash)) {
                 throw new InvalidOtpException();
             }
+            redisTemplate.delete(otpKey(request.phoneNumber()));
         }
-        redisTemplate.delete(otpKey(request.phoneNumber()));
 
         // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays
         // exclusive.

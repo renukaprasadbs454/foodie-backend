@@ -95,7 +95,7 @@ class AuthServiceImplTest {
 
         @Test
         void requestOtp_storesHashedOtpAndDispatchesSms() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
 
                 authService.requestOtp("+919876543210");
 
@@ -107,7 +107,7 @@ class AuthServiceImplTest {
 
         @Test
         void verifyOtp_expiredOtp_throwsOtpExpiredException() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 when(valueOperations.get("otp:+919876543210")).thenReturn(null);
 
                 assertThatThrownBy(() -> authService.verifyOtp(
@@ -117,7 +117,7 @@ class AuthServiceImplTest {
 
         @Test
         void verifyOtp_invalidOtp_throwsInvalidOtpException() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("111111"));
 
                 assertThatThrownBy(() -> authService.verifyOtp(
@@ -127,7 +127,7 @@ class AuthServiceImplTest {
 
         @Test
         void verifyOtp_newUserWithoutUserType_throwsUserTypeRequired() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
 
                 assertThatThrownBy(() -> authService.verifyOtp(
                                 new VerifyOtpRequestDto("+919876543210", "123456", null, null)))
@@ -138,8 +138,8 @@ class AuthServiceImplTest {
 
         @Test
         void verifyOtp_existingUserSameType_issuesTokenPair() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-                when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("123456"));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("482913"));
 
                 UUID userId = UUID.randomUUID();
                 UserCredential credential = UserCredential.phoneSignup("+919876543210", UserType.CUSTOMER);
@@ -156,7 +156,7 @@ class AuthServiceImplTest {
                 when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
                 TokenPairResponseDto response = authService.verifyOtp(
-                                new VerifyOtpRequestDto("+919876543210", "123456", UserType.CUSTOMER, "device"));
+                                new VerifyOtpRequestDto("+919876543210", "482913", UserType.CUSTOMER, "device"));
 
                 assertThat(response.accessToken()).isEqualTo("access");
                 assertThat(response.userType()).isEqualTo(UserType.CUSTOMER);
@@ -169,8 +169,8 @@ class AuthServiceImplTest {
 
         @Test
         void verifyOtp_samePhoneDifferentType_createsSecondCredential() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
-                when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("123456"));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                when(valueOperations.get("otp:+919876543210")).thenReturn(passwordEncoder.encode("482913"));
 
                 UserCredential customer = UserCredential.phoneSignup("+919876543210", UserType.CUSTOMER);
                 ReflectionTestUtils.setField(customer, "id", UUID.randomUUID());
@@ -191,7 +191,7 @@ class AuthServiceImplTest {
                 when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
                 TokenPairResponseDto response = authService.verifyOtp(
-                                new VerifyOtpRequestDto("+919876543210", "123456", UserType.RESTAURANT, "device"));
+                                new VerifyOtpRequestDto("+919876543210", "482913", UserType.RESTAURANT, "device"));
 
                 assertThat(response.isNewUser()).isTrue();
                 assertThat(response.userType()).isEqualTo(UserType.RESTAURANT);
@@ -224,7 +224,7 @@ class AuthServiceImplTest {
 
         @Test
         void loginAdmin_success_issuesTokenPairWithRole() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 UUID userId = UUID.randomUUID();
                 UserCredential admin = UserCredential.adminProvisionWithPassword(
                                 "+919999999999",
@@ -254,7 +254,7 @@ class AuthServiceImplTest {
 
         @Test
         void loginAdmin_invalidPassword_throwsUnauthorized() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 UUID userId = UUID.randomUUID();
                 UserCredential admin = UserCredential.adminProvisionWithPassword(
                                 "+919999999999",
@@ -273,7 +273,7 @@ class AuthServiceImplTest {
 
         @Test
         void loginAdmin_unknownEmail_throwsUnauthorized() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 when(userCredentialRepository.findByEmailIgnoreCaseAndUserType("missing@foodie.local", UserType.ADMIN))
                                 .thenReturn(Optional.empty());
 
@@ -284,7 +284,7 @@ class AuthServiceImplTest {
 
         @Test
         void loginAdmin_disabled_throwsAccountDeactivated() {
-                doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
+                lenient().doNothing().when(rateLimiter).check(anyString(), anyInt(), any(Duration.class));
                 UUID userId = UUID.randomUUID();
                 UserCredential admin = UserCredential.adminProvisionWithPassword(
                                 "+919999999999",
