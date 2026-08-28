@@ -35,7 +35,7 @@ public class AdminPaymentController {
     }
 
     @GetMapping("/settlements")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'SETTLEMENT', 'VIEW')")
     @Operation(summary = "List payment settlements with admin escrow & split breakdown")
     public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements() {
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements()));
@@ -61,14 +61,14 @@ public class AdminPaymentController {
     }
 
     @GetMapping("/commission-rules")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'COMMISSION', 'VIEW')")
     @Operation(summary = "Get active commission and platform fee rules")
     public ResponseEntity<ApiResponse<CommissionConfigDto>> getCommissionRules() {
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.getCommissionRules()));
     }
 
     @PostMapping("/commission-rules")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'COMMISSION', 'UPDATE')")
     @Operation(summary = "Update active commission and platform fee rules")
     public ResponseEntity<ApiResponse<CommissionConfigDto>> updateCommissionRules(
             @Valid @RequestBody CommissionConfigDto config) {
@@ -76,7 +76,7 @@ public class AdminPaymentController {
     }
 
     @PostMapping("/calculate-split")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'PAYMENT', 'VIEW')")
     @Operation(summary = "Calculate payment split breakdown for given subtotal and delivery fee")
     public ResponseEntity<ApiResponse<PaymentSplitBreakdownDto>> calculateSplit(
             @RequestParam(defaultValue = "0.00") BigDecimal foodSubtotal,

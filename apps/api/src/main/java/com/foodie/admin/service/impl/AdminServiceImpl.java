@@ -17,6 +17,7 @@ import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ForbiddenException;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.shared.contract.AdminCredentialPort;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -62,13 +63,16 @@ public class AdminServiceImpl implements AdminService {
                 && !hasPermission(creatorAdmin.getId(), "ADMIN_USER", "CREATE")) {
             throw new ForbiddenException("SUPER_ADMIN required to create admin users.");
         }
+        if (cmd.role() == AdminRoleName.SUPER_ADMIN && creatorAdmin.getRole().getName() != AdminRoleName.SUPER_ADMIN) {
+            throw new ForbiddenException("Only SUPER_ADMIN may assign SUPER_ADMIN role.");
+        }
         Role role = roleRepository.findByName(cmd.role())
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found."));
         UUID credentialId = adminCredentialPort.ensureAdminCredential(cmd.phoneNumber(), cmd.email());
         if (adminUserRepository.existsByUserCredentialId(credentialId)) {
             throw new ConflictException(ErrorCode.CONFLICT, "Admin profile already exists for this credential.");
         }
-        AdminUser created = AdminUser.create(credentialId, role, cmd.fullName().trim());
+        AdminUser created = AdminUser.create(credentialId, role, cmd.fullName().trim(), cmd.restaurantId());
         try {
             created = adminUserRepository.save(created);
         } catch (DataIntegrityViolationException ex) {
@@ -139,17 +143,25 @@ public class AdminServiceImpl implements AdminService {
                 view.userCredentialId(),
                 view.fullName(),
                 view.role(),
-                view.profileImageKey()
+                view.profileImageKey(),
+                view.restaurantId(),
+                view.permissions()
         );
     }
 
     private AdminUserView toView(AdminUser admin) {
+        List<String> permissions = permissionRepository.findByRoleId(admin.getRole().getId())
+                .stream()
+                .map(p -> p.getResource().toLowerCase() + "." + p.getAction().toLowerCase())
+                .toList();
         return new AdminUserView(
                 admin.getId(),
                 admin.getUserCredentialId(),
                 admin.getFullName(),
                 admin.getRole().getName(),
-                admin.getProfileImageKey()
+                admin.getProfileImageKey(),
+                admin.getRestaurantId(),
+                permissions
         );
     }
 

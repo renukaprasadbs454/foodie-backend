@@ -4,6 +4,8 @@ import com.foodie.admin.dto.response.AdminUserResponseDto;
 import com.foodie.admin.entity.AdminRoleName;
 import java.util.UUID;
 
+import java.util.List;
+
 /**
  * Admin public interface (Phase3 §2.13).
  */
@@ -13,8 +15,17 @@ public interface AdminService {
             String fullName,
             String phoneNumber,
             String email,
-            AdminRoleName role
+            AdminRoleName role,
+            UUID restaurantId
     ) {
+        public CreateAdminUserCommand(
+                String fullName,
+                String phoneNumber,
+                String email,
+                AdminRoleName role
+        ) {
+            this(fullName, phoneNumber, email, role, null);
+        }
     }
 
     record ActorContext(UUID actorUserCredentialId) {
@@ -25,7 +36,9 @@ public interface AdminService {
             UUID userCredentialId,
             String fullName,
             AdminRoleName role,
-            String profileImageKey
+            String profileImageKey,
+            UUID restaurantId,
+            List<String> permissions
     ) {
     }
 

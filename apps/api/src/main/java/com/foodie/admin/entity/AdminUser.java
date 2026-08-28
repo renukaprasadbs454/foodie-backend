@@ -26,14 +26,22 @@ public class AdminUser extends BaseEntity {
     @Column(name = "profile_image_key", length = 500)
     private String profileImageKey;
 
+    @Column(name = "restaurant_id")
+    private UUID restaurantId;
+
     protected AdminUser() {
     }
 
     public static AdminUser create(UUID userCredentialId, Role role, String fullName) {
+        return create(userCredentialId, role, fullName, null);
+    }
+
+    public static AdminUser create(UUID userCredentialId, Role role, String fullName, UUID restaurantId) {
         AdminUser admin = new AdminUser();
         admin.userCredentialId = userCredentialId;
         admin.role = role;
         admin.fullName = fullName;
+        admin.restaurantId = restaurantId;
         return admin;
     }
 
@@ -51,5 +59,13 @@ public class AdminUser extends BaseEntity {
 
     public String getProfileImageKey() {
         return profileImageKey;
+    }
+
+    public UUID getRestaurantId() {
+        return restaurantId;
+    }
+
+    public void setRestaurantId(UUID restaurantId) {
+        this.restaurantId = restaurantId;
     }
 }

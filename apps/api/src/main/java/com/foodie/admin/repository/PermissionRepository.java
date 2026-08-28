@@ -7,4 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PermissionRepository extends JpaRepository<Permission, UUID> {
 
     boolean existsByRoleIdAndResourceAndAction(UUID roleId, String resource, String action);
+
+    java.util.List<Permission> findByRoleId(UUID roleId);
+
+    void deleteByRoleId(UUID roleId);
 }

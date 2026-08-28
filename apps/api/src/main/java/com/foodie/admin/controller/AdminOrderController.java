@@ -30,7 +30,7 @@ public class AdminOrderController {
     }
 
     @PostMapping("/{id}/override-status")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'ORDER', 'UPDATE')")
     @Operation(summary = "Emergency order status override (state-machine graph still enforced)")
     public ResponseEntity<ApiResponse<OrderResponseDto>> overrideStatus(
             @AuthenticationPrincipal AuthPrincipal principal,
