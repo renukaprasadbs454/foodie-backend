@@ -64,13 +64,14 @@ jobs:
             echo "Starting Foodie deployment"
             echo "======================================"
 
-            cd /root/foodie/backend/apps/api
-
+            cd /root/foodie/backend
             echo "Checking current Git status..."
             git status
 
             echo "Pulling latest code from main..."
             git pull origin main
+
+            cd /root/foodie/backend/apps/api
 
             echo "Building Foodie backend Docker image..."
             docker compose build backend
