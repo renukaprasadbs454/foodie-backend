@@ -1,7 +1,7 @@
 package com.foodie.common.enums;
 
 public enum RestaurantType {
-    VEG,
-    NON_VEG,
+    DELIVERY_ONLY,
+    DINE_IN_ONLY,
     BOTH
 }
