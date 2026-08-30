@@ -332,7 +332,9 @@ public class AuthServiceImpl implements AuthService {
             if (!token.isRevoked()) {
                 token.revoke();
             }
-            redisTemplate.delete(sessionKey(hash));
+            try {
+                redisTemplate.delete(sessionKey(hash));
+            } catch (Exception ignored) {}
         });
     }
 
@@ -342,7 +344,9 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenRepository.findByUserCredentialIdAndRevokedFalse(userCredentialId)
                 .forEach(token -> {
                     token.revoke();
-                    redisTemplate.delete(sessionKey(token.getTokenHash()));
+                    try {
+                        redisTemplate.delete(sessionKey(token.getTokenHash()));
+                    } catch (Exception ignored) {}
                 });
         refreshTokenRepository.revokeAllActiveForUser(userCredentialId);
     }
@@ -373,7 +377,9 @@ public class AuthServiceImpl implements AuthService {
 
         Duration sessionTtl = Duration.between(Instant.now(), expiresAt);
         if (!sessionTtl.isNegative() && !sessionTtl.isZero()) {
-            redisTemplate.opsForValue().set(sessionKey(refreshHash), credential.getId().toString(), sessionTtl);
+            try {
+                redisTemplate.opsForValue().set(sessionKey(refreshHash), credential.getId().toString(), sessionTtl);
+            } catch (Exception ignored) {}
         }
 
         return new TokenPairResponseDto(
