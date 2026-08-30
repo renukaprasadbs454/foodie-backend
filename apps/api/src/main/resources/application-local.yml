@@ -30,10 +30,6 @@ logging:
     org.springframework.security: INFO
 
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  health:
-    redis:
-      enabled: false
+  endpoint:
+    health:
+      show-details: always
