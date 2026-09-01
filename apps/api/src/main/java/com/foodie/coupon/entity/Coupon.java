@@ -14,7 +14,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "coupon")
-@SQLRestriction("deleted_at IS NULL")
+@SQLRestriction("\"deleted_at\" IS NULL")
 public class Coupon extends BaseEntity {
 
     @Column(name = "code", nullable = false, unique = true, length = 30)
@@ -67,8 +67,7 @@ public class Coupon extends BaseEntity {
             Instant expiryDate,
             Integer usageLimitTotal,
             int usageLimitPerUser,
-            UUID restaurantId
-    ) {
+            UUID restaurantId) {
         Coupon coupon = new Coupon();
         coupon.code = code;
         coupon.discountType = discountType;

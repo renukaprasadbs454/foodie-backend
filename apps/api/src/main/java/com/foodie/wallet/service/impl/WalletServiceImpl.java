@@ -10,6 +10,9 @@ import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.repository.RestaurantRepository;
+import com.foodie.common.enums.UserType;
+import com.foodie.shared.contract.CustomerSummaryProvider;
+import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
@@ -57,6 +60,8 @@ public class WalletServiceImpl implements WalletService {
     private final PayoutRepository payoutRepository;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
     private final RestaurantRepository restaurantRepository;
+    private final CustomerSummaryProvider customerSummaryProvider;
+    private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final PayoutIdempotencyStore payoutIdempotencyStore;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -66,6 +71,8 @@ public class WalletServiceImpl implements WalletService {
             PayoutRepository payoutRepository,
             DeliveryPartnerLookup deliveryPartnerLookup,
             RestaurantRepository restaurantRepository,
+            CustomerSummaryProvider customerSummaryProvider,
+            RestaurantSummaryProvider restaurantSummaryProvider,
             PayoutIdempotencyStore payoutIdempotencyStore,
             ApplicationEventPublisher eventPublisher) {
         this.walletAccountRepository = walletAccountRepository;
@@ -73,15 +80,41 @@ public class WalletServiceImpl implements WalletService {
         this.payoutRepository = payoutRepository;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
         this.restaurantRepository = restaurantRepository;
+        this.customerSummaryProvider = customerSummaryProvider;
+        this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.payoutIdempotencyStore = payoutIdempotencyStore;
         this.eventPublisher = eventPublisher;
     }
 
+    private UUID resolveOwnerId(UUID userCredentialId, UserType userType) {
+        return switch (userType) {
+            case DELIVERY_PARTNER -> deliveryPartnerLookup.findPartnerIdByUserCredentialId(userCredentialId)
+                    .orElse(userCredentialId);
+            case CUSTOMER -> customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                    .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                    .orElse(userCredentialId);
+            case RESTAURANT -> restaurantSummaryProvider.findByOwnerUserCredentialId(userCredentialId)
+                    .map(com.foodie.shared.contract.RestaurantSummaryProvider.RestaurantSummary::restaurantId)
+                    .orElse(userCredentialId);
+            default -> throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Unsupported user type for wallet.");
+        };
+    }
+
+    private OwnerType resolveOwnerType(UserType userType) {
+        return switch (userType) {
+            case DELIVERY_PARTNER -> OwnerType.DELIVERY_PARTNER;
+            case CUSTOMER -> OwnerType.CUSTOMER;
+            case RESTAURANT -> OwnerType.RESTAURANT;
+            default -> throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Unsupported user type for wallet.");
+        };
+    }
+
     @Override
     @Transactional
-    public WalletBalanceResponseDto getBalance(UUID userCredentialId) {
-        UUID partnerId = requirePartnerId(userCredentialId);
-        WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
+    public WalletBalanceResponseDto getBalance(UUID userCredentialId, UserType userType) {
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
         return WalletMapper.toBalance(account);
     }
 
@@ -89,13 +122,15 @@ public class WalletServiceImpl implements WalletService {
     @Transactional
     public PageResult<LedgerEntryResponseDto> getLedger(
             UUID userCredentialId,
+            UserType userType,
             int page,
             int size,
             String sort,
             Instant createdAtFrom,
             Instant createdAtTo) {
-        UUID partnerId = requirePartnerId(userCredentialId);
-        WalletAccount account = getOrCreate(OwnerType.DELIVERY_PARTNER, partnerId);
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
         Page<LedgerEntry> result;
 
@@ -256,8 +291,7 @@ public class WalletServiceImpl implements WalletService {
             int size,
             String sort,
             Instant createdAtFrom,
-            Instant createdAtTo
-    ) {
+            Instant createdAtTo) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
@@ -270,8 +304,7 @@ public class WalletServiceImpl implements WalletService {
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        );
+                result.getTotalPages());
         return new PageResult<>(items, meta);
     }
 
@@ -280,8 +313,7 @@ public class WalletServiceImpl implements WalletService {
     public PayoutResponseDto requestRestaurantPayout(
             UUID ownerCredentialId,
             PayoutRequestDto request,
-            String idempotencyKey
-    ) {
+            String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var cached = payoutIdempotencyStore.find(idempotencyKey.trim());
             if (cached.isPresent()) {
@@ -299,8 +331,7 @@ public class WalletServiceImpl implements WalletService {
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.INSUFFICIENT_BALANCE,
-                    "Requested payout exceeds available wallet balance."
-            );
+                    "Requested payout exceeds available wallet balance.");
         }
 
         Payout payout = payoutRepository.save(Payout.request(account.getId(), amount));
@@ -346,12 +377,26 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletAccount getOrCreate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                .orElseGet(() -> walletAccountRepository.save(WalletAccount.open(ownerType, ownerId)));
+                .orElseGet(() -> {
+                    try {
+                        return walletAccountRepository.save(WalletAccount.open(ownerType, ownerId));
+                    } catch (Exception ex) {
+                        return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+                    }
+                });
     }
 
     private WalletAccount getOrCreateForUpdate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                .orElseGet(() -> walletAccountRepository.save(WalletAccount.open(ownerType, ownerId)));
+                .orElseGet(() -> {
+                    try {
+                        return walletAccountRepository.save(WalletAccount.open(ownerType, ownerId));
+                    } catch (Exception ex) {
+                        return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+                    }
+                });
     }
 
     private static int clampSize(int size) {

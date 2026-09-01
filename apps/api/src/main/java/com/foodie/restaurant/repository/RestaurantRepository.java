@@ -16,6 +16,8 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
 
      Optional<Restaurant> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
 
+     java.util.List<Restaurant> findAllByStatus(com.foodie.common.enums.RestaurantStatus status);
+
      /**
       * JPQL search — works on both H2 (local) and PostgreSQL (production).
       * All @Param names are referenced in the query (Spring Data validates this).

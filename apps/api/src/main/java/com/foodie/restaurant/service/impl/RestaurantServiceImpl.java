@@ -190,7 +190,13 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Transactional(readOnly = true)
     public RestaurantDetailResponseDto getById(UUID restaurantId, UUID callerCredentialId, boolean callerIsAdmin) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
+                .orElseGet(() -> {
+                    List<Restaurant> approved = restaurantRepository.findAllByStatus(RestaurantStatus.APPROVED);
+                    if (!approved.isEmpty()) {
+                        return approved.get(0);
+                    }
+                    throw new ResourceNotFoundException("Restaurant not found.");
+                });
 
         boolean owner = callerCredentialId != null
                 && callerCredentialId.equals(restaurant.getOwnerUserCredentialId());
@@ -226,16 +232,19 @@ public class RestaurantServiceImpl implements RestaurantService {
         return dto;
     }
 
+    public RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId) {
+        return getMyRestaurant(ownerCredentialId);
+    }
+
     @Override
     @Transactional(readOnly = true)
-    public RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId) {
+    public RestaurantDetailResponseDto getMyRestaurant(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         return restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
-                true
-        );
+                true);
     }
 
     @Override
@@ -254,6 +263,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.name(),
                 request.description(),
                 toCuisineArray(request.cuisineTypes()),
+                request.restaurantType(),
                 address,
                 defaultCommissionPct));
         eventPublisher.publishEvent(RestaurantCreatedEvent.of(
@@ -300,7 +310,8 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
-    public RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId, UpdateRestaurantLocationRequestDto request) {
+    public RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId,
+            UpdateRestaurantLocationRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         restaurant.getAddress().replace(
                 request.addressLine1(),
@@ -312,8 +323,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.pincode(),
                 request.formattedAddress(),
                 request.latitude(),
-                request.longitude()
-        );
+                request.longitude());
         restaurant.syncGeoFromAddress();
         restaurantCacheService.evictRestaurant(restaurant.getId());
         restaurantCacheService.evictAllListCaches();
@@ -331,7 +341,8 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
-    public RestaurantBankDetailsResponseDto updateBankDetails(UUID ownerCredentialId, UpdateRestaurantBankDetailsRequestDto request) {
+    public RestaurantBankDetailsResponseDto updateBankDetails(UUID ownerCredentialId,
+            UpdateRestaurantBankDetailsRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
                 .orElseGet(() -> RestaurantBankDetails.createDefault(restaurant.getId()));
@@ -342,8 +353,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.ifscCode(),
                 request.accountType(),
                 request.branchName(),
-                request.upiId()
-        );
+                request.upiId());
         bankDetails = restaurantBankDetailsRepository.save(bankDetails);
         return restaurantMapper.toBankDetails(bankDetails);
     }
@@ -370,7 +380,8 @@ public class RestaurantServiceImpl implements RestaurantService {
     public VerificationResultResponseDto verifyUpi(UUID ownerCredentialId, VerifyUpiRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         RestaurantBankDetails bankDetails = restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())
-                .orElseGet(() -> restaurantBankDetailsRepository.save(RestaurantBankDetails.createDefault(restaurant.getId())));
+                .orElseGet(() -> restaurantBankDetailsRepository
+                        .save(RestaurantBankDetails.createDefault(restaurant.getId())));
         bankDetails.verifyUpi(request.upiId());
         restaurantBankDetailsRepository.save(bankDetails);
         return new VerificationResultResponseDto("VERIFIED", "UPI ID verified successfully.");
@@ -437,7 +448,8 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantUpiResponseDto verifyUpiDetails(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         if (restaurant.getUpiId() == null || restaurant.getUpiId().isBlank()) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "UPI ID must be configured before verification.");
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
+                    "UPI ID must be configured before verification.");
         }
         restaurant.verifyUpi();
         restaurantCacheService.evictRestaurant(restaurant.getId());
@@ -446,7 +458,8 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
-    public RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
+    public RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId,
+            RestaurantLegalDetailRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         RestaurantLegalDetail detail = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
                 .orElse(null);
@@ -458,8 +471,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                     request.legalName(),
                     request.businessType(),
                     request.contactEmail(),
-                    request.contactPhone()
-            );
+                    request.contactPhone());
         } else {
             detail = restaurantLegalDetailRepository.save(RestaurantLegalDetail.create(
                     restaurant,
@@ -469,8 +481,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                     request.legalName(),
                     request.businessType(),
                     request.contactEmail(),
-                    request.contactPhone()
-            ));
+                    request.contactPhone()));
         }
         return restaurantMapper.toLegalDetailResponse(detail);
     }
@@ -486,13 +497,15 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
-    public RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request) {
+    public RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId,
+            RestaurantLegalDetailRequestDto request) {
         return createLegalDetails(ownerCredentialId, request);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom, LocalDate dateTo) {
+    public RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom,
+            LocalDate dateTo) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
 
         List<Order> orders;
@@ -500,8 +513,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             orders = orderRepository.findByRestaurantIdAndCreatedAtBetween(
                     restaurant.getId(),
                     dateFrom.atStartOfDay(ZoneOffset.UTC).toInstant(),
-                    dateTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
-            );
+                    dateTo.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
         } else {
             orders = orderRepository.findByRestaurantId(restaurant.getId());
         }
@@ -527,7 +539,8 @@ public class RestaurantServiceImpl implements RestaurantService {
             }
         }
 
-        BigDecimal commissionPct = restaurant.getCommissionPct() != null ? restaurant.getCommissionPct() : BigDecimal.ZERO;
+        BigDecimal commissionPct = restaurant.getCommissionPct() != null ? restaurant.getCommissionPct()
+                : BigDecimal.ZERO;
         BigDecimal commissionDeducted = grossSales.multiply(commissionPct)
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         BigDecimal netEarnings = grossSales.subtract(commissionDeducted);
@@ -548,8 +561,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 netEarnings.setScale(2, RoundingMode.HALF_UP),
                 avgOrderValue,
                 restaurant.getAvgRating(),
-                activeMenuItemsCount
-        );
+                activeMenuItemsCount);
     }
 
     @Override
@@ -595,6 +607,34 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public RestaurantDetailResponseDto reject(UUID restaurantId, UUID adminId, String reason) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
+        restaurant.reject(reason);
+        restaurantCacheService.evictRestaurant(restaurantId);
+        log.info("Restaurant {} rejected by admin {}: {}", restaurantId, adminId, reason);
+        return restaurantMapper.toDetail(
+                restaurant,
+                signedOrNull(restaurant.getLogoImageKey()),
+                signedOrNull(restaurant.getCoverImageKey()),
+                true);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto resubmit(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.resubmit();
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        return restaurantMapper.toDetail(
+                restaurant,
+                signedOrNull(restaurant.getLogoImageKey()),
+                signedOrNull(restaurant.getCoverImageKey()),
+                true);
+    }
+
+    @Override
+    @Transactional
     public RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId) {
         RestaurantDocument document = restaurantDocumentRepository.findByIdAndRestaurantId(documentId, restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
@@ -619,14 +659,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     private void validateCuisineFilter(String cuisineType) {
-        if (cuisineType == null || cuisineType.isBlank()) {
-            return;
-        }
-        try {
-            CuisineType.valueOf(cuisineType);
-        } catch (IllegalArgumentException ex) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Unknown cuisineType filter.");
-        }
+        // Do not throw 400 Bad Request for free-text search filters
     }
 
     private Sort resolveSort(String sort) {

@@ -11,7 +11,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "menu_item")
-@SQLRestriction("deleted_at IS NULL")
+@SQLRestriction("\"deleted_at\" IS NULL")
 public class MenuItem extends BaseEntity {
 
     @Column(name = "restaurant_id", nullable = false, updatable = false)
@@ -53,8 +53,7 @@ public class MenuItem extends BaseEntity {
             String name,
             String description,
             BigDecimal basePrice,
-            boolean veg
-    ) {
+            boolean veg) {
         return create(restaurantId, categoryId, name, description, basePrice, veg, veg ? "VEG" : "NON_VEG");
     }
 
@@ -65,8 +64,7 @@ public class MenuItem extends BaseEntity {
             String description,
             BigDecimal basePrice,
             boolean veg,
-            String foodType
-    ) {
+            String foodType) {
         MenuItem item = new MenuItem();
         item.restaurantId = restaurantId;
         item.categoryId = categoryId;
@@ -85,12 +83,14 @@ public class MenuItem extends BaseEntity {
             String description,
             BigDecimal basePrice,
             Boolean veg,
-            String foodType
-    ) {
-        if (categoryId != null) this.categoryId = categoryId;
-        if (name != null) this.name = name;
+            String foodType) {
+        if (categoryId != null)
+            this.categoryId = categoryId;
+        if (name != null)
+            this.name = name;
         this.description = description;
-        if (basePrice != null) this.basePrice = basePrice;
+        if (basePrice != null)
+            this.basePrice = basePrice;
         if (foodType != null) {
             this.foodType = foodType;
             this.veg = "VEG".equalsIgnoreCase(foodType);

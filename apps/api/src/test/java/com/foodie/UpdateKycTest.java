@@ -13,7 +13,11 @@ public class UpdateKycTest extends AbstractIntegrationTest {
     @Test
     public void executeUpdate() {
         int rows = jdbcTemplate.update(
-                "UPDATE delivery_partner SET kyc_status = 'VERIFIED' WHERE user_credential_id::text LIKE '4317a3a8-ed21%'");
+                "UPDATE \"delivery_partner\" " +
+                "SET \"kyc_status\" = 'VERIFIED' " +
+                "WHERE CAST(\"user_credential_id\" AS VARCHAR) LIKE '4317a3a8-ed21%'"
+        );
+
         System.out.println("========== UPDATED KYC ROWS: " + rows + " ==========");
     }
 }

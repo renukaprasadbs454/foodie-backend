@@ -14,6 +14,11 @@ public interface ObjectStorageClient {
     void putObject(String key, InputStream content, long contentLength, String contentType);
 
     /**
+     * Retrieve exact object bytes.
+     */
+    byte[] getObject(String key);
+
+    /**
      * Short-lived signed URL for private retrieval.
      */
     String createSignedGetUrl(String key, Duration ttl);

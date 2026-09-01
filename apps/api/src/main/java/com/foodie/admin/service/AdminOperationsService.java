@@ -18,36 +18,38 @@ import java.util.UUID;
 
 public interface AdminOperationsService {
 
-    RestaurantDetailResponseDto approveRestaurant(UUID actorCredentialId, UUID restaurantId);
+        RestaurantDetailResponseDto approveRestaurant(UUID actorCredentialId, UUID restaurantId);
 
-    RestaurantDetailResponseDto suspendRestaurant(
-            UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request);
+        RestaurantDetailResponseDto suspendRestaurant(
+                        UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request);
 
-    DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId);
+        RestaurantDetailResponseDto rejectRestaurant(
+                        UUID actorCredentialId, UUID restaurantId, String reason);
 
-    CouponResponseDto createCoupon(UUID actorCredentialId, CreateCouponRequestDto request);
+        DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId);
 
-    DeactivateCouponResponseDto deactivateCoupon(UUID actorCredentialId, UUID couponId);
+        CouponResponseDto createCoupon(UUID actorCredentialId, CreateCouponRequestDto request);
 
-    OrderResponseDto overrideOrderStatus(
-            UUID actorCredentialId, UUID orderId, OverrideOrderStatusRequestDto request);
+        DeactivateCouponResponseDto deactivateCoupon(UUID actorCredentialId, UUID couponId);
 
-    ModerationResponseDto flagReview(UUID actorCredentialId, UUID reviewId, FlagReviewRequestDto request);
+        OrderResponseDto overrideOrderStatus(
+                        UUID actorCredentialId, UUID orderId, OverrideOrderStatusRequestDto request);
 
-    ModerationResponseDto clearReviewFlag(UUID actorCredentialId, UUID reviewId);
+        ModerationResponseDto flagReview(UUID actorCredentialId, UUID reviewId, FlagReviewRequestDto request);
 
-    PageResult<AuditLogResponseDto> listAuditLogs(
-            UUID actorCredentialId,
-            String resourceType,
-            UUID resourceId,
-            UUID adminUserId,
-            Instant createdAtFrom,
-            Instant createdAtTo,
-            int page,
-            int size,
-            String sort
-    );
+        ModerationResponseDto clearReviewFlag(UUID actorCredentialId, UUID reviewId);
 
-    record PageResult<T>(List<T> items, PaginationMeta pagination) {
-    }
+        PageResult<AuditLogResponseDto> listAuditLogs(
+                        UUID actorCredentialId,
+                        String resourceType,
+                        UUID resourceId,
+                        UUID adminUserId,
+                        Instant createdAtFrom,
+                        Instant createdAtTo,
+                        int page,
+                        int size,
+                        String sort);
+
+        record PageResult<T>(List<T> items, PaginationMeta pagination) {
+        }
 }

@@ -10,5 +10,5 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
 
     Optional<Category> findByIdAndRestaurantId(UUID id, UUID restaurantId);
 
-    List<Category> findByRestaurantIdOrderByDisplayOrderAscCreatedAtAsc(UUID restaurantId);
+    List<Category> findByRestaurantIdOrderByDisplayOrderAsc(UUID restaurantId);
 }

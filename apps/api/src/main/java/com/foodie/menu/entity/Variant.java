@@ -11,7 +11,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "variant")
-@SQLRestriction("deleted_at IS NULL")
+@SQLRestriction("\"deleted_at\" IS NULL")
 public class Variant extends BaseEntity {
 
     @Column(name = "menu_item_id", nullable = false, updatable = false)

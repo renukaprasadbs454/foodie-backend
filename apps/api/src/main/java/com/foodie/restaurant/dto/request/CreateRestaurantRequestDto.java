@@ -10,23 +10,29 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record CreateRestaurantRequestDto(
-        @NotBlank
-        @Size(min = 2, max = 255)
-        String name,
+                @NotBlank @Size(min = 2, max = 255) String name,
 
-        @Size(max = 1000)
-        String description,
+                @Size(max = 1000) String description,
 
-        @NotEmpty
-        List<@NotNull CuisineType> cuisineTypes,
+                @NotEmpty List<@NotNull CuisineType> cuisineTypes,
 
-        @NotNull
-        @Valid
-        RestaurantAddressRequestDto address,
+                com.foodie.common.enums.RestaurantType restaurantType,
 
-        /**
-         * Accepted for OpenAPI completeness only — ignored server-side (API Contracts §3.3).
-         */
-        BigDecimal commissionPct
-) {
+                @NotNull @Valid RestaurantAddressRequestDto address,
+
+                /**
+                 * Accepted for OpenAPI completeness only — ignored server-side (API Contracts
+                 * §3.3).
+                 */
+                BigDecimal commissionPct) {
+
+        public CreateRestaurantRequestDto(
+                        String name,
+                        String description,
+                        List<CuisineType> cuisineTypes,
+                        RestaurantAddressRequestDto address,
+                        BigDecimal commissionPct) {
+                this(name, description, cuisineTypes, com.foodie.common.enums.RestaurantType.BOTH, address,
+                                commissionPct);
+        }
 }

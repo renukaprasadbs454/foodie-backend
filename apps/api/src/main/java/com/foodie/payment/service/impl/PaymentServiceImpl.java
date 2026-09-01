@@ -1,5 +1,7 @@
 package com.foodie.payment.service.impl;
 
+import com.foodie.common.enums.UserType;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.enums.OrderStatus;
@@ -27,6 +29,9 @@ import com.foodie.shared.contract.OrderPaymentPort;
 import com.foodie.shared.event.PaymentCapturedEvent;
 import com.foodie.shared.event.PaymentFailedEvent;
 import com.foodie.shared.event.RefundProcessedEvent;
+import com.foodie.wallet.service.WalletService;
+import com.foodie.common.enums.OwnerType;
+import com.foodie.common.enums.LedgerReferenceType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.UUID;
@@ -53,6 +58,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentIdempotencyStore idempotencyStore;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final WalletService walletService;
 
     public PaymentServiceImpl(
             PaymentRepository paymentRepository,
@@ -65,8 +71,8 @@ public class PaymentServiceImpl implements PaymentService {
             WebhookDedupService webhookDedupService,
             PaymentIdempotencyStore idempotencyStore,
             ObjectMapper objectMapper,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher,
+            WalletService walletService) {
         this.paymentRepository = paymentRepository;
         this.refundRequestRepository = refundRequestRepository;
         this.orderPaymentPort = orderPaymentPort;
@@ -78,11 +84,13 @@ public class PaymentServiceImpl implements PaymentService {
         this.idempotencyStore = idempotencyStore;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
+        this.walletService = walletService;
     }
 
     @Override
     @Transactional
-    public PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey) {
+    public PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey,
+            boolean useWallet) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException(
                     ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "Idempotency-Key header is required.");
@@ -115,7 +123,18 @@ public class PaymentServiceImpl implements PaymentService {
                     ErrorCode.ORDER_NOT_PAYABLE, "Order is not payable in its current status.");
         }
 
-        BigDecimal amount = order.totalAmount().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalAmount = order.totalAmount().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal walletAmountUsed = BigDecimal.ZERO;
+        BigDecimal razorpayAmount = totalAmount;
+
+        if (useWallet) {
+            BigDecimal walletBalance = walletService.getBalance(userCredentialId, UserType.CUSTOMER).balance();
+            if (walletBalance.compareTo(BigDecimal.ZERO) > 0) {
+                walletAmountUsed = walletBalance.min(totalAmount);
+                razorpayAmount = totalAmount.subtract(walletAmountUsed);
+            }
+        }
+
         var existing = paymentRepository.findByOrderId(orderId);
         if (existing.isPresent()) {
             Payment payment = existing.get();
@@ -125,9 +144,26 @@ public class PaymentServiceImpl implements PaymentService {
                 return view;
             }
             if (payment.getStatus() == PaymentStatus.FAILED) {
-                var created = razorpayClient.createOrder(amount, shortReceipt(orderId), orderId.toString());
-                payment.reinitiate(created.razorpayOrderId(), idempotencyKey, amount);
-                paymentRepository.save(payment);
+                String razorpayOrderId = null;
+                if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    var created = razorpayClient.createOrder(razorpayAmount, shortReceipt(orderId), orderId.toString());
+                    razorpayOrderId = created.razorpayOrderId();
+                }
+
+                if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
+                    walletService.debit(OwnerType.CUSTOMER, customerId, walletAmountUsed,
+                            LedgerReferenceType.ORDER_PAYMENT, orderId);
+                }
+
+                payment.reinitiate(razorpayOrderId, idempotencyKey, razorpayAmount, walletAmountUsed);
+                if (razorpayAmount.compareTo(BigDecimal.ZERO) == 0 && walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
+                    payment.markCaptured("WALLET_" + orderId);
+                    paymentRepository.save(payment);
+                    eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
+                } else {
+                    paymentRepository.save(payment);
+                }
+
                 PaymentInitiationResponseDto view = toInitiationView(payment);
                 idempotencyStore.store(idempotencyKey, view);
                 return view;
@@ -136,9 +172,24 @@ public class PaymentServiceImpl implements PaymentService {
                     ErrorCode.ORDER_NOT_PAYABLE, "Order already has a captured or refunded payment.");
         }
 
-        var created = razorpayClient.createOrder(amount, shortReceipt(orderId), orderId.toString());
+        String razorpayOrderId = null;
+        if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
+            var created = razorpayClient.createOrder(razorpayAmount, shortReceipt(orderId), orderId.toString());
+            razorpayOrderId = created.razorpayOrderId();
+        }
+
+        if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
+            walletService.debit(OwnerType.CUSTOMER, customerId, walletAmountUsed, LedgerReferenceType.ORDER_PAYMENT,
+                    orderId);
+        }
+
         Payment payment = paymentRepository.save(Payment.initiate(
-                orderId, created.razorpayOrderId(), amount, idempotencyKey));
+                orderId, razorpayOrderId, razorpayAmount, walletAmountUsed, idempotencyKey));
+
+        if (razorpayAmount.compareTo(BigDecimal.ZERO) == 0 && walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
+            eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
+        }
+
         PaymentInitiationResponseDto view = toInitiationView(payment);
         idempotencyStore.store(idempotencyKey, view);
         return view;
@@ -146,12 +197,12 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public boolean verifyPayment(UUID userCredentialId, com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
+    public boolean verifyPayment(UUID userCredentialId,
+            com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
         boolean valid = signatureVerifier.isValidPaymentSignature(
                 request.razorpayOrderId(),
                 request.razorpayPaymentId(),
-                request.razorpaySignature()
-        );
+                request.razorpaySignature());
         if (!valid) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Invalid payment signature.");
         }
@@ -164,8 +215,7 @@ public class PaymentServiceImpl implements PaymentService {
             paymentRepository.save(payment);
             eventPublisher.publishEvent(PaymentCapturedEvent.of(
                     payment.getOrderId(),
-                    payment.getId()
-            ));
+                    payment.getId()));
         }
         return true;
     }
@@ -207,8 +257,7 @@ public class PaymentServiceImpl implements PaymentService {
             UUID paymentId,
             RefundPaymentRequestDto request,
             UUID actorId,
-            boolean systemActor
-    ) {
+            boolean systemActor) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found."));
 
@@ -244,8 +293,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info(
                 "Refund initiated refundRequestId={} paymentId={} amount={} systemActor={} actorId={}",
-                refundRequest.getId(), paymentId, amount, systemActor, initiator
-        );
+                refundRequest.getId(), paymentId, amount, systemActor, initiator);
 
         return new RefundInitiationResponseDto(refundRequest.getId(), refundRequest.getStatus());
     }
@@ -290,6 +338,16 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
         payment.markFailed(razorpayPaymentId);
+        paymentRepository.save(payment);
+
+        if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
+            OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(payment.getOrderId()).orElse(null);
+            if (order != null) {
+                walletService.credit(OwnerType.CUSTOMER, order.customerId(), payment.getWalletAmount(),
+                        LedgerReferenceType.ORDER_PAYMENT, payment.getId());
+            }
+        }
+
         eventPublisher.publishEvent(PaymentFailedEvent.of(payment.getOrderId(), payment.getId()));
         log.info("Payment FAILED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
     }
@@ -338,8 +396,9 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.getRazorpayOrderId(),
                 payment.getAmount(),
                 "INR",
-                razorpayProperties.getKeyId()
-        );
+                razorpayProperties.getKeyId(),
+                payment.getWalletAmount(),
+                payment.getStatus().name());
     }
 
     private static String shortReceipt(UUID orderId) {

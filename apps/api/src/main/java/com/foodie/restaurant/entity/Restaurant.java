@@ -55,6 +55,13 @@ public class Restaurant extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private RestaurantStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restaurant_type", length = 30)
+    private com.foodie.common.enums.RestaurantType restaurantType = com.foodie.common.enums.RestaurantType.BOTH;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
     @Column(name = "commission_pct", nullable = false, precision = 4, scale = 2)
     private BigDecimal commissionPct;
 
@@ -64,8 +71,8 @@ public class Restaurant extends BaseEntity {
     @Column(name = "upi_name", length = 150)
     private String upiName;
 
-    @Column(name = "upi_verified", nullable = false)
-    private boolean upiVerified = false;
+    @Column(name = "upi_verified")
+    private Boolean upiVerified = Boolean.FALSE;
 
     @Column(name = "upi_verified_at")
     private java.time.Instant upiVerifiedAt;
@@ -80,11 +87,25 @@ public class Restaurant extends BaseEntity {
             String[] cuisineTypes,
             RestaurantAddress address,
             BigDecimal commissionPct) {
+        return createPending(ownerUserCredentialId, name, description, cuisineTypes,
+                com.foodie.common.enums.RestaurantType.BOTH, address, commissionPct);
+    }
+
+    public static Restaurant createPending(
+            UUID ownerUserCredentialId,
+            String name,
+            String description,
+            String[] cuisineTypes,
+            com.foodie.common.enums.RestaurantType restaurantType,
+            RestaurantAddress address,
+            BigDecimal commissionPct) {
         Restaurant restaurant = new Restaurant();
         restaurant.ownerUserCredentialId = ownerUserCredentialId;
         restaurant.name = name;
         restaurant.description = description;
         restaurant.cuisineTypes = cuisineTypes;
+        restaurant.restaurantType = restaurantType != null ? restaurantType
+                : com.foodie.common.enums.RestaurantType.BOTH;
         restaurant.address = address;
         restaurant.latitude = address.getLatitude();
         restaurant.longitude = address.getLongitude();
@@ -95,9 +116,17 @@ public class Restaurant extends BaseEntity {
     }
 
     public void updateProfile(String name, String description, String[] cuisineTypes) {
+        updateProfile(name, description, cuisineTypes, null);
+    }
+
+    public void updateProfile(String name, String description, String[] cuisineTypes,
+            com.foodie.common.enums.RestaurantType restaurantType) {
         this.name = name;
         this.description = description;
         this.cuisineTypes = cuisineTypes;
+        if (restaurantType != null) {
+            this.restaurantType = restaurantType;
+        }
     }
 
     public void syncGeoFromAddress() {
@@ -107,10 +136,21 @@ public class Restaurant extends BaseEntity {
 
     public void approve() {
         this.status = RestaurantStatus.APPROVED;
+        this.rejectionReason = null;
     }
 
     public void suspend() {
         this.status = RestaurantStatus.SUSPENDED;
+    }
+
+    public void reject(String reason) {
+        this.status = RestaurantStatus.REJECTED;
+        this.rejectionReason = reason;
+    }
+
+    public void resubmit() {
+        this.status = RestaurantStatus.PENDING;
+        this.rejectionReason = null;
     }
 
     public void setLogoImageKey(String logoImageKey) {
@@ -142,6 +182,14 @@ public class Restaurant extends BaseEntity {
 
     public String[] getCuisineTypes() {
         return cuisineTypes;
+    }
+
+    public com.foodie.common.enums.RestaurantType getRestaurantType() {
+        return restaurantType;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
     }
 
     public RestaurantAddress getAddress() {
@@ -197,7 +245,7 @@ public class Restaurant extends BaseEntity {
     }
 
     public boolean isUpiVerified() {
-        return upiVerified;
+        return Boolean.TRUE.equals(upiVerified);
     }
 
     public java.time.Instant getUpiVerifiedAt() {

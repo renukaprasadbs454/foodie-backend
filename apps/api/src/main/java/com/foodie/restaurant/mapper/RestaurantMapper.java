@@ -30,16 +30,14 @@ public class RestaurantMapper {
                 restaurant.getAvgRating(),
                 restaurant.getLatitude(),
                 restaurant.getLongitude(),
-                imageUrl
-        );
+                imageUrl);
     }
 
     public RestaurantDetailResponseDto toDetail(
             Restaurant restaurant,
             String logoUrl,
             String coverUrl,
-            boolean privileged
-    ) {
+            boolean privileged) {
         RestaurantAddress address = restaurant.getAddress();
         return new RestaurantDetailResponseDto(
                 restaurant.getId(),
@@ -56,17 +54,17 @@ public class RestaurantMapper {
                         address.getPincode(),
                         address.getFormattedAddress(),
                         address.getLatitude(),
-                        address.getLongitude()
-                ),
+                        address.getLongitude()),
                 restaurant.getLatitude(),
                 restaurant.getLongitude(),
                 logoUrl,
                 coverUrl,
                 restaurant.getAvgRating(),
                 restaurant.getStatus().name(),
+                restaurant.getRestaurantType(),
+                restaurant.getRejectionReason(),
                 privileged ? restaurant.getCommissionPct() : null,
-                privileged ? restaurant.getOwnerUserCredentialId() : null
-        );
+                privileged ? restaurant.getOwnerUserCredentialId() : null);
     }
 
     public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {
@@ -128,8 +126,7 @@ public class RestaurantMapper {
         return new RestaurantDocumentResponseDto(
                 document.getId(),
                 document.getDocType().name(),
-                document.getVerifiedAt()
-        );
+                document.getVerifiedAt());
     }
 
     public RestaurantUpiResponseDto toUpiResponse(Restaurant restaurant) {

@@ -63,8 +63,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
             CouponAdminService couponAdminService,
             OrderService orderService,
             ReviewService reviewService,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.adminUserRepository = adminUserRepository;
         this.auditLogRepository = auditLogRepository;
         this.adminService = adminService;
@@ -88,8 +87,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "RESTAURANT",
                 restaurantId,
                 Map.of("status", before.status()),
-                Map.of("status", after.status())
-        );
+                Map.of("status", after.status()));
         return after;
     }
 
@@ -99,16 +97,31 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
             UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request) {
         AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "SUSPEND");
         RestaurantDetailResponseDto before = restaurantService.getById(restaurantId, actorCredentialId, true);
-        RestaurantDetailResponseDto after =
-                restaurantService.suspend(restaurantId, admin.getId(), request.reason());
+        RestaurantDetailResponseDto after = restaurantService.suspend(restaurantId, admin.getId(), request.reason());
         adminService.recordAudit(
                 admin.getId(),
                 "SUSPEND_RESTAURANT",
                 "RESTAURANT",
                 restaurantId,
                 Map.of("status", before.status()),
-                Map.of("status", after.status(), "reason", request.reason())
-        );
+                Map.of("status", after.status(), "reason", request.reason()));
+        return after;
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto rejectRestaurant(
+            UUID actorCredentialId, UUID restaurantId, String reason) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");
+        RestaurantDetailResponseDto before = restaurantService.getById(restaurantId, actorCredentialId, true);
+        RestaurantDetailResponseDto after = restaurantService.reject(restaurantId, admin.getId(), reason);
+        adminService.recordAudit(
+                admin.getId(),
+                "REJECT_RESTAURANT",
+                "RESTAURANT",
+                restaurantId,
+                Map.of("status", before.status()),
+                Map.of("status", after.status(), "reason", reason));
         return after;
     }
 
@@ -123,8 +136,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "DELIVERY_PARTNER",
                 partnerId,
                 Map.of("kycStatus", "PENDING"),
-                Map.of("kycStatus", after.kycStatus())
-        );
+                Map.of("kycStatus", after.kycStatus()));
         return after;
     }
 
@@ -139,8 +151,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "COUPON",
                 created.couponId(),
                 null,
-                created
-        );
+                created);
         return created;
     }
 
@@ -155,8 +166,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "COUPON",
                 couponId,
                 Map.of("isActive", true),
-                Map.of("isActive", after.isActive())
-        );
+                Map.of("isActive", after.isActive()));
         return after;
     }
 
@@ -171,16 +181,14 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 request.targetStatus(),
                 request.reason(),
                 actorCredentialId,
-                UserType.ADMIN
-        );
+                UserType.ADMIN);
         adminService.recordAudit(
                 admin.getId(),
                 "OVERRIDE_ORDER_STATUS",
                 "ORDER",
                 orderId,
                 Map.of("status", before.status().name()),
-                Map.of("status", after.status().name(), "reason", request.reason())
-        );
+                Map.of("status", after.status().name(), "reason", request.reason()));
         return after;
     }
 
@@ -196,8 +204,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "REVIEW",
                 reviewId,
                 Map.of("flagged", false),
-                Map.of("flagged", true, "reason", request.reason())
-        );
+                Map.of("flagged", true, "reason", request.reason()));
         return new ModerationResponseDto(reviewId, true);
     }
 
@@ -212,8 +219,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 "REVIEW",
                 reviewId,
                 Map.of("flagged", true),
-                Map.of("flagged", false)
-        );
+                Map.of("flagged", false));
         return new ModerationResponseDto(reviewId, false);
     }
 
@@ -228,8 +234,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
             Instant createdAtTo,
             int page,
             int size,
-            String sort
-    ) {
+            String sort) {
         AdminUser admin = requireAdmin(actorCredentialId);
         if (!adminService.hasPermission(admin.getId(), "AUDIT", "READ")) {
             throw new ForbiddenException("SUPER_ADMIN required to view audit logs.");
@@ -241,15 +246,13 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 adminUserId,
                 createdAtFrom,
                 createdAtTo,
-                pageable
-        );
+                pageable);
         List<AuditLogResponseDto> items = result.getContent().stream().map(this::toAuditDto).toList();
         return new PageResult<>(items, new PaginationMeta(
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        ));
+                result.getTotalPages()));
     }
 
     private AdminUser requirePermission(UUID actorCredentialId, String resource, String action) {
@@ -275,8 +278,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 log.getResourceId(),
                 parseJson(log.getBeforeState()),
                 parseJson(log.getAfterState()),
-                log.getCreatedAt()
-        );
+                log.getCreatedAt());
     }
 
     private Object parseJson(String json) {

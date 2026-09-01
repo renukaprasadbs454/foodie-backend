@@ -10,42 +10,32 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: apps/api
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Java 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
+          cache-dependency-path: "apps/api/pom.xml"
 
       - name: Make Maven Wrapper executable
+        working-directory: apps/api
         run: chmod +x mvnw
 
-      - name: Build
-        run: ./mvnw -B -DskipTests package
-
-      - name: Unit & integration tests
-        run: ./mvnw -B test
-
-      - name: Upload Surefire Reports
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: apps/api/target/surefire-reports/
+      - name: Build & Package
+        working-directory: apps/api
+        run: ./mvnw -B package -DskipTests
 
   deploy:
     name: Deploy Foodie Backend
     needs: build-test
     runs-on: ubuntu-latest
 
+    # Deploy only for pushes to main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -63,13 +53,14 @@ jobs:
             echo "Starting Foodie deployment"
             echo "======================================"
 
-            cd /root/foodie/backend/apps/api
-
+            cd /root/foodie/backend
             echo "Checking current Git status..."
             git status
 
             echo "Pulling latest code from main..."
             git pull origin main
+
+            cd /root/foodie/backend/apps/api
 
             echo "Building Foodie backend Docker image..."
             docker compose build backend

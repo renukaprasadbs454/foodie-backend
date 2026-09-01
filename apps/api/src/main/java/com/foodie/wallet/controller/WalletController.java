@@ -30,49 +30,46 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Wallet")
 public class WalletController {
 
-    private final WalletService walletService;
+        private final WalletService walletService;
 
-    public WalletController(WalletService walletService) {
-        this.walletService = walletService;
-    }
+        public WalletController(WalletService walletService) {
+                this.walletService = walletService;
+        }
 
-    @GetMapping("/balance")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
-    @Operation(summary = "Get my wallet balance (cached derived value)")
-    public ResponseEntity<ApiResponse<WalletBalanceResponseDto>> getBalance(
-            @AuthenticationPrincipal AuthPrincipal principal
-    ) {
-        return ResponseEntity.ok(ApiResponse.success(walletService.getBalance(principal.userId())));
-    }
+        @GetMapping("/balance")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER')")
+        @Operation(summary = "Get my wallet balance (cached derived value)")
+        public ResponseEntity<ApiResponse<WalletBalanceResponseDto>> getBalance(
+                        @AuthenticationPrincipal AuthPrincipal principal) {
+                return ResponseEntity.ok(ApiResponse
+                                .success(walletService.getBalance(principal.userId(), principal.userType())));
+        }
 
-    @GetMapping("/ledger")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
-    @Operation(summary = "Get my ledger history")
-    public ResponseEntity<ApiResponse<List<LedgerEntryResponseDto>>> getLedger(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            Instant createdAtFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            Instant createdAtTo
-    ) {
-        var result = walletService.getLedger(
-                principal.userId(), page, size, sort, createdAtFrom, createdAtTo);
-        return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
-    }
+        @GetMapping("/ledger")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER')")
+        @Operation(summary = "Get my ledger history")
+        public ResponseEntity<ApiResponse<List<LedgerEntryResponseDto>>> getLedger(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "20") int size,
+                        @RequestParam(required = false) String sort,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdAtFrom,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdAtTo) {
+                var result = walletService.getLedger(
+                                principal.userId(), principal.userType(), page, size, sort, createdAtFrom, createdAtTo);
+                return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
+        }
 
-    @PostMapping("/payout-requests")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
-    @Operation(summary = "Request a payout (REQUESTED only — bank settlement out of Module 9 scope)")
-    public ResponseEntity<ApiResponse<PayoutResponseDto>> requestPayout(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody PayoutRequestDto request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
-    ) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(ApiResponse.success(
-                        walletService.requestPayout(principal.userId(), request, idempotencyKey)));
-    }
+        @PostMapping("/payout-requests")
+        @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+        @Operation(summary = "Request a payout (REQUESTED only — bank settlement out of Module 9 scope)")
+        public ResponseEntity<ApiResponse<PayoutResponseDto>> requestPayout(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @Valid @RequestBody PayoutRequestDto request,
+                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED)
+                                .body(ApiResponse.success(
+                                                walletService.requestPayout(principal.userId(), request,
+                                                                idempotencyKey)));
+        }
 }

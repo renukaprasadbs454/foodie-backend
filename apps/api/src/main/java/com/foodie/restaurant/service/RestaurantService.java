@@ -28,72 +28,83 @@ import java.time.LocalDate;
 
 public interface RestaurantService {
 
-    record PageResult<T>(List<T> items, PaginationMeta pagination) {
-    }
+        record PageResult<T>(List<T> items, PaginationMeta pagination) {
+        }
 
-    PageResult<RestaurantSummaryResponseDto> search(
-            String search,
-            String cuisineType,
-            Double minRating,
-            Double lat,
-            Double lng,
-            int page,
-            int size,
-            String sort
-    );
+        PageResult<RestaurantSummaryResponseDto> search(
+                        String search,
+                        String cuisineType,
+                        Double minRating,
+                        Double lat,
+                        Double lng,
+                        int page,
+                        int size,
+                        String sort);
 
-    RestaurantDetailResponseDto getById(UUID restaurantId, UUID callerCredentialId, boolean callerIsAdmin);
+        RestaurantDetailResponseDto getById(UUID restaurantId, UUID callerCredentialId, boolean callerIsAdmin);
 
-    RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId);
+        RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId);
 
-    RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request);
+        RestaurantDetailResponseDto getMyRestaurant(UUID ownerCredentialId);
 
-    RestaurantDetailResponseDto updateMyRestaurant(UUID ownerCredentialId, UpdateRestaurantRequestDto request);
+        RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request);
 
-    RestaurantLocationResponseDto getLocation(UUID ownerCredentialId);
+        RestaurantDetailResponseDto updateMyRestaurant(UUID ownerCredentialId, UpdateRestaurantRequestDto request);
 
-    RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId, UpdateRestaurantLocationRequestDto request);
+        RestaurantLocationResponseDto getLocation(UUID ownerCredentialId);
 
-    RestaurantBankDetailsResponseDto getBankDetails(UUID ownerCredentialId);
+        RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId,
+                        UpdateRestaurantLocationRequestDto request);
 
-    RestaurantBankDetailsResponseDto updateBankDetails(UUID ownerCredentialId, UpdateRestaurantBankDetailsRequestDto request);
+        RestaurantBankDetailsResponseDto getBankDetails(UUID ownerCredentialId);
 
-    VerificationResultResponseDto verifyBankDetails(UUID ownerCredentialId);
+        RestaurantBankDetailsResponseDto updateBankDetails(UUID ownerCredentialId,
+                        UpdateRestaurantBankDetailsRequestDto request);
 
-    VerificationResultResponseDto verifyUpi(UUID ownerCredentialId, VerifyUpiRequestDto request);
+        VerificationResultResponseDto verifyBankDetails(UUID ownerCredentialId);
 
-    RestaurantDocumentResponseDto uploadDocument(
-            UUID ownerCredentialId,
-            RestaurantDocType docType,
-            MultipartFile file
-    );
+        VerificationResultResponseDto verifyUpi(UUID ownerCredentialId, VerifyUpiRequestDto request);
 
-    RestaurantImageUploadResponseDto uploadImage(
-            UUID ownerCredentialId,
-            RestaurantImageType imageType,
-            MultipartFile file
-    );
+        RestaurantDocumentResponseDto uploadDocument(
+                        UUID ownerCredentialId,
+                        RestaurantDocType docType,
+                        MultipartFile file);
 
-    RestaurantUpiResponseDto getUpiDetails(UUID ownerCredentialId);
+        RestaurantImageUploadResponseDto uploadImage(
+                        UUID ownerCredentialId,
+                        RestaurantImageType imageType,
+                        MultipartFile file);
 
-    RestaurantUpiResponseDto updateUpiDetails(UUID ownerCredentialId, RestaurantUpiRequestDto request);
+        RestaurantUpiResponseDto getUpiDetails(UUID ownerCredentialId);
 
-    RestaurantUpiResponseDto verifyUpiDetails(UUID ownerCredentialId);
+        RestaurantUpiResponseDto updateUpiDetails(UUID ownerCredentialId, RestaurantUpiRequestDto request);
 
-    RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request);
+        RestaurantUpiResponseDto verifyUpiDetails(UUID ownerCredentialId);
 
-    RestaurantLegalDetailResponseDto getLegalDetails(UUID ownerCredentialId);
+        RestaurantLegalDetailResponseDto createLegalDetails(UUID ownerCredentialId,
+                        RestaurantLegalDetailRequestDto request);
 
-    RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId, RestaurantLegalDetailRequestDto request);
+        RestaurantLegalDetailResponseDto getLegalDetails(UUID ownerCredentialId);
 
-    RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom, LocalDate dateTo);
+        RestaurantLegalDetailResponseDto updateLegalDetails(UUID ownerCredentialId,
+                        RestaurantLegalDetailRequestDto request);
 
-    /** Invoked by Admin module (Phase3 §2.3 / API §13.1) — not exposed as restaurant HTTP in Module 3. */
-    RestaurantDetailResponseDto approve(UUID restaurantId, UUID adminId);
+        RestaurantDashboardSummaryResponseDto getDashboardSummary(UUID ownerCredentialId, LocalDate dateFrom,
+                        LocalDate dateTo);
 
-    /** Invoked by Admin module (Phase3 §2.3 / API §13.2). */
-    RestaurantDetailResponseDto suspend(UUID restaurantId, UUID adminId, String reason);
+        /**
+         * Invoked by Admin module (Phase3 §2.3 / API §13.1) — not exposed as restaurant
+         * HTTP in Module 3.
+         */
+        RestaurantDetailResponseDto approve(UUID restaurantId, UUID adminId);
 
-    /** Document verification for Admin Ops — sets verified_at. */
-    RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
+        /** Invoked by Admin module (Phase3 §2.3 / API §13.2). */
+        RestaurantDetailResponseDto suspend(UUID restaurantId, UUID adminId, String reason);
+
+        RestaurantDetailResponseDto reject(UUID restaurantId, UUID adminId, String reason);
+
+        RestaurantDetailResponseDto resubmit(UUID ownerCredentialId);
+
+        /** Document verification for Admin Ops — sets verified_at. */
+        RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
 }

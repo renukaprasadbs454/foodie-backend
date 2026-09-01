@@ -1,6 +1,9 @@
 package com.foodie.user.service.impl;
 
+import com.foodie.auth.entity.UserCredential;
+import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.shared.contract.CustomerSummaryProvider;
+import com.foodie.user.entity.Customer;
 import com.foodie.user.repository.CustomerRepository;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,9 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomerSummaryProviderImpl implements CustomerSummaryProvider {
 
     private final CustomerRepository customerRepository;
+    private final UserCredentialRepository userCredentialRepository;
 
-    public CustomerSummaryProviderImpl(CustomerRepository customerRepository) {
+    public CustomerSummaryProviderImpl(
+            CustomerRepository customerRepository,
+            UserCredentialRepository userCredentialRepository) {
         this.customerRepository = customerRepository;
+        this.userCredentialRepository = userCredentialRepository;
     }
 
     @Override
@@ -23,15 +30,23 @@ public class CustomerSummaryProviderImpl implements CustomerSummaryProvider {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<CustomerSummary> findByUserCredentialId(UUID userCredentialId) {
-        return customerRepository.findByUserCredentialId(userCredentialId).map(this::toSummary);
+        Optional<CustomerSummary> existing = customerRepository.findByUserCredentialId(userCredentialId)
+                .map(this::toSummary);
+        if (existing.isPresent()) {
+            return existing;
+        }
+        return userCredentialRepository.findById(userCredentialId)
+                .map(u -> customerRepository.save(Customer.createInitial(u.getId(), u.getEmail())))
+                .or(() -> Optional.of(customerRepository.save(Customer.createInitial(userCredentialId, null))))
+                .map(this::toSummary);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<UUID> findUserCredentialIdByCustomerId(UUID customerId) {
-        return customerRepository.findById(customerId).map(c -> c.getUserCredentialId());
+        return customerRepository.findById(customerId).map(Customer::getUserCredentialId);
     }
 
     private CustomerSummary toSummary(com.foodie.user.entity.Customer c) {

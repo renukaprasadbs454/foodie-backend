@@ -9,7 +9,8 @@ import com.foodie.payment.dto.request.VerifyPaymentRequestDto;
 
 public interface PaymentService {
 
-    PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey);
+    PaymentInitiationResponseDto initiate(UUID userCredentialId, UUID orderId, String idempotencyKey,
+            boolean useWallet);
 
     boolean verifyPayment(UUID userCredentialId, VerifyPaymentRequestDto request);
 
@@ -19,6 +20,5 @@ public interface PaymentService {
             UUID paymentId,
             RefundPaymentRequestDto request,
             UUID actorId,
-            boolean systemActor
-    );
+            boolean systemActor);
 }

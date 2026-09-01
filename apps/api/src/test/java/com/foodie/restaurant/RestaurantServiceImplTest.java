@@ -98,8 +98,7 @@ class RestaurantServiceImplTest {
                 restaurantCacheService,
                 eventPublisher,
                 new ObjectMapper().findAndRegisterModules(),
-                new BigDecimal("18.00")
-        );
+                new BigDecimal("18.00"));
     }
 
     @Test
@@ -163,8 +162,7 @@ class RestaurantServiceImplTest {
                 "Karnataka",
                 "India",
                 "560095",
-                "124 MG Road, 5th Block, Bengaluru, Karnataka - 560095, India"
-        );
+                "124 MG Road, 5th Block, Bengaluru, Karnataka - 560095, India");
 
         RestaurantLocationResponseDto updatedLocation = service.updateLocation(ownerId, updateDto);
         assertThat(updatedLocation.addressLine1()).isEqualTo("124 MG Road");
@@ -192,8 +190,7 @@ class RestaurantServiceImplTest {
                 "HDFC0001234",
                 "CURRENT",
                 "Koramangala 5th Block",
-                "foodierestaurant@upi"
-        );
+                "foodierestaurant@upi");
         RestaurantBankDetailsResponseDto updated = service.updateBankDetails(ownerId, updateDto);
         assertThat(updated.bankAccount().bankName()).isEqualTo("HDFC Bank");
         assertThat(updated.bankAccount().accountNumberMasked()).isEqualTo("XXXX XXXX 4521");
@@ -203,7 +200,8 @@ class RestaurantServiceImplTest {
         // Verify bank details
         RestaurantBankDetails bankDetails = RestaurantBankDetails.createDefault(restaurant.getId());
         bankDetails.updateDetails("Foodie", "HDFC", "98765432104521", "HDFC0001234", "CURRENT", "Main", "foodie@upi");
-        when(restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.of(bankDetails));
+        when(restaurantBankDetailsRepository.findByRestaurantId(restaurant.getId()))
+                .thenReturn(Optional.of(bankDetails));
 
         VerificationResultResponseDto bankVerify = service.verifyBankDetails(ownerId);
         assertThat(bankVerify.status()).isEqualTo("VERIFIED");
@@ -260,9 +258,7 @@ class RestaurantServiceImplTest {
                 List.of(CuisineType.CHINESE, CuisineType.BIRYANI),
                 new RestaurantAddressRequestDto(
                         "L1", null, "Bengaluru", "560001",
-                        new BigDecimal("12.970000"), new BigDecimal("77.590000")
-                )
-        );
+                        new BigDecimal("12.970000"), new BigDecimal("77.590000")));
 
         RestaurantDetailResponseDto dto = service.updateMyRestaurant(ownerId, request);
 
@@ -318,19 +314,19 @@ class RestaurantServiceImplTest {
     void createLegalDetails_whenExisting_updatesAndReturnsDto() {
         Restaurant restaurant = pendingRestaurant();
         when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
-        com.foodie.restaurant.entity.RestaurantLegalDetail existingDetail = com.foodie.restaurant.entity.RestaurantLegalDetail.create(
-                restaurant, "29ABCDE1234F1Z5", "ABCDE1234F", "12345678901234",
-                "Spice Legal", com.foodie.common.enums.RestaurantBusinessType.PRIVATE_LIMITED,
-                "contact@spice.com", "+919876543210"
-        );
+        com.foodie.restaurant.entity.RestaurantLegalDetail existingDetail = com.foodie.restaurant.entity.RestaurantLegalDetail
+                .create(
+                        restaurant, "29ABCDE1234F1Z5", "ABCDE1234F", "12345678901234",
+                        "Spice Legal", com.foodie.common.enums.RestaurantBusinessType.PRIVATE_LIMITED,
+                        "contact@spice.com", "+919876543210");
         setId(existingDetail, UUID.randomUUID());
-        when(restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())).thenReturn(Optional.of(existingDetail));
+        when(restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId()))
+                .thenReturn(Optional.of(existingDetail));
 
         var request = new com.foodie.restaurant.dto.request.RestaurantLegalDetailRequestDto(
                 "29ABCDE1234F1Z5", "ABCDE1234F", "12345678901234",
                 "Updated Spice Legal", com.foodie.common.enums.RestaurantBusinessType.PRIVATE_LIMITED,
-                "updated@spice.com", "+919876543210"
-        );
+                "updated@spice.com", "+919876543210");
 
         var response = service.createLegalDetails(ownerId, request);
 
@@ -339,20 +335,46 @@ class RestaurantServiceImplTest {
         assertThat(response.contactEmail()).isEqualTo("updated@spice.com");
     }
 
+    @Test
+    void reject_updatesStatusAndReason() {
+        Restaurant restaurant = pendingRestaurant();
+        UUID adminId = UUID.randomUUID();
+        when(restaurantRepository.findById(restaurant.getId())).thenReturn(Optional.of(restaurant));
+
+        RestaurantDetailResponseDto dto = service.reject(restaurant.getId(), adminId, "Document illegible");
+
+        assertThat(dto.status()).isEqualTo("REJECTED");
+        assertThat(restaurant.getStatus()).isEqualTo(RestaurantStatus.REJECTED);
+        assertThat(restaurant.getRejectionReason()).isEqualTo("Document illegible");
+        verify(restaurantCacheService).evictRestaurant(restaurant.getId());
+    }
+
+    @Test
+    void resubmit_fromRejected_resetsToPending() {
+        Restaurant restaurant = pendingRestaurant();
+        restaurant.reject("Fix GST");
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+
+        RestaurantDetailResponseDto dto = service.resubmit(ownerId);
+
+        assertThat(dto.status()).isEqualTo("PENDING");
+        assertThat(restaurant.getStatus()).isEqualTo(RestaurantStatus.PENDING);
+        assertThat(restaurant.getRejectionReason()).isNull();
+        verify(restaurantCacheService).evictRestaurant(restaurant.getId());
+    }
+
     private Restaurant pendingRestaurant() {
         RestaurantAddress address = RestaurantAddress.create(
                 "L1", null, "Bengaluru", "560103",
-                new BigDecimal("12.935200"), new BigDecimal("77.691200")
-        );
+                new BigDecimal("12.935200"), new BigDecimal("77.691200"));
         setId(address, UUID.randomUUID());
         Restaurant restaurant = Restaurant.createPending(
                 ownerId,
                 "Spice Route Kitchen",
                 "desc",
-                new String[] {"SOUTH_INDIAN"},
+                new String[] { "SOUTH_INDIAN" },
                 address,
-                new BigDecimal("18.00")
-        );
+                new BigDecimal("18.00"));
         setId(restaurant, UUID.randomUUID());
         return restaurant;
     }
@@ -360,8 +382,7 @@ class RestaurantServiceImplTest {
     private static RestaurantAddressRequestDto addressDto() {
         return new RestaurantAddressRequestDto(
                 "Flat 1", null, "Bengaluru", "560103",
-                new BigDecimal("12.935200"), new BigDecimal("77.691200")
-        );
+                new BigDecimal("12.935200"), new BigDecimal("77.691200"));
     }
 
     private static void setId(Object entity, UUID id) {

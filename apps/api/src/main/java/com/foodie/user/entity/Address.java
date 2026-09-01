@@ -13,7 +13,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "address")
-@SQLRestriction("deleted_at IS NULL")
+@SQLRestriction("\"deleted_at\" IS NULL")
 public class Address extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -79,8 +79,7 @@ public class Address extends BaseEntity {
             String pincode,
             BigDecimal latitude,
             BigDecimal longitude,
-            boolean isDefault
-    ) {
+            boolean isDefault) {
         Address address = new Address();
         address.customer = customer;
         address.recipientName = recipientName;
@@ -108,9 +107,9 @@ public class Address extends BaseEntity {
             String pincode,
             BigDecimal latitude,
             BigDecimal longitude,
-            boolean isDefault
-    ) {
-        return create(customer, null, null, null, null, null, label, line1, line2, city, pincode, latitude, longitude, isDefault);
+            boolean isDefault) {
+        return create(customer, null, null, null, null, null, label, line1, line2, city, pincode, latitude, longitude,
+                isDefault);
     }
 
     public void update(
@@ -125,8 +124,7 @@ public class Address extends BaseEntity {
             String city,
             String pincode,
             BigDecimal latitude,
-            BigDecimal longitude
-    ) {
+            BigDecimal longitude) {
         this.recipientName = recipientName;
         this.recipientPhone = recipientPhone;
         this.houseFlatNo = houseFlatNo;
@@ -137,8 +135,10 @@ public class Address extends BaseEntity {
         this.line2 = line2;
         this.city = city;
         this.pincode = pincode;
-        if (latitude != null) this.latitude = latitude;
-        if (longitude != null) this.longitude = longitude;
+        if (latitude != null)
+            this.latitude = latitude;
+        if (longitude != null)
+            this.longitude = longitude;
     }
 
     public void clearDefault() {
