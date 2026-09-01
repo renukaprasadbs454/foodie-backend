@@ -1,9 +1,7 @@
 package com.foodie.wallet.entity;
 
 import com.foodie.common.entity.BaseEntity;
-import com.foodie.common.enums.PayoutProvider;
 import com.foodie.common.enums.PayoutStatus;
-import com.foodie.common.enums.ReconciliationStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -28,25 +26,11 @@ public class Payout extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private PayoutStatus status;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "provider", nullable = false, length = 30)
-    private PayoutProvider provider = PayoutProvider.RAZORPAY;
-
     @Column(name = "bank_ref", length = 100)
     private String bankRef;
 
-    @Column(name = "failure_reason", length = 255)
-    private String failureReason;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "reconciliation_status", nullable = false, length = 40)
-    private ReconciliationStatus reconciliationStatus = ReconciliationStatus.MATCHED;
-
     @Column(name = "completed_at")
     private Instant completedAt;
-
-    @Column(name = "processed_at")
-    private Instant processedAt;
 
     @Column(name = "account_holder_name")
     private String accountHolderName;
@@ -73,39 +57,11 @@ public class Payout extends BaseEntity {
         payout.walletAccountId = walletAccountId;
         payout.amount = amount.setScale(2, RoundingMode.HALF_UP);
         payout.status = PayoutStatus.REQUESTED;
-        payout.provider = PayoutProvider.RAZORPAY;
-        payout.reconciliationStatus = ReconciliationStatus.MATCHED;
         payout.accountHolderName = accountHolderName;
         payout.accountNumber = accountNumber;
         payout.ifscCode = ifscCode;
         payout.bankName = bankName;
         return payout;
-    }
-
-    public void retryFailedPayout() {
-        if (this.status != PayoutStatus.FAILED) {
-            throw new IllegalStateException("Only FAILED payouts are eligible for retry.");
-        }
-        this.status = PayoutStatus.PROCESSING;
-        this.failureReason = null;
-        this.processedAt = Instant.now();
-    }
-
-    public void updateStatus(PayoutStatus status, String bankRef, String failureReason, ReconciliationStatus reconciliationStatus) {
-        this.status = status;
-        if (bankRef != null) {
-            this.bankRef = bankRef;
-        }
-        this.failureReason = failureReason;
-        if (reconciliationStatus != null) {
-            this.reconciliationStatus = reconciliationStatus;
-        }
-        if (status == PayoutStatus.COMPLETED) {
-            this.completedAt = Instant.now();
-            this.processedAt = Instant.now();
-        } else if (status == PayoutStatus.PROCESSING || status == PayoutStatus.FAILED) {
-            this.processedAt = Instant.now();
-        }
     }
 
     public UUID getWalletAccountId() {
@@ -120,28 +76,12 @@ public class Payout extends BaseEntity {
         return status;
     }
 
-    public PayoutProvider getProvider() {
-        return provider != null ? provider : PayoutProvider.RAZORPAY;
-    }
-
     public String getBankRef() {
         return bankRef;
     }
 
-    public String getFailureReason() {
-        return failureReason;
-    }
-
-    public ReconciliationStatus getReconciliationStatus() {
-        return reconciliationStatus != null ? reconciliationStatus : ReconciliationStatus.MATCHED;
-    }
-
     public Instant getCompletedAt() {
         return completedAt;
-    }
-
-    public Instant getProcessedAt() {
-        return processedAt != null ? processedAt : completedAt;
     }
 
     public String getAccountHolderName() {

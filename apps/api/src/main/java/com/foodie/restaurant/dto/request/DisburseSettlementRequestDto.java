@@ -6,6 +6,5 @@ import java.util.UUID;
 
 public record DisburseSettlementRequestDto(
         @NotNull UUID settlementId,
-        @NotBlank String paymentReference
-) {
+        @NotBlank String paymentReference) {
 }

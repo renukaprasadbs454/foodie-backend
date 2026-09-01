@@ -45,8 +45,7 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
             CartMapper cartMapper,
             CustomerSummaryProvider customerSummaryProvider,
             MenuItemPriceProvider menuItemPriceProvider,
-            RestaurantSummaryProvider restaurantSummaryProvider
-    ) {
+            RestaurantSummaryProvider restaurantSummaryProvider) {
         this.cartRepository = cartRepository;
         this.cartItemRepository = cartItemRepository;
         this.cartMapper = cartMapper;
@@ -81,8 +80,7 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
             throw new ConflictException(
                     ErrorCode.CART_RESTAURANT_CONFLICT,
                     "Cart already contains items from a different restaurant.",
-                    CartConflictHintDto.clearCart()
-            );
+                    CartConflictHintDto.clearCart());
         }
 
         Optional<CartItem> existing = findLine(cart.getId(), request.menuItemId(), request.variantId());
@@ -92,8 +90,7 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
             if (newQty > MAX_QUANTITY) {
                 throw new BadRequestException(
                         ErrorCode.VALIDATION_FAILED,
-                        "Quantity cannot exceed " + MAX_QUANTITY + " for a single line."
-                );
+                        "Quantity cannot exceed " + MAX_QUANTITY + " for a single line.");
             }
             line.setQuantity(newQty);
             if (request.notes() != null) {
@@ -105,8 +102,7 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
                     request.menuItemId(),
                     request.variantId(),
                     request.quantity(),
-                    request.notes()
-            ));
+                    request.notes()));
             if (cart.getRestaurantId() == null) {
                 cart.setRestaurantId(snapshot.restaurantId());
             }
@@ -147,8 +143,7 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
                         item.variantId(),
                         item.quantity(),
                         item.unitPrice(),
-                        item.lineTotal()
-                ))
+                        item.lineTotal()))
                 .toList();
         return new CartCheckoutSnapshot(view.cartId(), view.restaurantId(), lines, view.subtotal());
     }
@@ -180,7 +175,8 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
 
     @Override
     @Transactional
-    public CartResponseDto updateItemQuantity(UUID userCredentialId, UUID cartItemId, UpdateCartItemQuantityRequestDto request) {
+    public CartResponseDto updateItemQuantity(UUID userCredentialId, UUID cartItemId,
+            UpdateCartItemQuantityRequestDto request) {
         Cart cart = getOrCreateCart(resolveCustomerId(userCredentialId));
         CartItem item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cart item not found."));
@@ -204,11 +200,15 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
         List<CartItem> items = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
         List<CartMapper.PricedLine> priced = new ArrayList<>();
         for (CartItem item : items) {
-            BigDecimal unitPrice = menuItemPriceProvider
-                    .getPriceSnapshot(item.getMenuItemId(), item.getVariantId())
+            var snapshot = menuItemPriceProvider
+                    .getPriceSnapshot(item.getMenuItemId(), item.getVariantId());
+            BigDecimal unitPrice = snapshot
                     .map(MenuItemPriceProvider.MenuItemPriceSnapshot::unitPrice)
                     .orElse(BigDecimal.ZERO);
-            priced.add(new CartMapper.PricedLine(cartMapper.toItem(item, unitPrice)));
+            String name = snapshot
+                    .map(MenuItemPriceProvider.MenuItemPriceSnapshot::itemName)
+                    .orElse("Item");
+            priced.add(new CartMapper.PricedLine(cartMapper.toItem(item, name, unitPrice)));
         }
 
         String restName = null;

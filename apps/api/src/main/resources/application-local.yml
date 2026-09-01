@@ -1,9 +1,13 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:foodie}
-    username: ${DB_USER:foodie}
-    password: ${DB_PASSWORD:foodie}
-    driver-class-name: org.postgresql.Driver
+    url: ${DB_URL:jdbc:h2:file:./data/foodie-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -30,10 +34,6 @@ logging:
     org.springframework.security: INFO
 
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  health:
-    redis:
-      enabled: false
+  endpoint:
+    health:
+      show-details: always

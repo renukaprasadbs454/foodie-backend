@@ -10,7 +10,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "category")
-@SQLRestriction("deleted_at IS NULL")
+@SQLRestriction("\"deleted_at\" IS NULL")
 public class Category extends BaseEntity {
 
     @Column(name = "restaurant_id", nullable = false, updatable = false)

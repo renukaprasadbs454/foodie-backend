@@ -5,13 +5,7 @@ package com.foodie.admin.entity;
  */
 public enum AdminRoleName {
     SUPER_ADMIN,
-    FINANCE_ADMIN,
-    OPERATIONS_ADMIN,
-    RESTAURANT_MANAGER,
-    SUPPORT_AGENT,
-    AUDITOR,
     OPS,
     FINANCE,
-    SUPPORT,
-    DARKSTORE_ADMIN
+    SUPPORT
 }

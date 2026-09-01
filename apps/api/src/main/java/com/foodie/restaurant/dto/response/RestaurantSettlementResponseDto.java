@@ -7,15 +7,15 @@ import java.util.UUID;
 public record RestaurantSettlementResponseDto(
         UUID id,
         UUID restaurantId,
-        String restaurantName,
-        BigDecimal totalGrossSales,
+        String settlementNumber,
+        Instant settlementPeriodStart,
+        Instant settlementPeriodEnd,
+        BigDecimal grossSales,
         BigDecimal commissionAmount,
-        BigDecimal netPayoutAmount,
+        BigDecimal taxDeducted,
+        BigDecimal netPayable,
         String status,
         String paymentReference,
-        Instant periodStart,
-        Instant periodEnd,
         Instant disbursedAt,
-        Instant createdAt
-) {
+        Instant createdAt) {
 }

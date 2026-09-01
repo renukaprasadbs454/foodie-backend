@@ -57,8 +57,9 @@ public class LocalObjectStorageClient implements ObjectStorageClient {
 
     @Override
     public String createSignedGetUrl(String key, Duration ttl) {
-        // Omitting expires= param natively prevents React Native Image cache busting on
-        // re-renders
+        if (key != null && (key.startsWith("http://") || key.startsWith("https://"))) {
+            return key;
+        }
         return "/api/v1/storage/" + key;
     }
 

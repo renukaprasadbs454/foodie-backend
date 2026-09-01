@@ -22,9 +22,11 @@ public class CartMapper {
         }
 
         BigDecimal taxAmount = subtotal.multiply(new BigDecimal("0.05")).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal deliveryFee = subtotal.compareTo(BigDecimal.ZERO) > 0 ? new BigDecimal("40.00") : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal deliveryFee = subtotal.compareTo(BigDecimal.ZERO) > 0 ? new BigDecimal("40.00")
+                : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         BigDecimal discountAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        BigDecimal grandTotal = subtotal.add(taxAmount).add(deliveryFee).subtract(discountAmount).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal grandTotal = subtotal.add(taxAmount).add(deliveryFee).subtract(discountAmount).setScale(2,
+                RoundingMode.HALF_UP);
 
         return new CartResponseDto(
                 cart.getId(),
@@ -36,23 +38,22 @@ public class CartMapper {
                 deliveryFee,
                 taxAmount,
                 discountAmount,
-                grandTotal
-        );
+                grandTotal);
     }
 
-    public CartItemResponseDto toItem(CartItem item, BigDecimal unitPrice) {
+    public CartItemResponseDto toItem(CartItem item, String name, BigDecimal unitPrice) {
         BigDecimal unit = unitPrice.setScale(2, RoundingMode.HALF_UP);
         BigDecimal lineTotal = unit.multiply(BigDecimal.valueOf(item.getQuantity()))
                 .setScale(2, RoundingMode.HALF_UP);
         return new CartItemResponseDto(
                 item.getId(),
                 item.getMenuItemId(),
+                name,
                 item.getVariantId(),
                 item.getQuantity(),
                 item.getNotes(),
                 unit,
-                lineTotal
-        );
+                lineTotal);
     }
 
     public record PricedLine(CartItemResponseDto dto) {
