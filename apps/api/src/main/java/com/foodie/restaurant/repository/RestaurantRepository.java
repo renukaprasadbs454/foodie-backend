@@ -19,8 +19,12 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
      java.util.List<Restaurant> findAllByStatus(com.foodie.common.enums.RestaurantStatus status);
 
      @org.springframework.data.jpa.repository.Modifying
-     @Query("UPDATE Restaurant r SET r.status = com.foodie.common.enums.RestaurantStatus.REJECTED WHERE LOWER(r.name) NOT LIKE '%royal%hotel%'")
+     @Query("UPDATE Restaurant r SET r.status = com.foodie.common.enums.RestaurantStatus.REJECTED WHERE LOWER(r.name) NOT LIKE '%royal%hotel%' AND LOWER(r.name) NOT LIKE '%ganesha%'")
      int rejectAllDummyRestaurants();
+
+     @org.springframework.data.jpa.repository.Modifying
+     @Query("UPDATE Restaurant r SET r.status = com.foodie.common.enums.RestaurantStatus.APPROVED WHERE r.status = com.foodie.common.enums.RestaurantStatus.PENDING")
+     int approveAllPendingRestaurants();
 
      /**
       * JPQL search — works on both H2 (local) and PostgreSQL (production).

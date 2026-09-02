@@ -28,4 +28,12 @@ public class DebugController {
         int updated = restaurantRepository.rejectAllDummyRestaurants();
         return ResponseEntity.ok(ApiResponse.success("Cleaned up " + updated + " dummy restaurants."));
     }
+
+    @GetMapping("/approve-pending")
+    @Transactional
+    @Operation(summary = "Approve all pending restaurants")
+    public ResponseEntity<ApiResponse<String>> approvePending() {
+        int updated = restaurantRepository.approveAllPendingRestaurants();
+        return ResponseEntity.ok(ApiResponse.success("Approved " + updated + " pending restaurants."));
+    }
 }
