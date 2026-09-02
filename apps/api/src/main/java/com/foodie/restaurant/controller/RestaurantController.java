@@ -77,22 +77,6 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 
-    @GetMapping("/cleanup-dummy")
-    @org.springframework.transaction.annotation.Transactional
-    @Operation(summary = "Cleanup dummy restaurants")
-    public ResponseEntity<ApiResponse<String>> cleanupDummy() {
-        var all = restaurantRepository.findAll();
-        int removed = 0;
-        for (var r : all) {
-            if (!"Royal Hotel".equalsIgnoreCase(r.getName())) {
-                r.reject("Dummy restaurant removed");
-                restaurantRepository.save(r);
-                removed++;
-            }
-        }
-        return ResponseEntity.ok(ApiResponse.success("Cleaned up " + removed + " dummy restaurants."));
-    }
-
     @GetMapping("/{id}")
     @Operation(summary = "Get restaurant detail (public APPROVED; owner/admin may see PENDING/SUSPENDED)")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getById(
