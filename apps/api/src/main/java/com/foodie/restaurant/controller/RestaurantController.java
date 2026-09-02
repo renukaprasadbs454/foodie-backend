@@ -54,12 +54,9 @@ import org.springframework.web.multipart.MultipartFile;
 public class RestaurantController {
 
     private final RestaurantService restaurantService;
-    private final com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
 
-    public RestaurantController(RestaurantService restaurantService,
-            com.foodie.restaurant.repository.RestaurantRepository restaurantRepository) {
+    public RestaurantController(RestaurantService restaurantService) {
         this.restaurantService = restaurantService;
-        this.restaurantRepository = restaurantRepository;
     }
 
     @GetMapping

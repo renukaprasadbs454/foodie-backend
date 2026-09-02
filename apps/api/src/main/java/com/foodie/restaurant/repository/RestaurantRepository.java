@@ -18,6 +18,10 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
 
      java.util.List<Restaurant> findAllByStatus(com.foodie.common.enums.RestaurantStatus status);
 
+     @org.springframework.data.jpa.repository.Modifying
+     @Query("UPDATE Restaurant r SET r.status = com.foodie.common.enums.RestaurantStatus.REJECTED WHERE LOWER(r.name) NOT LIKE '%royal%hotel%'")
+     int rejectAllDummyRestaurants();
+
      /**
       * JPQL search — works on both H2 (local) and PostgreSQL (production).
       * All @Param names are referenced in the query (Spring Data validates this).

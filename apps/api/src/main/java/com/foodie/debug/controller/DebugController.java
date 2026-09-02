@@ -1,10 +1,11 @@
 package com.foodie.debug.controller;
 
 import com.foodie.common.dto.ApiResponse;
+import com.foodie.restaurant.repository.RestaurantRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,17 +15,17 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Debug Utilities")
 public class DebugController {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final RestaurantRepository restaurantRepository;
 
-    public DebugController(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DebugController(RestaurantRepository restaurantRepository) {
+        this.restaurantRepository = restaurantRepository;
     }
 
     @GetMapping("/cleanup-dummy")
+    @Transactional
     @Operation(summary = "Cleanup dummy restaurants")
     public ResponseEntity<ApiResponse<String>> cleanupDummy() {
-        int updated = jdbcTemplate.update(
-                "UPDATE restaurant SET status = 'REJECTED', rejection_reason = 'Dummy restaurant removed' WHERE LOWER(name) NOT LIKE '%royal%hotel%'");
+        int updated = restaurantRepository.rejectAllDummyRestaurants();
         return ResponseEntity.ok(ApiResponse.success("Cleaned up " + updated + " dummy restaurants."));
     }
 }
