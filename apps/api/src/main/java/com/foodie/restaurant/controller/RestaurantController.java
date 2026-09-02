@@ -78,6 +78,7 @@ public class RestaurantController {
     }
 
     @GetMapping("/cleanup-dummy")
+    @org.springframework.transaction.annotation.Transactional
     @Operation(summary = "Cleanup dummy restaurants")
     public ResponseEntity<ApiResponse<String>> cleanupDummy() {
         var all = restaurantRepository.findAll();
