@@ -6,9 +6,11 @@ Welcome to the **Foodie Backend API**. This comprehensive guide provides everyth
 
 ## 🚀 1. Local Server Environment & Quick Start
 
-* **Backend Base URL**: `http://localhost:8080`
-* **Swagger UI (Interactive API Docs)**: `http://localhost:8080/swagger-ui.html`
-* **OpenAPI JSON Spec**: `http://localhost:8080/v3/api-docs`
+* **Live API Base URL**: `https://api.foodie.kwiko.org`
+* **Live Swagger UI**: `https://api.foodie.kwiko.org/swagger-ui.html`
+* **Live OpenAPI JSON Spec**: `https://api.foodie.kwiko.org/v3/api-docs`
+* **Local Backend Base URL**: `http://localhost:8080` (or `8082`)
+* **Local Swagger UI**: `http://localhost:8080/swagger-ui.html`
 * **Database (PostgreSQL 15)**: `localhost:5433` (DB: `foodie`, User: `foodie`, Pass: `foodie`)
 * **Cache (Redis)**: `localhost:6379`
 

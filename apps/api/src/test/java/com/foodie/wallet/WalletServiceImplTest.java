@@ -294,5 +294,4 @@ class WalletServiceImplTest {
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
                                 .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
-        }
 }
