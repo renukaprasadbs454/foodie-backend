@@ -7,28 +7,20 @@ on:
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Docker Build & Test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-          cache-dependency-path: "apps/api/pom.xml"
-
       - name: Make Maven Wrapper executable
         working-directory: apps/api
         run: chmod +x mvnw
 
-      - name: Build & Package
+      - name: Build Backend Docker Image
         working-directory: apps/api
-        run: ./mvnw -B package -DskipTests
+        run: docker compose build backend
 
   deploy:
     name: Deploy Foodie Backend
@@ -54,6 +46,7 @@ jobs:
             echo "======================================"
 
             cd /root/foodie/backend
+
             echo "Checking current Git status..."
             git status
 
@@ -68,8 +61,40 @@ jobs:
             echo "Starting Foodie backend..."
             docker compose up -d backend
 
-            echo "Waiting for backend to start..."
-            sleep 10
+            echo "Waiting for Foodie backend to become healthy..."
+
+            for i in {1..30}; do
+              STATUS=$(docker inspect foodie-backend \
+                --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+
+              echo "Health status: $STATUS"
+
+              if [ "$STATUS" = "healthy" ]; then
+                echo "======================================"
+                echo "Foodie backend is healthy!"
+                echo "======================================"
+                break
+              fi
+
+              if [ "$STATUS" = "unhealthy" ]; then
+                echo "======================================"
+                echo "Foodie backend is unhealthy!"
+                echo "======================================"
+                docker compose logs backend --tail=100
+                exit 1
+              fi
+
+              sleep 5
+
+              if [ "$i" -eq 30 ]; then
+                echo "======================================"
+                echo "Foodie backend did not become healthy in time."
+                echo "======================================"
+                docker compose ps
+                docker compose logs backend --tail=100
+                exit 1
+              fi
+            done
 
             echo "Checking Docker containers..."
             docker compose ps
@@ -78,5 +103,5 @@ jobs:
             docker compose logs backend --tail=50
 
             echo "======================================"
-            echo "Foodie deployment completed"
+            echo "Foodie deployment completed successfully"
             echo "======================================"
