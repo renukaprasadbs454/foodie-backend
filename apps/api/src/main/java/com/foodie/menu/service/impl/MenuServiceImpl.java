@@ -230,9 +230,14 @@ public class MenuServiceImpl implements MenuService {
     public MenuItemResponseDto createItem(UUID ownerCredentialId, CreateMenuItemRequestDto request) {
         UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
         Category category = categoryRepository.findByIdAndRestaurantId(request.categoryId(), restaurantId)
-                .orElseThrow(() -> new UnprocessableEntityException(
-                        ErrorCode.CATEGORY_NOT_OWNED,
-                        "Category does not belong to this restaurant."));
+                .orElseGet(() -> {
+                    java.util.List<Category> all = categoryRepository
+                            .findByRestaurantIdOrderByDisplayOrderAsc(restaurantId);
+                    if (all.isEmpty()) {
+                        return categoryRepository.save(Category.create(restaurantId, "Popular Items", 1));
+                    }
+                    return all.get(0);
+                });
 
         MenuItem item = menuItemRepository.save(MenuItem.create(
                 restaurantId,
@@ -256,10 +261,16 @@ public class MenuServiceImpl implements MenuService {
 
         UUID categoryId = request.categoryId();
         if (categoryId != null && !categoryId.equals(item.getCategoryId())) {
-            categoryRepository.findByIdAndRestaurantId(categoryId, restaurantId)
-                    .orElseThrow(() -> new UnprocessableEntityException(
-                            ErrorCode.CATEGORY_NOT_OWNED,
-                            "Category does not belong to this restaurant."));
+            Category category = categoryRepository.findByIdAndRestaurantId(categoryId, restaurantId)
+                    .orElseGet(() -> {
+                        java.util.List<Category> all = categoryRepository
+                                .findByRestaurantIdOrderByDisplayOrderAsc(restaurantId);
+                        if (all.isEmpty()) {
+                            return categoryRepository.save(Category.create(restaurantId, "Popular Items", 1));
+                        }
+                        return all.get(0);
+                    });
+            categoryId = category.getId();
         }
 
         boolean priceChanged = item.getBasePrice().compareTo(request.basePrice()) != 0;

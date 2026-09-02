@@ -122,185 +122,169 @@ public class OrderServiceImpl implements OrderService {
             UUID userCredentialId,
             CreateOrderRequestDto request,
             String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new BadRequestException(
-                    ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "Idempotency-Key header is required.");
-        }
-        String payloadHash = hashPayload(request);
-        var cached = idempotencyService.findCachedResponse(idempotencyKey, payloadHash);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        var existing = orderRepository.findByIdempotencyKey(idempotencyKey);
-        if (existing.isPresent()) {
-            OrderResponseDto view = toDetail(existing.get());
-            idempotencyService.store(idempotencyKey, payloadHash, view);
-            // Same key already persisted — if payload differs, Redis path would have
-            // thrown; DB alone
-            // cannot re-validate payload, so treat as replay of original order (Phase3:
-            // key→response).
-            return view;
-        }
-
-        UUID customerId = resolveCustomerId(userCredentialId);
-
-        UUID addressId = request.addressId();
-        if (addressId == null || !addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)) {
-            List<String> existingAddrs = jdbcTemplate
-                    .queryForList("SELECT CAST(id AS VARCHAR) FROM address WHERE customer_id = ?", String.class,
-                            customerId);
-            if (!existingAddrs.isEmpty()) {
-                addressId = UUID.fromString(existingAddrs.get(0));
-            } else {
-                addressId = UUID.randomUUID();
-                jdbcTemplate.update(
-                        "INSERT INTO address (id, customer_id, label, recipient_name, recipient_phone, line1, city, state, pincode, latitude, longitude, is_default, created_at, updated_at) "
-                                +
-                                "VALUES (?, ?, 'Home', 'Customer', '9999999999', '123 Main St', 'Tumkur', 'Karnataka', '572101', 13.3379, 77.1173, true, NOW(), NOW())",
-                        addressId, customerId);
+        try {
+            if (idempotencyKey == null || idempotencyKey.isBlank()) {
+                throw new BadRequestException(
+                        ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "Idempotency-Key header is required.");
             }
-        }
+            String payloadHash = hashPayload(request);
+            var cached = idempotencyService.findCachedResponse(idempotencyKey, payloadHash);
+            if (cached.isPresent()) {
+                return cached.get();
+            }
 
-        CartCheckoutPort.CartCheckoutSnapshot cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
-        if (cart.restaurantId() == null || cart.items() == null || cart.items().isEmpty()) {
-            List<String> restaurants = jdbcTemplate
-                    .queryForList("SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1",
-                            String.class);
-            if (!restaurants.isEmpty()) {
-                UUID restId = UUID.fromString(restaurants.get(0));
-                List<String> menuItems = jdbcTemplate.queryForList(
-                        "SELECT CAST(id AS VARCHAR) FROM menu_item WHERE restaurant_id = ? AND is_available = true LIMIT 2",
-                        String.class,
-                        restId);
-                if (!menuItems.isEmpty()) {
+            var existing = orderRepository.findByIdempotencyKey(idempotencyKey);
+            if (existing.isPresent()) {
+                OrderResponseDto view = toDetail(existing.get());
+                idempotencyService.store(idempotencyKey, payloadHash, view);
+                return view;
+            }
+
+            UUID customerId = resolveCustomerId(userCredentialId);
+
+            UUID addressId = request.addressId();
+            if (addressId == null || !addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)) {
+                List<String> existingAddrs = jdbcTemplate
+                        .queryForList("SELECT CAST(id AS VARCHAR) FROM address WHERE customer_id = ?", String.class,
+                                customerId);
+                if (!existingAddrs.isEmpty()) {
+                    addressId = UUID.fromString(existingAddrs.get(0));
+                } else {
+                    addressId = UUID.randomUUID();
                     jdbcTemplate.update(
-                            "DELETE FROM cart_item WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?)",
-                            customerId);
-                    jdbcTemplate.update("DELETE FROM cart WHERE customer_id = ?", customerId);
-                    UUID cartId = UUID.randomUUID();
-                    jdbcTemplate.update(
-                            "INSERT INTO cart (id, customer_id, restaurant_id, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
-                            cartId, customerId, restId);
-                    for (String mIdStr : menuItems) {
-                        jdbcTemplate.update(
-                                "INSERT INTO cart_item (id, cart_id, menu_item_id, quantity, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
-                                UUID.randomUUID(), cartId, UUID.fromString(mIdStr));
-                    }
-                    cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
+                            "INSERT INTO address (id, customer_id, label, recipient_name, recipient_phone, line1, city, state, pincode, latitude, longitude, is_default, created_at, updated_at) "
+                                    +
+                                    "VALUES (?, ?, 'Home', 'Customer', '9999999999', '123 Main St', 'Tumkur', 'Karnataka', '572101', 13.3379, 77.1173, true, NOW(), NOW())",
+                            addressId, customerId);
                 }
             }
+
+            CartCheckoutPort.CartCheckoutSnapshot cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
             if (cart.restaurantId() == null || cart.items() == null || cart.items().isEmpty()) {
-                throw new UnprocessableEntityException(ErrorCode.CART_EMPTY, "Cart is empty.");
+                List<String> restaurants = jdbcTemplate
+                        .queryForList("SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1",
+                                String.class);
+                if (!restaurants.isEmpty()) {
+                    UUID restId = UUID.fromString(restaurants.get(0));
+                    List<String> menuItems = jdbcTemplate.queryForList(
+                            "SELECT CAST(id AS VARCHAR) FROM menu_item WHERE restaurant_id = ? AND is_available = true LIMIT 2",
+                            String.class,
+                            restId);
+                    if (!menuItems.isEmpty()) {
+                        jdbcTemplate.update(
+                                "DELETE FROM cart_item WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?)",
+                                customerId);
+                        jdbcTemplate.update("DELETE FROM cart WHERE customer_id = ?", customerId);
+                        UUID cartId = UUID.randomUUID();
+                        jdbcTemplate.update(
+                                "INSERT INTO cart (id, customer_id, restaurant_id, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
+                                cartId, customerId, restId);
+                        for (String mIdStr : menuItems) {
+                            jdbcTemplate.update(
+                                    "INSERT INTO cart_item (id, cart_id, menu_item_id, quantity, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
+                                    UUID.randomUUID(), cartId, UUID.fromString(mIdStr));
+                        }
+                        cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
+                    }
+                }
+                if (cart.restaurantId() == null || cart.items() == null || cart.items().isEmpty()) {
+                    throw new UnprocessableEntityException(ErrorCode.CART_EMPTY, "Cart is empty.");
+                }
             }
-        }
 
-        Map<UUID, String> itemNames = new LinkedHashMap<>();
-        for (CartCheckoutPort.Line line : cart.items()) {
-            MenuItemPriceProvider.MenuItemPriceSnapshot snapshot = menuItemPriceProvider
-                    .getPriceSnapshot(line.menuItemId(), line.variantId())
-                    .orElseThrow(() -> new UnprocessableEntityException(
-                            ErrorCode.ITEM_UNAVAILABLE, "A cart item is no longer available."));
-            if (!snapshot.available()) {
-                throw new UnprocessableEntityException(
-                        ErrorCode.ITEM_UNAVAILABLE, "A cart item is currently unavailable.");
+            Map<UUID, String> itemNames = new LinkedHashMap<>();
+            for (CartCheckoutPort.Line line : cart.items()) {
+                MenuItemPriceProvider.MenuItemPriceSnapshot snapshot = menuItemPriceProvider
+                        .getPriceSnapshot(line.menuItemId(), line.variantId())
+                        .orElseThrow(() -> new UnprocessableEntityException(
+                                ErrorCode.ITEM_UNAVAILABLE, "A cart item is no longer available."));
+                if (!snapshot.available()) {
+                    throw new UnprocessableEntityException(
+                            ErrorCode.ITEM_UNAVAILABLE, "A cart item is currently unavailable.");
+                }
+                if (!snapshot.restaurantId().equals(cart.restaurantId())) {
+                    throw new UnprocessableEntityException(
+                            ErrorCode.ITEM_UNAVAILABLE, "A cart item is no longer available at this restaurant.");
+                }
+                itemNames.put(line.menuItemId(), snapshot.itemName());
             }
-            if (!snapshot.restaurantId().equals(cart.restaurantId())) {
-                throw new UnprocessableEntityException(
-                        ErrorCode.ITEM_UNAVAILABLE, "A cart item is no longer available at this restaurant.");
-            }
-            itemNames.put(line.menuItemId(), snapshot.itemName());
-        }
 
-        BigDecimal subtotal = cart.subtotal().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal discount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        UUID appliedCouponId = null;
-        if (request.couponCode() != null && !request.couponCode().isBlank()) {
-            // Re-validate server-side — client coupon preview is never trusted (API
-            // Contracts §6.1).
-            CouponService.DiscountResult applied = couponService.apply(
-                    request.couponCode().trim(),
+            BigDecimal subtotal = cart.subtotal().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal discount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            UUID appliedCouponId = null;
+            if (request.couponCode() != null && !request.couponCode().isBlank()) {
+                // Re-validate server-side — client coupon preview is never trusted (API
+                // Contracts §6.1).
+                CouponService.DiscountResult applied = couponService.apply(
+                        request.couponCode().trim(),
+                        customerId,
+                        cart.restaurantId(),
+                        subtotal);
+                discount = applied.discountAmount().setScale(2, RoundingMode.HALF_UP);
+                appliedCouponId = applied.couponId();
+            }
+            BigDecimal deliveryFee = orderProperties.getDefaultDeliveryFee().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal taxAmount = subtotal.multiply(orderProperties.getTaxRate()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            Order order = Order.place(
+                    orderNumberGenerator.next(),
                     customerId,
                     cart.restaurantId(),
-                    subtotal);
-            discount = applied.discountAmount().setScale(2, RoundingMode.HALF_UP);
-            appliedCouponId = applied.couponId();
-        }
-        BigDecimal deliveryFee = orderProperties.getDefaultDeliveryFee().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal taxAmount = subtotal.multiply(orderProperties.getTaxRate()).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
-                .setScale(2, RoundingMode.HALF_UP);
-
-        Order order = Order.place(
-                orderNumberGenerator.next(),
-                customerId,
-                cart.restaurantId(),
-                addressId,
-                subtotal,
-                deliveryFee,
-                discount,
-                taxAmount,
-                total,
-                idempotencyKey);
-        if (appliedCouponId != null) {
-            order.attachCoupon(appliedCouponId);
-        }
-
-        try {
-            order = orderRepository.saveAndFlush(order);
-        } catch (DataIntegrityViolationException ex) {
-            Order raced = orderRepository.findByIdempotencyKey(idempotencyKey)
-                    .orElseThrow(() -> ex);
-            OrderResponseDto view = toDetail(raced);
-            idempotencyService.store(idempotencyKey, payloadHash, view);
-            return view;
-        }
-
-        for (CartCheckoutPort.Line line : cart.items()) {
-            orderItemRepository.save(OrderItem.snapshot(
-                    order,
-                    line.menuItemId(),
-                    line.variantId(),
-                    line.quantity(),
-                    line.unitPrice().setScale(2, RoundingMode.HALF_UP),
-                    line.lineTotal().setScale(2, RoundingMode.HALF_UP)));
-        }
-
-        orderStatusEventRepository.save(OrderStatusEvent.append(
-                order.getId(),
-                null,
-                OrderStatus.PLACED,
-                OrderActorType.CUSTOMER,
-                userCredentialId,
-                null));
-
-        cartCheckoutPort.clearCart(userCredentialId);
-        eventPublisher.publishEvent(OrderPlacedEvent.of(order.getId(), customerId, cart.restaurantId()));
-
-        OrderResponseDto response = orderMapper.toDetail(
-                order,
-                orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
-                orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
-                itemNames);
-        idempotencyService.store(idempotencyKey, payloadHash, response);
-
-        try {
-            String phone = jdbcTemplate.queryForObject("SELECT phone_number FROM user_credential WHERE id = ?",
-                    String.class, userCredentialId);
-            if ("9686753394".equals(phone)) {
-                Order testOrder = orderRepository.findById(order.getId()).orElse(order);
-                applyTransition(testOrder, OrderStatus.CONFIRMED, OrderActorType.SYSTEM, null, null);
-                applyTransition(testOrder, OrderStatus.ACCEPTED, OrderActorType.RESTAURANT, null,
-                        "Auto-accept for testing");
-                applyTransition(testOrder, OrderStatus.PREPARING, OrderActorType.RESTAURANT, null,
-                        "Auto-prepare for testing");
-                return getById(testOrder.getId(), userCredentialId, UserType.CUSTOMER);
+                    addressId,
+                    subtotal,
+                    deliveryFee,
+                    discount,
+                    taxAmount,
+                    total,
+                    idempotencyKey);
+            if (appliedCouponId != null) {
+                order.attachCoupon(appliedCouponId);
             }
-        } catch (Exception e) {
-            // ignore
-        }
 
-        return response;
+            try {
+                order = orderRepository.saveAndFlush(order);
+            } catch (DataIntegrityViolationException ex) {
+                Order raced = orderRepository.findByIdempotencyKey(idempotencyKey)
+                        .orElseThrow(() -> ex);
+                OrderResponseDto view = toDetail(raced);
+                idempotencyService.store(idempotencyKey, payloadHash, view);
+                return view;
+            }
+
+            for (CartCheckoutPort.Line line : cart.items()) {
+                orderItemRepository.save(OrderItem.snapshot(
+                        order,
+                        line.menuItemId(),
+                        line.variantId(),
+                        line.quantity(),
+                        line.unitPrice().setScale(2, RoundingMode.HALF_UP),
+                        line.lineTotal().setScale(2, RoundingMode.HALF_UP)));
+            }
+
+            orderStatusEventRepository.save(OrderStatusEvent.append(
+                    order.getId(),
+                    null,
+                    OrderStatus.PLACED,
+                    OrderActorType.CUSTOMER,
+                    userCredentialId,
+                    null));
+
+            cartCheckoutPort.clearCart(userCredentialId);
+            eventPublisher.publishEvent(OrderPlacedEvent.of(order.getId(), customerId, cart.restaurantId()));
+
+            OrderResponseDto response = orderMapper.toDetail(
+                    order,
+                    orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
+                    orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
+                    itemNames);
+            idempotencyService.store(idempotencyKey, payloadHash, response);
+            return response;
+        } catch (Exception fatal) {
+            log.error("CRITICAL FATAL EXCEPTION IN CREATE_ORDER", fatal);
+            throw fatal;
+        }
     }
 
     @Override
@@ -523,7 +507,7 @@ public class OrderServiceImpl implements OrderService {
                     UUID newCustId = UUID.randomUUID();
                     try {
                         jdbcTemplate.update(
-                                "INSERT INTO customer (id, user_credential_id, name, phone, created_at, updated_at) VALUES (?, ?, 'Foodie Customer', '9999999999', NOW(), NOW())",
+                                "INSERT INTO customer (id, user_credential_id, full_name, created_at, updated_at) VALUES (?, ?, 'Foodie Customer', NOW(), NOW())",
                                 newCustId, userCredentialId);
                     } catch (Exception ex) {
                         log.warn("Customer auto-creation notice: {}", ex.getMessage());

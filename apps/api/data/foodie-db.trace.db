@@ -749,3 +749,90 @@ ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [4210
 2026-09-01 09:15:47.699970+05:30 jdbc[3]: exception
 org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
 ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 13:25:28.393726+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 13:25:28.403345+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 14:19:01.237543+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 14:19:01.248065+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 14:34:00.086482+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 14:34:00.094684+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 16:01:58.627777+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 16:01:58.639691+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 16:30:28.713125+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "RESTAURANT" not found (candidates are: "restaurant"); SQL statement:
+SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1 [42103-224]
+2026-09-02 16:57:22.609384+05:30 jdbc[13]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "RESTAURANT" not found (candidates are: "restaurant"); SQL statement:
+SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1 [42103-224]
+2026-09-02 17:01:36.526107+05:30 jdbc[23]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "RESTAURANT" not found (candidates are: "restaurant"); SQL statement:
+SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1 [42103-224]
+2026-09-02 17:10:44.122464+05:30 jdbc[23]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "USER_CREDENTIAL" not found (candidates are: "user_credential"); SQL statement:
+SELECT phone_number FROM user_credential WHERE id = ? [42103-224]
+2026-09-02 17:17:35.640803+05:30 jdbc[23]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "USER_CREDENTIAL" not found (candidates are: "user_credential"); SQL statement:
+SELECT phone_number FROM user_credential WHERE id = ? [42103-224]
+2026-09-02 17:18:18.415848+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 17:18:18.424540+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 17:18:51.120183+05:30 jdbc[4]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "USER_CREDENTIAL" not found (candidates are: "user_credential"); SQL statement:
+SELECT phone_number FROM user_credential WHERE id = ? [42103-224]
+2026-09-02 19:10:43.901025+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 19:10:43.911445+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 19:41:58.867943+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 19:41:58.878478+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 19:57:00.082448+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 19:57:00.095396+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 19:59:44.840820+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "USER_CREDENTIAL" not found (candidates are: "user_credential"); SQL statement:
+SELECT phone_number FROM user_credential WHERE id = ? [42103-224]
+2026-09-02 20:23:00.262703+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 20:23:00.275102+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 20:39:14.238329+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 20:39:14.249037+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-02 20:51:25.198552+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-02 20:51:25.209449+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]

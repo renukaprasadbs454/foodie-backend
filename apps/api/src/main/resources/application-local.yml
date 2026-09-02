@@ -19,7 +19,7 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 2s
   jpa:
-    show-sql: true
+    show-sql: false
     hibernate:
       ddl-auto: update
     properties:
@@ -27,6 +27,10 @@ spring:
         globally_quoted_identifiers: true
         type:
           preferred_enum_jdbc_type: VARCHAR
+
+foodie:
+  razorpay:
+    mode: live
 
 logging:
   level:

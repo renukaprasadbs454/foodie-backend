@@ -76,7 +76,11 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
                     ErrorCode.ITEM_UNAVAILABLE, "Menu item is currently unavailable.");
         }
 
-        if (cart.getRestaurantId() != null && !cart.getRestaurantId().equals(snapshot.restaurantId())) {
+        List<CartItem> existingLines = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
+        if (existingLines.isEmpty()) {
+            cart.clearRestaurant();
+            cart.setRestaurantId(snapshot.restaurantId());
+        } else if (cart.getRestaurantId() != null && !cart.getRestaurantId().equals(snapshot.restaurantId())) {
             throw new ConflictException(
                     ErrorCode.CART_RESTAURANT_CONFLICT,
                     "Cart already contains items from a different restaurant.",
@@ -118,9 +122,11 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
         CartItem item = cartItemRepository.findByIdAndCartId(cartItemId, cart.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Cart item not found."));
         cartItemRepository.delete(item);
+        cartItemRepository.flush();
 
         if (cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()).isEmpty()) {
             cart.clearRestaurant();
+            cartRepository.saveAndFlush(cart);
         }
         return toView(cart);
     }
@@ -130,7 +136,9 @@ public class CartServiceImpl implements CartService, CartCheckoutPort {
     public void clear(UUID userCredentialId) {
         Cart cart = getOrCreateCart(resolveCustomerId(userCredentialId));
         cartItemRepository.deleteAllByCartId(cart.getId());
+        cartItemRepository.flush();
         cart.clearRestaurant();
+        cartRepository.saveAndFlush(cart);
     }
 
     @Override
