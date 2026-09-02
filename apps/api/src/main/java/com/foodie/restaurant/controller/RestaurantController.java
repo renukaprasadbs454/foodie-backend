@@ -264,7 +264,7 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.resubmit(principal.userId())));
     }
 
-    @PostMapping("/cleanup-dummy")
+    @GetMapping("/cleanup-dummy")
     @Operation(summary = "Cleanup dummy restaurants")
     public ResponseEntity<ApiResponse<String>> cleanupDummy() {
         var all = restaurantRepository.findAll();
