@@ -40,6 +40,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_HOST: postgres
@@ -61,7 +67,8 @@ services:
     image: nginx:1.27-alpine
     container_name: foodie-nginx
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
     volumes:

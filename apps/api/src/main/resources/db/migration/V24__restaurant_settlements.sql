@@ -1,7 +1,7 @@
 -- Module 10: Restaurant Settlement & Financial Payouts
 -- Manages restaurant earnings, commission splits, payout disbursements, and settlement ledger.
 
-CREATE TABLE restaurant_settlement (
+CREATE TABLE IF NOT EXISTS restaurant_settlement (
     id                      UUID PRIMARY KEY,
     restaurant_id           UUID NOT NULL REFERENCES restaurant(id) ON DELETE RESTRICT,
     settlement_number       VARCHAR(100) NOT NULL UNIQUE,
@@ -20,8 +20,8 @@ CREATE TABLE restaurant_settlement (
         CHECK (status IN ('PENDING', 'APPROVED', 'DISBURSED', 'FAILED'))
 );
 
-CREATE INDEX idx_rest_settlement_restaurant ON restaurant_settlement(restaurant_id);
-CREATE INDEX idx_rest_settlement_status ON restaurant_settlement(status);
+CREATE INDEX IF NOT EXISTS idx_rest_settlement_restaurant ON restaurant_settlement(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_rest_settlement_status ON restaurant_settlement(status);
 
 -- Update wallet_account constraint to include RESTAURANT owner type if constrained
 ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_account_owner_type;
