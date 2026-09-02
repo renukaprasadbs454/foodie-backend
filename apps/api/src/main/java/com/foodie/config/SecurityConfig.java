@@ -57,7 +57,8 @@ public class SecurityConfig {
                                                                 "/api/v1/payments/webhook/razorpay",
                                                                 "/api/v1/payouts/webhook/**",
                                                                 "/api/v1/storage/**",
-                                                                "/api/v1/debug/**")
+                                                                "/api/v1/debug/**",
+                                                                "/api/v1/restaurants/cleanup-dummy")
                                                 .permitAll()
                                                 .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**")
                                                 .authenticated()
