@@ -54,9 +54,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class RestaurantController {
 
     private final RestaurantService restaurantService;
+    private final com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
 
-    public RestaurantController(RestaurantService restaurantService) {
+    public RestaurantController(RestaurantService restaurantService,
+            com.foodie.restaurant.repository.RestaurantRepository restaurantRepository) {
         this.restaurantService = restaurantService;
+        this.restaurantRepository = restaurantRepository;
     }
 
     @GetMapping
@@ -259,5 +262,20 @@ public class RestaurantController {
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> resubmit(
             @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.resubmit(principal.userId())));
+    }
+
+    @PostMapping("/cleanup-dummy")
+    @Operation(summary = "Cleanup dummy restaurants")
+    public ResponseEntity<ApiResponse<String>> cleanupDummy() {
+        var all = restaurantRepository.findAll();
+        int removed = 0;
+        for (var r : all) {
+            if (!"Royal Hotel".equalsIgnoreCase(r.getName())) {
+                r.reject("Dummy restaurant removed");
+                restaurantRepository.save(r);
+                removed++;
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success("Cleaned up " + removed + " dummy restaurants."));
     }
 }

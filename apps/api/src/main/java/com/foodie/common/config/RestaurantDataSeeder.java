@@ -52,18 +52,21 @@ public class RestaurantDataSeeder implements ApplicationRunner {
         @Override
         @Transactional
         public void run(ApplicationArguments args) {
-                if (restaurantRepository.count() > 0) {
-                        log.info("Restaurants already seeded in persistent database. Preserving existing data.");
-                        return;
-                }
+                return;
+        }
 
-                log.info("Seeding 4 realistic approved restaurants with 10 menu items each...");
-                seedRestaurant1();
-                seedRestaurant2();
-                seedRestaurant3();
-                seedRestaurant4();
+        log.info("Seeding 4 realistic approved restaurants with 10 menu items each...");
 
-                log.info("Successfully seeded 4 approved restaurants with full menus!");
+        seedRestaurant1();
+
+        seedRestaurant2();
+
+        seedRestaurant3();
+
+        seedRestaurant4();
+
+        log.info("Successfully seeded 4 approved restaurants with full menus!");
+
         }
 
         private void seedRestaurant1() {
