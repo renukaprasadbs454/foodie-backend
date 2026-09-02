@@ -40,10 +40,12 @@ public class AuthController {
     @org.springframework.web.bind.annotation.GetMapping("/dev/approve")
     public String approveSpecific() {
         try {
-            int rows = jdbcTemplate.update(
-                    "UPDATE delivery_partner SET kyc_status = 'VERIFIED' WHERE user_credential_id = " +
-                            "(SELECT id FROM user_credential WHERE phone_number = '9972301881')");
-            return "SUCCESS: Rows updated: " + rows;
+            int rows1 = jdbcTemplate.update(
+                    "UPDATE restaurant SET status = 'APPROVED' WHERE owner_user_credential_id IN " +
+                            "(SELECT id FROM user_credential WHERE phone_number LIKE '%9972301895%')");
+            int rows2 = jdbcTemplate.update(
+                    "UPDATE restaurant SET status = 'APPROVED' WHERE status = 'PENDING'");
+            return "SUCCESS: Restaurant approved. Rows updated: " + (rows1 + rows2);
         } catch (Exception e) {
             e.printStackTrace();
             return "ERR: " + e.getMessage();
