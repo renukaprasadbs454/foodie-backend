@@ -15,17 +15,23 @@ public class RedisRateLimiter {
     }
 
     public void check(String key, int maxRequests, Duration window) {
-        Long count = redisTemplate.opsForValue().increment(key);
-        if (count == null) {
-            throw new RateLimitedException(window.toSeconds());
-        }
-        if (count == 1L) {
-            redisTemplate.expire(key, window);
-        }
-        if (count > maxRequests) {
-            Long ttl = redisTemplate.getExpire(key);
-            long retryAfter = ttl == null || ttl < 0 ? window.toSeconds() : ttl;
-            throw new RateLimitedException(retryAfter);
+        try {
+            Long count = redisTemplate.opsForValue().increment(key);
+            if (count == null) {
+                throw new RateLimitedException(window.toSeconds());
+            }
+            if (count == 1L) {
+                redisTemplate.expire(key, window);
+            }
+            if (count > maxRequests) {
+                Long ttl = redisTemplate.getExpire(key);
+                long retryAfter = ttl == null || ttl < 0 ? window.toSeconds() : ttl;
+                throw new RateLimitedException(retryAfter);
+            }
+        } catch (RateLimitedException rle) {
+            throw rle;
+        } catch (Exception ex) {
+            // Graceful fallback when Redis is unavailable
         }
     }
 }

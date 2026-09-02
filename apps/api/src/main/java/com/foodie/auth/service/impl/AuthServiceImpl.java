@@ -393,7 +393,11 @@ public class AuthServiceImpl implements AuthService {
 
         Duration sessionTtl = Duration.between(Instant.now(), expiresAt);
         if (!sessionTtl.isNegative() && !sessionTtl.isZero()) {
-            redisTemplate.opsForValue().set(sessionKey(refreshHash), credential.getId().toString(), sessionTtl);
+            try {
+                redisTemplate.opsForValue().set(sessionKey(refreshHash), credential.getId().toString(), sessionTtl);
+            } catch (Exception ex) {
+                log.debug("Redis session save skipped: {}", ex.getMessage());
+            }
         }
 
         return new TokenPairResponseDto(
