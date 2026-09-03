@@ -47,8 +47,10 @@ public final class OrderStateMachine {
 
         if (actor == OrderActorType.RESTAURANT) {
             return switch (to) {
-                case ACCEPTED -> from == OrderStatus.CONFIRMED ? Decision.ALLOW : Decision.ILLEGAL;
-                case REJECTED -> from == OrderStatus.CONFIRMED ? Decision.ALLOW : Decision.ILLEGAL;
+                case ACCEPTED ->
+                    (from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
+                case REJECTED ->
+                    (from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
                 case PREPARING -> from == OrderStatus.ACCEPTED ? Decision.ALLOW : Decision.ILLEGAL;
                 case READY_FOR_PICKUP -> from == OrderStatus.PREPARING ? Decision.ALLOW : Decision.ILLEGAL;
                 default -> Decision.FORBIDDEN;
