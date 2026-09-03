@@ -60,6 +60,10 @@ public class SecurityConfig {
                                                                 "/api/v1/debug/**",
                                                                 "/api/v1/restaurants/cleanup-dummy")
                                                 .permitAll()
+                                                .requestMatchers(
+                                                                HttpMethod.GET,
+                                                                "/api/v1/webhooks/whatsapp")
+                                                .permitAll()
                                                 .requestMatchers("/api/v1/restaurants/me", "/api/v1/restaurants/me/**")
                                                 .authenticated()
                                                 .requestMatchers(
