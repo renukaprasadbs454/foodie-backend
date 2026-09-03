@@ -25,8 +25,17 @@ public class DebugController {
     @Transactional
     @Operation(summary = "Cleanup dummy restaurants")
     public ResponseEntity<ApiResponse<String>> cleanupDummy() {
-        int updated = restaurantRepository.rejectAllDummyRestaurants();
-        return ResponseEntity.ok(ApiResponse.success("Cleaned up " + updated + " dummy restaurants."));
+        var list = restaurantRepository.findAll();
+        int count = 0;
+        for (var r : list) {
+            String name = r.getName() != null ? r.getName().toLowerCase() : "";
+            if (!name.contains("ganesha") && !name.contains("ganesh") && !name.contains("royal")) {
+                r.setStatus(com.foodie.common.enums.RestaurantStatus.REJECTED);
+                restaurantRepository.save(r);
+                count++;
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success("Cleaned up " + count + " dummy restaurants."));
     }
 
     @GetMapping("/approve-pending")
