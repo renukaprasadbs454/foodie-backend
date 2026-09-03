@@ -99,6 +99,11 @@ foodie:
     project-id: ${FCM_PROJECT_ID:}
     credentials-path: ${FCM_CREDENTIALS_PATH:}
     max-attempts: ${FCM_MAX_ATTEMPTS:3}
+  whatsapp:
+    api-url: ${WHATSAPP_API_URL:https://graph.facebook.com/v20.0}
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:1221588944380691}
+    access-token: ${WHATSAPP_ACCESS_TOKEN:EAAWQPzK10nEBSSDfEircdRcZB0HKL7YH9pJnmyKGGQUkJWA5vc4iEMZC1c7f85tRUwcoy1ktTFh6sy3q2ZApAZCjHFCkhtIJPwdKishqu0ZBnZBJCWTssHAaF9cfIa0k1OIiFf8WhGQKZB7MEhMXgGt8A8H46JMseHFUr9jOZBKaoZAy97WKAXdRTVkYjf4V44dOAhv7XOpKd74ldJNmT347cULqZCSQQh3vM5eclizdbFCZCHBRZBRNXDlUFUn7DtOHxTCYMlz79Q2qMd3msjGjcvWRAGdOj9M5ZC0GgJv1gYQZDZD}
+    verify-token: ${WHATSAPP_VERIFY_TOKEN:foodie_whatsapp_verify_token_2026}
 
 logging:
   level:
