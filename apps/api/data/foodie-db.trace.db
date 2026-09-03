@@ -854,3 +854,9 @@ ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [4210
 2026-09-04 01:08:10.600660+05:30 jdbc[3]: exception
 org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
 ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]
+2026-09-04 01:15:09.904972+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "WALLET_ACCOUNT" not found; SQL statement:
+ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type [42102-224]
+2026-09-04 01:15:09.919822+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "PAYMENT" not found; SQL statement:
+ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount [42102-224]

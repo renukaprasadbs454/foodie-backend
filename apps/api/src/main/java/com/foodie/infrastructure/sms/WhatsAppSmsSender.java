@@ -46,22 +46,45 @@ public class WhatsAppSmsSender implements SmsSender {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(accessToken);
 
-            // Constructing WhatsApp JSON Payload for a generic OTP text (or template)
-            // Assuming standard text message since template name was not explicitly
-            // provided by the user
+            // Constructing WhatsApp JSON Payload for a standard OTP template
+            // Free-form text is rejected by Meta outside the 24-hour service window.
             String payload = String.format(
                     """
                             {
                               "messaging_product": "whatsapp",
                               "to": "%s",
-                              "type": "text",
-                              "text": {
-                                "preview_url": false,
-                                "body": "Your Foodie App verification code is: *%s*. It is valid for 5 minutes. Do not share this code."
+                              "type": "template",
+                              "template": {
+                                "name": "login_otp",
+                                "language": {
+                                  "code": "en_US"
+                                },
+                                "components": [
+                                  {
+                                    "type": "body",
+                                    "parameters": [
+                                      {
+                                        "type": "text",
+                                        "text": "%s"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "button",
+                                    "sub_type": "url",
+                                    "index": "0",
+                                    "parameters": [
+                                      {
+                                        "type": "text",
+                                        "text": "%s"
+                                      }
+                                    ]
+                                  }
+                                ]
                               }
                             }
                             """,
-                    formattedPhone, otp);
+                    formattedPhone, otp, otp);
 
             HttpEntity<String> request = new HttpEntity<>(payload, headers);
 
