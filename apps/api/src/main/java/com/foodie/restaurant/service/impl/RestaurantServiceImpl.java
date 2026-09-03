@@ -158,7 +158,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         Pageable pageable;
         Page<Restaurant> result;
         if (lat != null && lng != null) {
-            pageable = PageRequest.of(Math.max(page, 0), clampSize(size));
+            pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
             result = restaurantRepository.searchApprovedGeo(
                     emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, lat, lng, pageable);
         } else {
@@ -589,6 +589,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant.approve();
         eventPublisher.publishEvent(RestaurantApprovedEvent.of(restaurantId, adminId));
         restaurantCacheService.evictRestaurant(restaurantId);
+        restaurantCacheService.evictAllListCaches();
         return buildDetail(restaurant, true);
     }
 
@@ -605,6 +606,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant.suspend();
         eventPublisher.publishEvent(RestaurantSuspendedEvent.of(restaurantId, adminId, reason));
         restaurantCacheService.evictRestaurant(restaurantId);
+        restaurantCacheService.evictAllListCaches();
         log.info("Restaurant {} suspended by admin {}: {}", restaurantId, adminId, reason);
         return buildDetail(restaurant, true);
     }
@@ -616,6 +618,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
         restaurant.reject(reason);
         restaurantCacheService.evictRestaurant(restaurantId);
+        restaurantCacheService.evictAllListCaches();
         log.info("Restaurant {} rejected by admin {}: {}", restaurantId, adminId, reason);
         return buildDetail(restaurant, true);
     }
