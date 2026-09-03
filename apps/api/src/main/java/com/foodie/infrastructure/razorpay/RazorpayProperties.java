@@ -53,6 +53,6 @@ public class RazorpayProperties {
     }
 
     public boolean isStub() {
-        return !"live".equalsIgnoreCase(mode);
+        return "stub".equalsIgnoreCase(mode);
     }
 }
