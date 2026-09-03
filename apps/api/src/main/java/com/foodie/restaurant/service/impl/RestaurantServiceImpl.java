@@ -217,11 +217,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             }
         }
 
-        RestaurantDetailResponseDto dto = restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                privileged);
+        RestaurantDetailResponseDto dto = buildDetail(restaurant, privileged);
         if (restaurant.getStatus() == RestaurantStatus.APPROVED && !privileged) {
             try {
                 restaurantCacheService.putDetailJson(restaurantId, objectMapper.writeValueAsString(dto));
@@ -240,11 +236,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Transactional(readOnly = true)
     public RestaurantDetailResponseDto getMyRestaurant(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -269,11 +261,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         eventPublisher.publishEvent(RestaurantCreatedEvent.of(
                 restaurant.getId(), ownerCredentialId, restaurant.getName()));
         restaurantCacheService.evictAllListCaches();
-        return restaurantMapper.toDetail(
-                restaurant,
-                null,
-                null,
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -294,11 +282,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.address().longitude());
         restaurant.syncGeoFromAddress();
         restaurantCacheService.evictRestaurant(restaurant.getId());
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -577,11 +561,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant.approve();
         eventPublisher.publishEvent(RestaurantApprovedEvent.of(restaurantId, adminId));
         restaurantCacheService.evictRestaurant(restaurantId);
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -598,11 +578,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         eventPublisher.publishEvent(RestaurantSuspendedEvent.of(restaurantId, adminId, reason));
         restaurantCacheService.evictRestaurant(restaurantId);
         log.info("Restaurant {} suspended by admin {}: {}", restaurantId, adminId, reason);
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -613,11 +589,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant.reject(reason);
         restaurantCacheService.evictRestaurant(restaurantId);
         log.info("Restaurant {} rejected by admin {}: {}", restaurantId, adminId, reason);
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -626,11 +598,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         restaurant.resubmit();
         restaurantCacheService.evictRestaurant(restaurant.getId());
-        return restaurantMapper.toDetail(
-                restaurant,
-                signedOrNull(restaurant.getLogoImageKey()),
-                signedOrNull(restaurant.getCoverImageKey()),
-                true);
+        return buildDetail(restaurant, true);
     }
 
     @Override
@@ -646,6 +614,24 @@ public class RestaurantServiceImpl implements RestaurantService {
     private Restaurant requireOwned(UUID ownerCredentialId) {
         return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
+    }
+
+    private RestaurantDetailResponseDto buildDetail(Restaurant restaurant, boolean privileged) {
+        RestaurantLegalDetailResponseDto legalDetails = null;
+        List<RestaurantDocumentResponseDto> documents = null;
+        if (privileged) {
+            legalDetails = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
+                    .map(restaurantMapper::toLegalDetailResponse).orElse(null);
+            documents = restaurantDocumentRepository.findByRestaurantId(restaurant.getId()).stream()
+                    .map(restaurantMapper::toDocument).toList();
+        }
+        return restaurantMapper.toDetail(
+                restaurant,
+                signedOrNull(restaurant.getLogoImageKey()),
+                signedOrNull(restaurant.getCoverImageKey()),
+                privileged,
+                legalDetails,
+                documents);
     }
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {

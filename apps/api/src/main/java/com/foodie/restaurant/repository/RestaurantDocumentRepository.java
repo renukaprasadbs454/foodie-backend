@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RestaurantDocumentRepository extends JpaRepository<RestaurantDocument, UUID> {
 
     Optional<RestaurantDocument> findByIdAndRestaurantId(UUID id, UUID restaurantId);
+
+    java.util.List<RestaurantDocument> findByRestaurantId(UUID restaurantId);
 }

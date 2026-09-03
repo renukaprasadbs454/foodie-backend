@@ -30,7 +30,7 @@ public class DebugController {
         for (var r : list) {
             String name = r.getName() != null ? r.getName().toLowerCase() : "";
             if (!name.contains("ganesha") && !name.contains("ganesh") && !name.contains("royal")) {
-                r.setStatus(com.foodie.common.enums.RestaurantStatus.REJECTED);
+                r.reject("Cleanup dummy");
                 restaurantRepository.save(r);
                 count++;
             }
