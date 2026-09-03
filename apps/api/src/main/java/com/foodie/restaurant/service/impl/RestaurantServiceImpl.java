@@ -197,7 +197,12 @@ public class RestaurantServiceImpl implements RestaurantService {
             } catch (IllegalArgumentException ignored) {
             }
         }
-        Page<Restaurant> result = restaurantRepository.searchAdmin(statusEnum, pageable);
+        Page<Restaurant> result;
+        if (statusEnum != null) {
+            result = restaurantRepository.findByStatus(statusEnum, pageable);
+        } else {
+            result = restaurantRepository.findAll(pageable);
+        }
         List<RestaurantDetailResponseDto> items = result.getContent().stream()
                 .map(r -> buildDetail(r, true))
                 .toList();
