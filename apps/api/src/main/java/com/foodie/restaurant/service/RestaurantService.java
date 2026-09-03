@@ -113,4 +113,6 @@ public interface RestaurantService {
 
         /** Document verification for Admin Ops — sets verified_at. */
         RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
+
+        void delete(UUID restaurantId, UUID adminId);
 }

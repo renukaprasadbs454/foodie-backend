@@ -73,4 +73,14 @@ public class AdminRestaurantController {
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.rejectRestaurant(principal.userId(), restaurantId, request.reason())));
     }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Permanently delete a SUSPENDED restaurant")
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID restaurantId) {
+        adminOperationsService.deleteRestaurant(principal.userId(), restaurantId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }

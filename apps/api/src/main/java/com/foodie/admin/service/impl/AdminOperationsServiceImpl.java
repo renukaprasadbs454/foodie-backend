@@ -119,6 +119,21 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public void deleteRestaurant(UUID actorCredentialId, UUID restaurantId) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "SUSPEND");
+        RestaurantDetailResponseDto before = restaurantService.getById(restaurantId, actorCredentialId, true);
+        restaurantService.delete(restaurantId, admin.getId());
+        adminService.recordAudit(
+                admin.getId(),
+                "DELETE_RESTAURANT",
+                "RESTAURANT",
+                restaurantId,
+                Map.of("status", before.status()),
+                Map.of("status", "DELETED"));
+    }
+
+    @Override
+    @Transactional
     public RestaurantDetailResponseDto rejectRestaurant(
             UUID actorCredentialId, UUID restaurantId, String reason) {
         AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");

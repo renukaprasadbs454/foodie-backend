@@ -625,6 +625,22 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public void delete(UUID restaurantId, UUID adminId) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
+        if (restaurant.getStatus() != RestaurantStatus.SUSPENDED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Only SUSPENDED restaurants can be deleted.");
+        }
+        restaurantRepository.delete(restaurant);
+        restaurantCacheService.evictRestaurant(restaurantId);
+        restaurantCacheService.evictAllListCaches();
+        log.info("Restaurant {} permanently deleted by admin {}", restaurantId, adminId);
+    }
+
+    @Override
+    @Transactional
     public RestaurantDetailResponseDto resubmit(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         restaurant.resubmit();

@@ -23,6 +23,8 @@ public interface AdminOperationsService {
         RestaurantDetailResponseDto suspendRestaurant(
                         UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request);
 
+        void deleteRestaurant(UUID actorCredentialId, UUID restaurantId);
+
         PageResult<RestaurantDetailResponseDto> listRestaurants(
                         UUID actorCredentialId, String status, int page, int size, String sort);
 
