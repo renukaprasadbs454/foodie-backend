@@ -581,10 +581,10 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantDetailResponseDto approve(UUID restaurantId, UUID adminId) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
-        if (restaurant.getStatus() != RestaurantStatus.PENDING) {
+        if (restaurant.getStatus() == RestaurantStatus.APPROVED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Only PENDING restaurants can be approved.");
+                    "Restaurant is already approved.");
         }
         restaurant.approve();
         eventPublisher.publishEvent(RestaurantApprovedEvent.of(restaurantId, adminId));
