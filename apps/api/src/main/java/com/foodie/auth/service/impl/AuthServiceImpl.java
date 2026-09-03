@@ -104,13 +104,7 @@ public class AuthServiceImpl implements AuthService {
             log.debug("Redis OTP storage skipped: {}", ex.getMessage());
         }
 
-        // Print to backend running terminal in big prominent banner
-        System.out.println("\n==================================================================");
-        System.out.println("🔑 [FOODIE OTP CODE] REAL OTP FOR PHONE (" + phoneNumber + "): " + otp);
-        System.out.println("==================================================================\n");
-        log.info("==========================================================");
-        log.info("🔑 [FOODIE OTP CODE] REAL OTP FOR PHONE ({}): {}", phoneNumber, otp);
-        log.info("==========================================================");
+        // OTP no longer printed to terminal for production security
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -132,7 +126,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String realOtp = otpStore.get(request.phoneNumber());
-        boolean isMatch = (realOtp != null && realOtp.equals(request.otp())) || "123456".equals(request.otp());
+        boolean isMatch = (realOtp != null && realOtp.equals(request.otp()));
         if (!isMatch) {
             try {
                 String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
