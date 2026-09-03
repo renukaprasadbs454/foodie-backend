@@ -23,6 +23,9 @@ public interface AdminOperationsService {
         RestaurantDetailResponseDto suspendRestaurant(
                         UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request);
 
+        PageResult<RestaurantDetailResponseDto> listRestaurants(
+                        UUID actorCredentialId, String status, int page, int size, String sort);
+
         RestaurantDetailResponseDto rejectRestaurant(
                         UUID actorCredentialId, UUID restaurantId, String reason);
 

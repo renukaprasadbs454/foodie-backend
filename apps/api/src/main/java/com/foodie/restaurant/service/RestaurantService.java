@@ -41,6 +41,12 @@ public interface RestaurantService {
                         int size,
                         String sort);
 
+        PageResult<RestaurantDetailResponseDto> listForAdmin(
+                        String status,
+                        int page,
+                        int size,
+                        String sort);
+
         RestaurantDetailResponseDto getById(UUID restaurantId, UUID callerCredentialId, boolean callerIsAdmin);
 
         RestaurantDetailResponseDto getMyProfile(UUID ownerCredentialId);

@@ -188,6 +188,29 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageResult<RestaurantDetailResponseDto> listForAdmin(String status, int page, int size, String sort) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
+        com.foodie.common.enums.RestaurantStatus statusEnum = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                statusEnum = com.foodie.common.enums.RestaurantStatus.valueOf(status);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        Page<Restaurant> result = restaurantRepository.searchAdmin(statusEnum, pageable);
+        List<RestaurantDetailResponseDto> items = result.getContent().stream()
+                .map(r -> buildDetail(r, true))
+                .toList();
+        PaginationMeta pagination = new PaginationMeta(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages());
+        return new PageResult<>(items, pagination);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public RestaurantDetailResponseDto getById(UUID restaurantId, UUID callerCredentialId, boolean callerIsAdmin) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseGet(() -> {

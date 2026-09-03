@@ -92,6 +92,15 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AdminOperationsService.PageResult<RestaurantDetailResponseDto> listRestaurants(
+            UUID actorCredentialId, String status, int page, int size, String sort) {
+        requirePermission(actorCredentialId, "RESTAURANT", "READ");
+        var res = restaurantService.listForAdmin(status, page, size, sort);
+        return new AdminOperationsService.PageResult<>(res.items(), res.pagination());
+    }
+
+    @Override
     @Transactional
     public RestaurantDetailResponseDto suspendRestaurant(
             UUID actorCredentialId, UUID restaurantId, SuspendRestaurantRequestDto request) {

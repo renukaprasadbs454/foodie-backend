@@ -65,4 +65,10 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                @Param("lat") Double lat,
                @Param("lng") Double lng,
                Pageable pageable);
+
+     @Query("SELECT r FROM Restaurant r"
+               + " WHERE (:status IS NULL OR r.status = :status)")
+     Page<Restaurant> searchAdmin(
+               @Param("status") com.foodie.common.enums.RestaurantStatus status,
+               Pageable pageable);
 }

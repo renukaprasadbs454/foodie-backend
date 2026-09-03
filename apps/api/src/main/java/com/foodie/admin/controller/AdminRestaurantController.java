@@ -29,6 +29,19 @@ public class AdminRestaurantController {
         this.adminOperationsService = adminOperationsService;
     }
 
+    @org.springframework.web.bind.annotation.GetMapping
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List restaurants for admin")
+    public ResponseEntity<ApiResponse<AdminOperationsService.PageResult<RestaurantDetailResponseDto>>> list(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status,
+            @org.springframework.web.bind.annotation.RequestParam(value = "page", defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(value = "size", defaultValue = "20") int size,
+            @org.springframework.web.bind.annotation.RequestParam(value = "sort", defaultValue = "createdAt") String sort) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.listRestaurants(principal.userId(), status, page, size, sort)));
+    }
+
     @PatchMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Approve a PENDING restaurant")
