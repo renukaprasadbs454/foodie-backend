@@ -43,14 +43,8 @@ public class PaymentController {
                         @PathVariable UUID orderId,
                         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
                         @RequestParam(defaultValue = "false") boolean useWallet) {
-                try {
-                        return ResponseEntity.ok(ApiResponse.success(
-                                        paymentService.initiate(principal.userId(), orderId, idempotencyKey, useWallet)));
-                } catch (Exception ex) {
-                        return ResponseEntity.ok(ApiResponse.<PaymentInitiationResponseDto>failure(
-                                com.foodie.common.exception.ErrorCode.EXTERNAL_SERVICE_ERROR, 
-                                "Diagnostic CF Error: " + ex.getMessage()));
-                }
+                return ResponseEntity.ok(ApiResponse.success(
+                                paymentService.initiate(principal.userId(), orderId, idempotencyKey, useWallet)));
         }
 
         @PostMapping("/verify")
