@@ -124,10 +124,10 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
             int status = ex.getStatusCode().value();
             String responseBody = ex.getResponseBodyAsString();
             log.error("Cashfree HTTP {} on {}: {}", status, path, responseBody);
-            throw new com.foodie.common.exception.BadRequestException(com.foodie.common.exception.ErrorCode.VALIDATION_ERROR, "CF Rejected: " + responseBody);
+            throw new com.foodie.common.exception.BadRequestException(com.foodie.common.exception.ErrorCode.BAD_REQUEST, "CF Rejected: " + responseBody);
         } catch (Exception ex) {
             log.error("Cashfree call failed on {}", path, ex);
-            throw new com.foodie.common.exception.BadRequestException(com.foodie.common.exception.ErrorCode.VALIDATION_ERROR, "CF Timeout: " + ex.getMessage());
+            throw new com.foodie.common.exception.BadRequestException(com.foodie.common.exception.ErrorCode.BAD_REQUEST, "CF Timeout: " + ex.getMessage());
         }
     }
 }
