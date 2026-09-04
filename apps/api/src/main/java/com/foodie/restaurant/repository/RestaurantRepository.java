@@ -35,7 +35,8 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
      @Query("SELECT r FROM Restaurant r"
                + " WHERE r.status = com.foodie.common.enums.RestaurantStatus.APPROVED"
                + " AND (:search IS NULL OR :search = ''"
-               + "      OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%')))"
+               + "      OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%'))"
+               + "      OR EXISTS (SELECT 1 FROM MenuItem m WHERE m.restaurantId = r.id AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%'))))"
                + " AND (:minRating IS NULL OR r.avgRating >= :minRating)"
                + " AND (:cuisineType IS NULL OR :cuisineType IS NOT NULL)")
      Page<Restaurant> searchApproved(
@@ -53,7 +54,8 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
      @Query("SELECT r FROM Restaurant r"
                + " WHERE r.status = com.foodie.common.enums.RestaurantStatus.APPROVED"
                + " AND (:search IS NULL OR :search = ''"
-               + "      OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%')))"
+               + "      OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%'))"
+               + "      OR EXISTS (SELECT 1 FROM MenuItem m WHERE m.restaurantId = r.id AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%'))))"
                + " AND (:minRating IS NULL OR r.avgRating >= :minRating)"
                + " AND (:cuisineType IS NULL OR :cuisineType IS NOT NULL)"
                + " AND (:lat IS NULL OR :lat IS NOT NULL)"
