@@ -61,7 +61,10 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
     @Override
     public CashfreeOrderCreateResult createOrder(BigDecimal amount, String customerId, String customerPhone, String notesOrderId) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("order_id", notesOrderId != null ? notesOrderId : ("OD_" + System.currentTimeMillis()));
+        String uniqueOrderId = notesOrderId != null 
+                ? (notesOrderId.length() > 36 ? notesOrderId.substring(0, 36) : notesOrderId) + "_" + (System.currentTimeMillis() % 10000000)
+                : ("OD_" + System.currentTimeMillis());
+        body.put("order_id", uniqueOrderId);
         body.put("order_amount", amount.setScale(2, RoundingMode.HALF_UP));
         body.put("order_currency", "INR");
         body.put("customer_details", Map.of(
