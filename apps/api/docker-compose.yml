@@ -66,6 +66,9 @@ services:
       JWT_SECRET: local-dev-only-change-me-foodie-jwt-secret-key-32b
       RAZORPAY_MODE: stub
       FCM_MODE: stub
+      CASHFREE_APP_ID: ${CASHFREE_APP_ID}
+      CASHFREE_SECRET_KEY: ${CASHFREE_SECRET_KEY}
+      CASHFREE_ENV: ${CASHFREE_ENV}
     ports:
       - "8080:8080"
 
