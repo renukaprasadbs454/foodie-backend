@@ -20,9 +20,20 @@ public class OpenApiConfig {
     @Bean
     OpenAPI foodieOpenApi() {
         return new OpenAPI()
+                .servers(java.util.List.of(
+                        new io.swagger.v3.oas.models.servers.Server()
+                                .url("https://api.foodie.kwiko.org")
+                                .description("Live Production API Server"),
+                        new io.swagger.v3.oas.models.servers.Server()
+                                .url("http://localhost:8082")
+                                .description("Local Development Server (Port 8082)"),
+                        new io.swagger.v3.oas.models.servers.Server()
+                                .url("http://localhost:8080")
+                                .description("Local Development Server (Port 8080)")
+                ))
                 .info(new Info()
                         .title("Foodie Platform API")
-                        .description("Modular monolith REST API — contract-first (/api/v1). See foodie-api / Docs/04_API_Contracts.")
+                        .description("Modular monolith REST API — contract-first (/api/v1). Live Server: https://api.foodie.kwiko.org")
                         .version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
                 .components(new Components()
