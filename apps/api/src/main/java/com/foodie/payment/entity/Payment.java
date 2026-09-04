@@ -18,11 +18,11 @@ public class Payment extends BaseEntity {
     @Column(name = "order_id", nullable = false, unique = true, updatable = false)
     private UUID orderId;
 
-    @Column(name = "razorpay_order_id", length = 100)
-    private String razorpayOrderId;
+    @Column(name = "payment_session_id", length = 100)
+    private String paymentSessionId;
 
-    @Column(name = "razorpay_payment_id", length = 100)
-    private String razorpayPaymentId;
+    @Column(name = "cashfree_order_id", length = 100)
+    private String cashfreeOrderId;
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
@@ -45,13 +45,13 @@ public class Payment extends BaseEntity {
 
     public static Payment initiate(
             UUID orderId,
-            String razorpayOrderId,
+            String paymentSessionId,
             BigDecimal amount,
             BigDecimal walletAmount,
             String idempotencyKey) {
         Payment payment = new Payment();
         payment.orderId = orderId;
-        payment.razorpayOrderId = razorpayOrderId;
+        payment.paymentSessionId = paymentSessionId;
         payment.amount = amount;
         payment.walletAmount = walletAmount != null ? walletAmount : BigDecimal.ZERO;
         payment.status = amount.compareTo(BigDecimal.ZERO) == 0 && payment.walletAmount.compareTo(BigDecimal.ZERO) > 0
@@ -64,16 +64,16 @@ public class Payment extends BaseEntity {
         return payment;
     }
 
-    public void markCaptured(String razorpayPaymentId) {
+    public void markCaptured(String cashfreeOrderId) {
         this.status = PaymentStatus.CAPTURED;
-        this.razorpayPaymentId = razorpayPaymentId;
+        this.cashfreeOrderId = cashfreeOrderId;
         this.capturedAt = Instant.now();
     }
 
-    public void markFailed(String razorpayPaymentId) {
+    public void markFailed(String cashfreeOrderId) {
         this.status = PaymentStatus.FAILED;
-        if (razorpayPaymentId != null) {
-            this.razorpayPaymentId = razorpayPaymentId;
+        if (cashfreeOrderId != null) {
+            this.cashfreeOrderId = cashfreeOrderId;
         }
     }
 
@@ -82,18 +82,17 @@ public class Payment extends BaseEntity {
     }
 
     /**
-     * Re-open a FAILED payment for a new Razorpay intent (unique order_id
-     * constraint).
+     * Re-open a FAILED payment for a new Cashfree intent.
      */
-    public void reinitiate(String razorpayOrderId, String idempotencyKey, BigDecimal amount, BigDecimal walletAmount) {
-        this.razorpayOrderId = razorpayOrderId;
+    public void reinitiate(String paymentSessionId, String idempotencyKey, BigDecimal amount, BigDecimal walletAmount) {
+        this.paymentSessionId = paymentSessionId;
         this.idempotencyKey = idempotencyKey;
         this.amount = amount;
         this.walletAmount = walletAmount != null ? walletAmount : BigDecimal.ZERO;
         this.status = amount.compareTo(BigDecimal.ZERO) == 0 && this.walletAmount.compareTo(BigDecimal.ZERO) > 0
                 ? PaymentStatus.CAPTURED
                 : PaymentStatus.PENDING;
-        this.razorpayPaymentId = this.status == PaymentStatus.CAPTURED ? "WALLET_" + orderId : null;
+        this.cashfreeOrderId = this.status == PaymentStatus.CAPTURED ? "WALLET_" + orderId : null;
         this.capturedAt = this.status == PaymentStatus.CAPTURED ? Instant.now() : null;
     }
 
@@ -101,12 +100,12 @@ public class Payment extends BaseEntity {
         return orderId;
     }
 
-    public String getRazorpayOrderId() {
-        return razorpayOrderId;
+    public String getPaymentSessionId() {
+        return paymentSessionId;
     }
 
-    public String getRazorpayPaymentId() {
-        return razorpayPaymentId;
+    public String getCashfreeOrderId() {
+        return cashfreeOrderId;
     }
 
     public BigDecimal getAmount() {

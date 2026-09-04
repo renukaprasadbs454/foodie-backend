@@ -3,10 +3,12 @@ package com.foodie.payment.dto.response;
 import java.math.BigDecimal;
 
 public record PaymentInitiationResponseDto(
-                String razorpayOrderId,
+                String paymentSessionId,
+                String cfOrderId,
                 BigDecimal amount,
                 String currency,
-                String keyId,
+                String appId,
                 BigDecimal walletAmountUsed,
                 String status) {
 }
+

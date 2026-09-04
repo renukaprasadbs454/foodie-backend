@@ -11,7 +11,7 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     Optional<Payment> findByIdempotencyKey(String idempotencyKey);
 
-    Optional<Payment> findByRazorpayOrderId(String razorpayOrderId);
+    Optional<Payment> findByCashfreeOrderId(String cashfreeOrderId);
 
-    Optional<Payment> findByRazorpayPaymentId(String razorpayPaymentId);
+    Optional<Payment> findByCashfreePaymentId(String cashfreePaymentId);
 }

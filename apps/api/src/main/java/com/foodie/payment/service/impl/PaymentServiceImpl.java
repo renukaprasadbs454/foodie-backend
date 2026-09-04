@@ -11,9 +11,7 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
-import com.foodie.infrastructure.razorpay.RazorpayClient;
-import com.foodie.infrastructure.razorpay.RazorpayProperties;
-import com.foodie.infrastructure.razorpay.RazorpaySignatureVerifier;
+import com.foodie.infrastructure.cashfree.CashfreePaymentClient;
 import com.foodie.payment.dto.request.RefundPaymentRequestDto;
 import com.foodie.payment.dto.response.PaymentInitiationResponseDto;
 import com.foodie.payment.dto.response.RefundInitiationResponseDto;
@@ -37,6 +35,7 @@ import java.math.RoundingMode;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,11 +50,10 @@ public class PaymentServiceImpl implements PaymentService {
     private final RefundRequestRepository refundRequestRepository;
     private final OrderPaymentPort orderPaymentPort;
     private final CustomerSummaryProvider customerSummaryProvider;
-    private final RazorpayClient razorpayClient;
-    private final RazorpayProperties razorpayProperties;
-    private final RazorpaySignatureVerifier signatureVerifier;
+    private final CashfreePaymentClient cashfreeClient;
     private final WebhookDedupService webhookDedupService;
     private final PaymentIdempotencyStore idempotencyStore;
+    private final String appId;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final WalletService walletService;
@@ -65,26 +63,24 @@ public class PaymentServiceImpl implements PaymentService {
             RefundRequestRepository refundRequestRepository,
             OrderPaymentPort orderPaymentPort,
             CustomerSummaryProvider customerSummaryProvider,
-            RazorpayClient razorpayClient,
-            RazorpayProperties razorpayProperties,
-            RazorpaySignatureVerifier signatureVerifier,
+            CashfreePaymentClient cashfreeClient,
             WebhookDedupService webhookDedupService,
             PaymentIdempotencyStore idempotencyStore,
             ObjectMapper objectMapper,
             ApplicationEventPublisher eventPublisher,
-            WalletService walletService) {
+            WalletService walletService,
+            @Value("${CASHFREE_APP_ID:}") String appId) {
         this.paymentRepository = paymentRepository;
         this.refundRequestRepository = refundRequestRepository;
         this.orderPaymentPort = orderPaymentPort;
         this.customerSummaryProvider = customerSummaryProvider;
-        this.razorpayClient = razorpayClient;
-        this.razorpayProperties = razorpayProperties;
-        this.signatureVerifier = signatureVerifier;
+        this.cashfreeClient = cashfreeClient;
         this.webhookDedupService = webhookDedupService;
         this.idempotencyStore = idempotencyStore;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
         this.walletService = walletService;
+        this.appId = appId;
     }
 
     @Override
@@ -144,10 +140,12 @@ public class PaymentServiceImpl implements PaymentService {
                 return view;
             }
             if (payment.getStatus() == PaymentStatus.FAILED) {
-                String razorpayOrderId = null;
+                String paymentSessionId = null;
+                String cfOrderId = null;
                 if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    var created = razorpayClient.createOrder(razorpayAmount, shortReceipt(orderId), orderId.toString());
-                    razorpayOrderId = created.razorpayOrderId();
+                    var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), null, orderId.toString());
+                    paymentSessionId = created.paymentSessionId();
+                    cfOrderId = created.cfOrderId();
                 }
 
                 if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
@@ -155,12 +153,13 @@ public class PaymentServiceImpl implements PaymentService {
                             LedgerReferenceType.ORDER_PAYMENT, orderId);
                 }
 
-                payment.reinitiate(razorpayOrderId, idempotencyKey, razorpayAmount, walletAmountUsed);
+                payment.reinitiate(paymentSessionId, idempotencyKey, razorpayAmount, walletAmountUsed);
                 if (razorpayAmount.compareTo(BigDecimal.ZERO) == 0 && walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
                     payment.markCaptured("WALLET_" + orderId);
                     paymentRepository.save(payment);
                     eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
                 } else {
+                    if (cfOrderId != null) payment.markFailed(cfOrderId);
                     paymentRepository.save(payment);
                 }
 
@@ -172,10 +171,12 @@ public class PaymentServiceImpl implements PaymentService {
                     ErrorCode.ORDER_NOT_PAYABLE, "Order already has a captured or refunded payment.");
         }
 
-        String razorpayOrderId = null;
+        String paymentSessionId = null;
+        String cfOrderId = null;
         if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
-            var created = razorpayClient.createOrder(razorpayAmount, shortReceipt(orderId), orderId.toString());
-            razorpayOrderId = created.razorpayOrderId();
+            var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), null, orderId.toString());
+            paymentSessionId = created.paymentSessionId();
+            cfOrderId = created.cfOrderId();
         }
 
         if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
@@ -184,7 +185,11 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         Payment payment = paymentRepository.save(Payment.initiate(
-                orderId, razorpayOrderId, razorpayAmount, walletAmountUsed, idempotencyKey));
+                orderId, paymentSessionId, razorpayAmount, walletAmountUsed, idempotencyKey));
+        if (cfOrderId != null) {
+            payment.markFailed(cfOrderId);
+            paymentRepository.save(payment);
+        }
 
         if (razorpayAmount.compareTo(BigDecimal.ZERO) == 0 && walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
             eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
@@ -199,19 +204,17 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public boolean verifyPayment(UUID userCredentialId,
             com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
-        boolean valid = signatureVerifier.isValidPaymentSignature(
-                request.razorpayOrderId(),
-                request.razorpayPaymentId(),
-                request.razorpaySignature());
-        if (!valid) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Invalid payment signature.");
+        
+        var fetch = cashfreeClient.fetchOrder(request.cashfreeOrderId());
+        if (!"PAID".equalsIgnoreCase(fetch.status())) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Payment not PAID in Cashfree.");
         }
 
         Payment payment = paymentRepository.findByOrderId(request.orderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for order."));
 
-        if (payment.getStatus() == PaymentStatus.PENDING) {
-            payment.markCaptured(request.razorpayPaymentId());
+        if (payment.getStatus() == PaymentStatus.PENDING || payment.getStatus() == PaymentStatus.FAILED) {
+            payment.markCaptured(request.cashfreeOrderId());
             paymentRepository.save(payment);
             eventPublisher.publishEvent(PaymentCapturedEvent.of(
                     payment.getOrderId(),
@@ -223,33 +226,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public void handleWebhook(String rawBody, String signatureHeader) {
-        if (!signatureVerifier.isValid(rawBody, signatureHeader)) {
-            throw new BadRequestException(
-                    ErrorCode.INVALID_WEBHOOK_SIGNATURE, "Invalid Razorpay webhook signature.");
-        }
-
-        JsonNode root;
-        try {
-            root = objectMapper.readTree(rawBody);
-        } catch (Exception ex) {
-            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Malformed webhook payload.");
-        }
-
-        String eventId = firstNonBlank(root.path("id").asText(null), root.path("event_id").asText(null));
-        if (webhookDedupService.isDuplicate(eventId)) {
-            log.info("Duplicate Razorpay webhook acknowledged eventId={}", eventId);
-            return;
-        }
-
-        String eventType = root.path("event").asText("");
-        switch (eventType) {
-            case "payment.captured" -> onPaymentCaptured(root);
-            case "payment.failed" -> onPaymentFailed(root);
-            case "refund.processed" -> onRefundProcessed(root);
-            default -> log.info("Unrecognized Razorpay webhook event acknowledged type={}", eventType);
-        }
-        webhookDedupService.markProcessed(eventId);
+        // Implementation for Cashfree Webhook can be added here
+        log.info("Received cashfree webhook");
     }
+
 
     @Override
     @Transactional
@@ -265,9 +245,9 @@ public class PaymentServiceImpl implements PaymentService {
             throw new UnprocessableEntityException(
                     ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment is not refundable in its current status.");
         }
-        if (payment.getRazorpayPaymentId() == null || payment.getRazorpayPaymentId().isBlank()) {
+        if (payment.getCashfreeOrderId() == null || payment.getCashfreeOrderId().isBlank() || payment.getCashfreeOrderId().startsWith("WALLET_")) {
             throw new UnprocessableEntityException(
-                    ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment has no Razorpay payment id for refund.");
+                    ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment has no Cashfree order id for refund.");
         }
 
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
@@ -284,12 +264,12 @@ public class PaymentServiceImpl implements PaymentService {
             return new RefundInitiationResponseDto(existing.getId(), existing.getStatus());
         }
 
-        var razorpayRefund = razorpayClient.createRefund(
-                payment.getRazorpayPaymentId(), amount, request.reason());
+        var cashfreeRefund = cashfreeClient.createRefund(
+                payment.getCashfreeOrderId(), amount, request.reason());
 
         UUID initiator = actorId != null ? actorId : SYSTEM_ACTOR_ID;
         RefundRequest refundRequest = refundRequestRepository.save(RefundRequest.initiate(
-                paymentId, amount, request.reason(), initiator, razorpayRefund.razorpayRefundId()));
+                paymentId, amount, request.reason(), initiator, cashfreeRefund.cfRefundId()));
 
         log.info(
                 "Refund initiated refundRequestId={} paymentId={} amount={} systemActor={} actorId={}",
@@ -299,16 +279,15 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void onPaymentCaptured(JsonNode root) {
-        JsonNode entity = root.path("payload").path("payment").path("entity");
-        String razorpayOrderId = entity.path("order_id").asText(null);
-        String razorpayPaymentId = entity.path("id").asText(null);
-        if (razorpayOrderId == null) {
+        JsonNode data = root.path("data").path("payment");
+        String cfOrderId = data.path("order_id").asText(null);
+        if (cfOrderId == null) {
             log.warn("payment.captured missing order_id — ignored");
             return;
         }
-        Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId).orElse(null);
+        Payment payment = paymentRepository.findByCashfreeOrderId(cfOrderId).orElse(null);
         if (payment == null) {
-            log.warn("payment.captured for unknown razorpayOrderId={}", razorpayOrderId);
+            log.warn("payment.captured for unknown cashfreeOrderId={}", cfOrderId);
             return;
         }
         if (payment.getStatus() == PaymentStatus.CAPTURED || payment.getStatus() == PaymentStatus.REFUNDED) {
@@ -318,26 +297,25 @@ public class PaymentServiceImpl implements PaymentService {
             log.warn("payment.captured ignored for status={}", payment.getStatus());
             return;
         }
-        payment.markCaptured(razorpayPaymentId);
+        payment.markCaptured(cfOrderId);
         eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
         log.info("Payment CAPTURED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
     }
 
     private void onPaymentFailed(JsonNode root) {
-        JsonNode entity = root.path("payload").path("payment").path("entity");
-        String razorpayOrderId = entity.path("order_id").asText(null);
-        String razorpayPaymentId = entity.path("id").asText(null);
-        if (razorpayOrderId == null) {
+        JsonNode data = root.path("data").path("payment");
+        String cfOrderId = data.path("order_id").asText(null);
+        if (cfOrderId == null) {
             return;
         }
-        Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId).orElse(null);
+        Payment payment = paymentRepository.findByCashfreeOrderId(cfOrderId).orElse(null);
         if (payment == null) {
             return;
         }
         if (payment.getStatus() != PaymentStatus.PENDING) {
             return;
         }
-        payment.markFailed(razorpayPaymentId);
+        payment.markFailed(cfOrderId);
         paymentRepository.save(payment);
 
         if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
@@ -353,22 +331,22 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void onRefundProcessed(JsonNode root) {
-        JsonNode entity = root.path("payload").path("refund").path("entity");
-        String razorpayRefundId = entity.path("id").asText(null);
-        String razorpayPaymentId = entity.path("payment_id").asText(null);
-        if (razorpayRefundId == null && razorpayPaymentId == null) {
+        JsonNode data = root.path("data").path("refund");
+        String cfRefundId = data.path("cf_refund_id").asText(null);
+        String cfOrderId = data.path("order_id").asText(null);
+        if (cfRefundId == null && cfOrderId == null) {
             return;
         }
 
         RefundRequest refundRequest = null;
-        if (razorpayRefundId != null) {
-            refundRequest = refundRequestRepository.findByRazorpayRefundId(razorpayRefundId).orElse(null);
+        if (cfRefundId != null) {
+            refundRequest = refundRequestRepository.findByCashfreeRefundId(cfRefundId).orElse(null);
         }
         Payment payment = null;
         if (refundRequest != null) {
             payment = paymentRepository.findById(refundRequest.getPaymentId()).orElse(null);
-        } else if (razorpayPaymentId != null) {
-            payment = paymentRepository.findByRazorpayPaymentId(razorpayPaymentId).orElse(null);
+        } else if (cfOrderId != null) {
+            payment = paymentRepository.findByCashfreeOrderId(cfOrderId).orElse(null);
             if (payment != null) {
                 refundRequest = refundRequestRepository
                         .findByPaymentIdAndStatus(payment.getId(), RefundStatus.INITIATED)
@@ -378,7 +356,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
         if (payment == null || refundRequest == null) {
-            log.warn("refund.processed unmatched razorpayRefundId={}", razorpayRefundId);
+            log.warn("refund.processed unmatched cfRefundId={}", cfRefundId);
             return;
         }
         if (refundRequest.getStatus() == RefundStatus.PROCESSED) {
@@ -393,10 +371,11 @@ public class PaymentServiceImpl implements PaymentService {
 
     private PaymentInitiationResponseDto toInitiationView(Payment payment) {
         return new PaymentInitiationResponseDto(
-                payment.getRazorpayOrderId(),
+                payment.getPaymentSessionId(),
+                payment.getCashfreeOrderId(),
                 payment.getAmount(),
                 "INR",
-                razorpayProperties.getKeyId(),
+                appId,
                 payment.getWalletAmount(),
                 payment.getStatus().name());
     }

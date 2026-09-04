@@ -9,6 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.time.Instant;
 
 @Entity
 @Table(name = "refund_request")
@@ -27,11 +28,14 @@ public class RefundRequest extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private RefundStatus status;
 
-    @Column(name = "razorpay_refund_id", length = 100)
-    private String razorpayRefundId;
+    @Column(name = "cashfree_refund_id", length = 100)
+    private String cashfreeRefundId;
 
     @Column(name = "initiated_by", nullable = false, updatable = false)
     private UUID initiatedBy;
+
+    @Column(name = "processed_at")
+    private Instant processedAt;
 
     protected RefundRequest() {
     }
@@ -41,7 +45,7 @@ public class RefundRequest extends BaseEntity {
             BigDecimal amount,
             String reason,
             UUID initiatedBy,
-            String razorpayRefundId
+            String cashfreeRefundId
     ) {
         RefundRequest request = new RefundRequest();
         request.paymentId = paymentId;
@@ -49,12 +53,13 @@ public class RefundRequest extends BaseEntity {
         request.reason = reason;
         request.status = RefundStatus.INITIATED;
         request.initiatedBy = initiatedBy;
-        request.razorpayRefundId = razorpayRefundId;
+        request.cashfreeRefundId = cashfreeRefundId;
         return request;
     }
 
     public void markProcessed() {
         this.status = RefundStatus.PROCESSED;
+        this.processedAt = Instant.now();
     }
 
     public void markFailed() {
@@ -77,8 +82,8 @@ public class RefundRequest extends BaseEntity {
         return status;
     }
 
-    public String getRazorpayRefundId() {
-        return razorpayRefundId;
+    public String getCashfreeRefundId() {
+        return cashfreeRefundId;
     }
 
     public UUID getInitiatedBy() {

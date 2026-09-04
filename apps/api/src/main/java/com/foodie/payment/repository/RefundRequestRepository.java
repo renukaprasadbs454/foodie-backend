@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RefundRequestRepository extends JpaRepository<RefundRequest, UUID> {
 
-    Optional<RefundRequest> findByRazorpayRefundId(String razorpayRefundId);
+    Optional<RefundRequest> findByCashfreeRefundId(String cashfreeRefundId);
 
     List<RefundRequest> findByPaymentIdAndStatus(UUID paymentId, RefundStatus status);
 }
