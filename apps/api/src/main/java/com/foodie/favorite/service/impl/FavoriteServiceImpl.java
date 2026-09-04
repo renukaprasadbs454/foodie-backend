@@ -68,7 +68,8 @@ public class FavoriteServiceImpl implements FavoriteService {
                         detail.avgRating(),
                         detail.latitude(),
                         detail.longitude(),
-                        detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl()
+                        detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl(),
+                        detail.isOpen()
                 ))
                 .toList();
     }
