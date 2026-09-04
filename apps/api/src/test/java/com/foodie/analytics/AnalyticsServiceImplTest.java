@@ -90,8 +90,8 @@ class AnalyticsServiceImplTest {
         List<DailySalesPointDto> points = service.getDailySales(range);
 
         assertThat(points).hasSize(1);
-        assertThat(points.get(0).orderCount()).isEqualTo(3);
-        assertThat(points.get(0).revenue()).isEqualByComparingTo("150.00");
+        assertThat(points.getFirst().orderCount()).isEqualTo(3);
+        assertThat(points.getFirst().revenue()).isEqualByComparingTo("150.00");
     }
 
     @Test
@@ -105,8 +105,8 @@ class AnalyticsServiceImplTest {
         List<OrderStatusMetricDto> metrics = service.getOrderStatusMetrics(range);
 
         assertThat(metrics).hasSize(2);
-        assertThat(metrics.get(0).status()).isEqualTo("CANCELLED");
-        assertThat(metrics.get(0).percentageOfTotal()).isEqualByComparingTo("25.00");
+        assertThat(metrics.getFirst().status()).isEqualTo("CANCELLED");
+        assertThat(metrics.getFirst().percentageOfTotal()).isEqualByComparingTo("25.00");
         assertThat(metrics.get(1).percentageOfTotal()).isEqualByComparingTo("75.00");
     }
 

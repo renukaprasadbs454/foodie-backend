@@ -262,7 +262,7 @@ class WalletServiceImplTest {
                 var page = service.getLedger(credentialId, UserType.DELIVERY_PARTNER, 0, 20, "createdAt", from, to);
 
                 assertThat(page.items()).hasSize(1);
-                assertThat(page.items().get(0).entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
                 ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
                 verify(ledgerEntryRepository).findHistory(eq(account.getId()), eq(from), eq(to),
                                 pageableCaptor.capture());
@@ -288,7 +288,7 @@ class WalletServiceImplTest {
                 var page = service.getLedger(credentialId, UserType.DELIVERY_PARTNER, 0, 20, "createdAt", null, null);
 
                 assertThat(page.items()).hasSize(1);
-                assertThat(page.items().get(0).entryType()).isEqualTo(LedgerEntryType.CREDIT);
+                assertThat(page.items().getFirst().entryType()).isEqualTo(LedgerEntryType.CREDIT);
                 ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
                 verify(ledgerEntryRepository).findByWalletAccountId(eq(account.getId()), pageableCaptor.capture());
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())

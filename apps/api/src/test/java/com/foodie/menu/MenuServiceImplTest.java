@@ -263,10 +263,10 @@ class MenuServiceImplTest {
                 FullMenuResponseDto menu = service.getFullMenu(restaurantId);
 
                 assertThat(menu.categories()).hasSize(1);
-                assertThat(menu.categories().get(0).items()).hasSize(1);
-                assertThat(menu.categories().get(0).items().get(0).isAvailable()).isFalse();
-                assertThat(menu.categories().get(0).items().get(0).variants()).hasSize(1);
-                assertThat(menu.categories().get(0).items().get(0).foodType()).isEqualTo("VEG");
+                assertThat(menu.categories().getFirst().items()).hasSize(1);
+                assertThat(menu.categories().getFirst().items().getFirst().isAvailable()).isFalse();
+                assertThat(menu.categories().getFirst().items().getFirst().variants()).hasSize(1);
+                assertThat(menu.categories().getFirst().items().getFirst().foodType()).isEqualTo("VEG");
                 verify(menuCacheService).put(any(), any());
         }
 

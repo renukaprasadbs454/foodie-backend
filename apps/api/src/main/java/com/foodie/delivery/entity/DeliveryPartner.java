@@ -73,10 +73,6 @@ public class DeliveryPartner extends BaseEntity {
         this.kycStatus = KycStatus.VERIFIED;
     }
 
-    public void rejectKyc() {
-        this.kycStatus = KycStatus.REJECTED;
-    }
-
     public UUID getUserCredentialId() {
         return userCredentialId;
     }

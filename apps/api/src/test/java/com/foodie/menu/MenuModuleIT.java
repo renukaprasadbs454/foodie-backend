@@ -102,10 +102,10 @@ class MenuModuleIT extends AbstractIntegrationTest {
         assertThat(data.get("restaurantId").toString()).isEqualTo(restaurantId.toString());
         List<?> categories = (List<?>) data.get("categories");
         assertThat(categories).hasSize(1);
-        Map<?, ?> cat = (Map<?, ?>) categories.get(0);
+        Map<?, ?> cat = (Map<?, ?>) categories.getFirst();
         List<?> items = (List<?>) cat.get("items");
         assertThat(items).hasSize(1);
-        Map<?, ?> menuItem = (Map<?, ?>) items.get(0);
+        Map<?, ?> menuItem = (Map<?, ?>) items.getFirst();
         assertThat(menuItem.get("isAvailable")).isEqualTo(false);
         assertThat((List<?>) menuItem.get("variants")).hasSize(1);
     }

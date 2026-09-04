@@ -91,11 +91,10 @@ class NotificationServiceImplTest {
 
         ArgumentCaptor<NotificationLog> captor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(logRepository, org.mockito.Mockito.atLeast(2)).save(captor.capture());
-        var capturedValues = captor.getAllValues();
-        assertThat(capturedValues.get(capturedValues.size() - 1).getDeliveryStatus())
+        assertThat(captor.getAllValues().getLast().getDeliveryStatus())
                 .isEqualTo(NotificationDeliveryStatus.SENT);
-        assertThat(capturedValues.get(0).getTitle()).isEqualTo("Order confirmed");
-        assertThat(capturedValues.get(0).getBody())
+        assertThat(captor.getAllValues().getFirst().getTitle()).isEqualTo("Order confirmed");
+        assertThat(captor.getAllValues().getFirst().getBody())
                 .isEqualTo("Your order FD-1 has been confirmed.");
         verify(eventPublisher).publishEvent(any(NotificationDispatchedEvent.class));
     }
@@ -121,8 +120,7 @@ class NotificationServiceImplTest {
 
         ArgumentCaptor<NotificationLog> captor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(logRepository, org.mockito.Mockito.atLeast(2)).save(captor.capture());
-        var capturedValues = captor.getAllValues();
-        assertThat(capturedValues.get(capturedValues.size() - 1).getDeliveryStatus())
+        assertThat(captor.getAllValues().getLast().getDeliveryStatus())
                 .isEqualTo(NotificationDeliveryStatus.FAILED);
     }
 
@@ -168,7 +166,7 @@ class NotificationServiceImplTest {
         var page = service.list(userId, true, 0, 20);
 
         assertThat(page.items()).hasSize(1);
-        assertThat(page.items().get(0).title()).isEqualTo("t");
+        assertThat(page.items().getFirst().title()).isEqualTo("t");
     }
 
     @Test

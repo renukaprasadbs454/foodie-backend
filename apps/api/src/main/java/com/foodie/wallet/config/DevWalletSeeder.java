@@ -9,7 +9,6 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.UUID;
 import com.foodie.common.enums.OwnerType;
-import com.foodie.common.enums.UserType;
 import com.foodie.common.enums.LedgerReferenceType;
 
 @Configuration
@@ -28,7 +27,7 @@ public class DevWalletSeeder {
     @PostConstruct
     public void seed() {
         try {
-            credRepo.findByPhoneNumberAndUserType("9686753394", UserType.CUSTOMER).ifPresent(cred -> {
+            credRepo.findByPhoneNumberAndUserType("9686753394", com.foodie.common.enums.UserType.CUSTOMER).ifPresent(cred -> {
                 custRepo.findByUserCredentialId(cred.getId()).ifPresent(customer -> {
                     System.out.println("Seeding 10 Rs to " + customer.getId());
                     walletService.credit(

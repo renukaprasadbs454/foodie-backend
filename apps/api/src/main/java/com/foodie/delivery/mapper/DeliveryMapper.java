@@ -16,28 +16,22 @@ public class DeliveryMapper {
 
         public DeliveryProfileResponseDto toProfile(DeliveryPartner partner, String profileImageUrl,
                         java.util.List<DeliveryDocumentResponseDto> documents) {
-                if (partner == null) {
-                        return null;
-                }
                 return new DeliveryProfileResponseDto(
                                 partner.getId(),
                                 partner.getFullName(),
-                                partner.getVehicleType() != null ? partner.getVehicleType().name() : "BIKE",
+                                partner.getVehicleType().name(),
                                 partner.getVehicleNumber(),
-                                partner.getKycStatus() != null ? partner.getKycStatus().name() : "PENDING",
+                                partner.getKycStatus().name(),
                                 partner.isOnline(),
                                 profileImageUrl,
                                 documents);
         }
 
         public DeliveryDocumentResponseDto toDocument(DeliveryPartnerDocument document) {
-                if (document == null) {
-                        return null;
-                }
                 return new DeliveryDocumentResponseDto(
                                 document.getId(),
-                                document.getDocType() != null ? document.getDocType().name() : "LICENSE",
-                                document.getVerificationStatus() != null ? document.getVerificationStatus().name() : "PENDING",
+                                document.getDocType().name(),
+                                document.getVerificationStatus().name(),
                                 document.getS3Key(),
                                 document.getCreatedAt());
         }

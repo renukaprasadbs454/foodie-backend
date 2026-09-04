@@ -58,10 +58,6 @@ class DeliveryServiceImplTest {
     @Mock
     private DeliveryAssignmentRepository deliveryAssignmentRepository;
     @Mock
-    private com.foodie.auth.repository.UserCredentialRepository userCredentialRepository;
-    @Mock
-    private com.foodie.wallet.repository.WalletAccountRepository walletAccountRepository;
-    @Mock
     private ObjectStorageClient objectStorageClient;
     @Mock
     private PartnerGeoService partnerGeoService;
@@ -91,8 +87,6 @@ class DeliveryServiceImplTest {
                 deliveryPartnerRepository,
                 deliveryPartnerDocumentRepository,
                 deliveryAssignmentRepository,
-                userCredentialRepository,
-                walletAccountRepository,
                 new DeliveryMapper(),
                 objectStorageClient,
                 partnerGeoService,
@@ -171,21 +165,6 @@ class DeliveryServiceImplTest {
         assertThat(captor.getValue().latitude()).isEqualTo(12.9352);
         assertThat(captor.getValue().longitude()).isEqualTo(77.6912);
         verify(partnerGeoService).addLocation(eq(partnerId), eq(12.9352), eq(77.6912));
-    }
-
-    @Test
-    void listForAdmin_returnsPagedDeliveryPartners() {
-        DeliveryPartner partner = verifiedPartner();
-        org.springframework.data.domain.Page<DeliveryPartner> paged =
-                new org.springframework.data.domain.PageImpl<>(List.of(partner));
-        when(deliveryPartnerRepository.findAll(any(org.springframework.data.domain.Pageable.class)))
-                .thenReturn(paged);
-
-        var result = service.listForAdmin(null, null, 0, 10, "createdAt,desc");
-
-        assertThat(result).isNotNull();
-        assertThat(result.items()).hasSize(1);
-        assertThat(result.items().get(0).fullName()).isEqualTo("Alex Rider");
     }
 
     private DeliveryPartner pendingPartner() {

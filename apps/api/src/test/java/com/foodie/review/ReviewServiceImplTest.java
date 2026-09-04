@@ -147,9 +147,9 @@ class ReviewServiceImplTest {
         var page = service.listForRestaurant(restaurantId, 0, 20, "createdAt");
 
         assertThat(page.items()).hasSize(1);
-        assertThat(page.items().get(0).comment()).isEqualTo("Nice");
+        assertThat(page.items().getFirst().comment()).isEqualTo("Nice");
         // Public DTO has no customer fields — structural guarantee via record shape
-        assertThat(page.items().get(0).getClass().getRecordComponents())
+        assertThat(page.items().getFirst().getClass().getRecordComponents())
                 .extracting(c -> c.getName())
                 .doesNotContain("customerId", "customerName");
     }

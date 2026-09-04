@@ -20,6 +20,4 @@ public interface DeliveryAssignmentRepository extends JpaRepository<DeliveryAssi
             UUID deliveryPartnerId,
             Collection<DeliveryAssignmentStatus> statuses
     );
-
-    long countByDeliveryPartnerIdAndStatus(UUID deliveryPartnerId, DeliveryAssignmentStatus status);
 }
