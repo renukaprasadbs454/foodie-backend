@@ -47,7 +47,7 @@ public class LocalObjectStorageController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + file.getFileName().toString() + "\"")
+                        "inline; filename=\"" + file.getFileName().toString() + "\"")
                 .body(resource);
     }
 }

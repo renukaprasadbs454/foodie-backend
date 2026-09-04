@@ -331,10 +331,10 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
-        if (order.status() != OrderStatus.READY_FOR_PICKUP) {
+        if (order.status() != OrderStatus.READY_FOR_PICKUP && order.status() != OrderStatus.PREPARING && order.status() != OrderStatus.ACCEPTED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Order must be READY_FOR_PICKUP to create a delivery assignment.");
+                    "Order must be ACCEPTED, PREPARING, or READY_FOR_PICKUP to create a delivery assignment.");
         }
 
         RestaurantPickupQuery.PickupLocation pickup = restaurantPickupQuery.findByRestaurantId(order.restaurantId())

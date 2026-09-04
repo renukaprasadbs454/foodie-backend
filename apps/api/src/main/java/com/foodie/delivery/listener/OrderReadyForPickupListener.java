@@ -23,10 +23,12 @@ public class OrderReadyForPickupListener {
     @EventListener
     @Transactional
     public void onOrderStatusChanged(OrderStatusChangedEvent event) {
-        if (event.toStatus() != OrderStatus.READY_FOR_PICKUP) {
+        if (event.toStatus() != OrderStatus.READY_FOR_PICKUP &&
+            event.toStatus() != OrderStatus.PREPARING &&
+            event.toStatus() != OrderStatus.ACCEPTED) {
             return;
         }
-        log.info("Order {} ready for pickup — creating delivery assignment", event.orderId());
+        log.info("Order {} transitioned to {} — creating delivery assignment", event.orderId(), event.toStatus());
         deliveryService.createAssignmentForOrder(event.orderId());
     }
 }

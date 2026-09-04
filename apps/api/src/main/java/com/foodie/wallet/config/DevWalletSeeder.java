@@ -27,14 +27,14 @@ public class DevWalletSeeder {
     @PostConstruct
     public void seed() {
         try {
-            credRepo.findByPhoneNumber("9686753394").ifPresent(cred -> {
+            credRepo.findByPhoneNumberAndUserType("9686753394", com.foodie.common.enums.UserType.CUSTOMER).ifPresent(cred -> {
                 custRepo.findByUserCredentialId(cred.getId()).ifPresent(customer -> {
                     System.out.println("Seeding 10 Rs to " + customer.getId());
                     walletService.credit(
                         OwnerType.CUSTOMER, 
                         customer.getId(), 
                         new BigDecimal("10.00"), 
-                        LedgerReferenceType.DEPOSIT, 
+                        LedgerReferenceType.INCENTIVE, 
                         UUID.randomUUID()
                     );
                 });
