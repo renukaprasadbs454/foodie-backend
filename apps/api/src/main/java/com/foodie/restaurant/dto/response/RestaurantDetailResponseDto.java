@@ -23,7 +23,8 @@ public record RestaurantDetailResponseDto(
                 BigDecimal commissionPct,
                 UUID ownerUserCredentialId,
                 RestaurantLegalDetailResponseDto legalDetails,
-                List<RestaurantDocumentResponseDto> documents) {
+                List<RestaurantDocumentResponseDto> documents,
+                Boolean isOpen) {
         public RestaurantDetailResponseDto(
                         UUID restaurantId,
                         String name,
@@ -42,6 +43,6 @@ public record RestaurantDetailResponseDto(
                                 restaurantId, name, description, cuisineTypes, address,
                                 latitude, longitude, logoImageUrl, coverImageUrl, avgRating,
                                 status, com.foodie.common.enums.RestaurantType.BOTH, null, commissionPct,
-                                ownerUserCredentialId, null, null);
+                                ownerUserCredentialId, null, null, Boolean.FALSE);
         }
 }

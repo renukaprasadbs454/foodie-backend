@@ -102,6 +102,15 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyRestaurant(principal.userId())));
     }
 
+    @PutMapping("/me/status")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Toggle restaurant online/offline status")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> toggleStatus(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestParam boolean isOpen) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.toggleStatus(principal.userId(), isOpen)));
+    }
+
     @PutMapping("/me")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Update my restaurant profile (status/commissionPct not updatable)")

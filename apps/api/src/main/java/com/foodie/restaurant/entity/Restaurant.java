@@ -59,6 +59,9 @@ public class Restaurant extends BaseEntity {
     @Column(name = "restaurant_type", length = 30)
     private com.foodie.common.enums.RestaurantType restaurantType = com.foodie.common.enums.RestaurantType.BOTH;
 
+    @Column(name = "is_open", nullable = false)
+    private Boolean isOpen = Boolean.FALSE;
+
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
@@ -112,6 +115,7 @@ public class Restaurant extends BaseEntity {
         restaurant.avgRating = BigDecimal.ZERO.setScale(1);
         restaurant.status = RestaurantStatus.PENDING;
         restaurant.commissionPct = commissionPct;
+        restaurant.isOpen = Boolean.FALSE;
         return restaurant;
     }
 
@@ -222,6 +226,14 @@ public class Restaurant extends BaseEntity {
 
     public BigDecimal getCommissionPct() {
         return commissionPct;
+    }
+
+    public Boolean getIsOpen() {
+        return isOpen;
+    }
+
+    public void setIsOpen(Boolean isOpen) {
+        this.isOpen = isOpen;
     }
 
     public void updateUpi(String upiId, String upiName) {

@@ -269,6 +269,19 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public RestaurantDetailResponseDto toggleStatus(UUID ownerCredentialId, boolean isOpen) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.setIsOpen(isOpen);
+        restaurant = restaurantRepository.save(restaurant);
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        restaurantCacheService.evictAllListCaches();
+        eventPublisher.publishEvent(new RestaurantUpdatedEvent(restaurant.getId()));
+        return buildDetail(restaurant, true);
+    }
+
+
+    @Override
+    @Transactional
     public RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request) {
         if (restaurantRepository.existsByOwnerUserCredentialId(ownerCredentialId)) {
             throw new ConflictException(

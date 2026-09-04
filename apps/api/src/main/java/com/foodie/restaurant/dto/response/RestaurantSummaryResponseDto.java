@@ -11,6 +11,7 @@ public record RestaurantSummaryResponseDto(
         BigDecimal avgRating,
         BigDecimal latitude,
         BigDecimal longitude,
-        String imageUrl
+        String imageUrl,
+        Boolean isOpen
 ) {
 }

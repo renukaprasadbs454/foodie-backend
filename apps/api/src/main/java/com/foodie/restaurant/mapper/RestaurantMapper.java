@@ -30,7 +30,8 @@ public class RestaurantMapper {
                                 restaurant.getAvgRating(),
                                 restaurant.getLatitude(),
                                 restaurant.getLongitude(),
-                                imageUrl);
+                                imageUrl,
+                                restaurant.getIsOpen());
         }
 
         public RestaurantDetailResponseDto toDetail(
@@ -68,7 +69,8 @@ public class RestaurantMapper {
                                 privileged ? restaurant.getCommissionPct() : null,
                                 privileged ? restaurant.getOwnerUserCredentialId() : null,
                                 legalDetails,
-                                documents);
+                                documents,
+                                restaurant.getIsOpen());
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {
