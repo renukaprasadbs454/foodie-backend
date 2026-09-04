@@ -28,7 +28,7 @@ public class RefundRequest extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private RefundStatus status;
 
-    @Column(name = "cashfree_refund_id", length = 100)
+    @Column(name = "cashfree_refund_id", length = 255)
     private String cashfreeRefundId;
 
     @Column(name = "initiated_by", nullable = false, updatable = false)

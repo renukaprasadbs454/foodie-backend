@@ -18,10 +18,10 @@ public class Payment extends BaseEntity {
     @Column(name = "order_id", nullable = false, unique = true, updatable = false)
     private UUID orderId;
 
-    @Column(name = "payment_session_id", length = 100)
+    @Column(name = "payment_session_id", length = 255)
     private String paymentSessionId;
 
-    @Column(name = "cashfree_order_id", length = 100)
+    @Column(name = "cashfree_order_id", length = 255)
     private String cashfreeOrderId;
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)

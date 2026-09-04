@@ -29,16 +29,16 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
             @Value("${CASHFREE_ENV:SANDBOX}") String env,
             ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        
-        String realAppId = appId;
-        String realSecretKey = secretKey;
-        if (appId != null && appId.startsWith("cfsk_")) {
-            realAppId = secretKey;
-            realSecretKey = appId;
+        String realAppId = appId != null ? appId.trim() : "";
+        String realSecretKey = secretKey != null ? secretKey.trim() : "";
+        if (realAppId.startsWith("cfsk_")) {
+            String temp = realAppId;
+            realAppId = realSecretKey;
+            realSecretKey = temp;
             log.warn("Detecting swapped Cashfree keys in environment, auto-correcting.");
         }
 
-        String baseUrl = env.equalsIgnoreCase("PRODUCTION") 
+        String baseUrl = env != null && env.trim().equalsIgnoreCase("PRODUCTION") 
                 ? "https://api.cashfree.com/pg" 
                 : "https://sandbox.cashfree.com/pg";
                 
@@ -54,6 +54,7 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
     @Override
     public CashfreeOrderCreateResult createOrder(BigDecimal amount, String customerId, String customerPhone, String notesOrderId) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("order_id", notesOrderId != null ? notesOrderId : ("OD_" + System.currentTimeMillis()));
         body.put("order_amount", amount.setScale(2, RoundingMode.HALF_UP));
         body.put("order_currency", "INR");
         body.put("customer_details", Map.of(
