@@ -275,7 +275,6 @@ public class RestaurantServiceImpl implements RestaurantService {
         restaurant = restaurantRepository.save(restaurant);
         restaurantCacheService.evictRestaurant(restaurant.getId());
         restaurantCacheService.evictAllListCaches();
-        eventPublisher.publishEvent(new RestaurantUpdatedEvent(restaurant.getId()));
         return buildDetail(restaurant, true);
     }
 
