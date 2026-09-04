@@ -224,7 +224,7 @@ class CustomerServiceImplTest {
 
         List<AddressResponseDto> list = service.listAddresses(credentialId);
         assertThat(list).hasSize(1);
-        assertThat(list.getFirst().city()).isEqualTo("Bengaluru");
+        assertThat(list.get(0).city()).isEqualTo("Bengaluru");
     }
 
     private Customer persistableCustomer(String name, String email) {

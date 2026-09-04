@@ -9,6 +9,9 @@ target/
 *.log
 test-output.txt
 *.txt
+data/
+*.mv.db
+*.trace.db
 
 # Environment / secrets
 application-local.yml

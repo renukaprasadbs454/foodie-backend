@@ -33,6 +33,11 @@ public interface AdminOperationsService {
 
         DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId);
 
+        DeliveryProfileResponseDto rejectDeliveryKyc(UUID actorCredentialId, UUID partnerId, String reason);
+
+        PageResult<com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto> listDeliveryPartners(
+                        UUID actorCredentialId, String status, String search, int page, int size, String sort);
+
         CouponResponseDto createCoupon(UUID actorCredentialId, CreateCouponRequestDto request);
 
         DeactivateCouponResponseDto deactivateCoupon(UUID actorCredentialId, UUID couponId);

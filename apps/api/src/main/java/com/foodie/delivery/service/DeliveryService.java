@@ -1,10 +1,12 @@
 package com.foodie.delivery.service;
 
+import com.foodie.common.dto.PaginationMeta;
 import com.foodie.common.enums.DeliveryDocType;
 import com.foodie.delivery.dto.request.LocationPingRequestDto;
 import com.foodie.delivery.dto.request.SetAvailabilityRequestDto;
 import com.foodie.delivery.dto.request.UpsertDeliveryProfileRequestDto;
 import com.foodie.delivery.dto.request.VerifyOtpRequestDto;
+import com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto;
 import com.foodie.delivery.dto.response.AvailabilityResponseDto;
 import com.foodie.delivery.dto.response.DeliveryAssignmentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
@@ -48,5 +50,13 @@ public interface DeliveryService {
 
         DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
 
+        DeliveryProfileResponseDto rejectKyc(UUID partnerId, UUID adminId, String reason);
+
+        PageResult<AdminDeliveryPartnerResponseDto> listForAdmin(
+                        String status, String search, int page, int size, String sort);
+
         boolean verifyFace(UUID userCredentialId, MultipartFile file);
+
+        record PageResult<T>(List<T> items, PaginationMeta pagination) {
+        }
 }

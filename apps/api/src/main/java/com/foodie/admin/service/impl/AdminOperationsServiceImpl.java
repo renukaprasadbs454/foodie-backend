@@ -19,6 +19,7 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ForbiddenException;
 import com.foodie.common.exception.ResourceNotFoundException;
+import com.foodie.common.exception.UnauthorizedException;
 import com.foodie.coupon.dto.request.CreateCouponRequestDto;
 import com.foodie.coupon.dto.response.CouponResponseDto;
 import com.foodie.coupon.dto.response.DeactivateCouponResponseDto;
@@ -166,6 +167,30 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public DeliveryProfileResponseDto rejectDeliveryKyc(UUID actorCredentialId, UUID partnerId, String reason) {
+        AdminUser admin = requirePermission(actorCredentialId, "DELIVERY", "KYC_APPROVE");
+        DeliveryProfileResponseDto after = deliveryService.rejectKyc(partnerId, admin.getId(), reason);
+        adminService.recordAudit(
+                admin.getId(),
+                "REJECT_DELIVERY_KYC",
+                "DELIVERY_PARTNER",
+                partnerId,
+                Map.of("kycStatus", "PENDING"),
+                Map.of("kycStatus", after.kycStatus(), "reason", reason != null ? reason : ""));
+        return after;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminOperationsService.PageResult<com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto> listDeliveryPartners(
+            UUID actorCredentialId, String status, String search, int page, int size, String sort) {
+        requireAdmin(actorCredentialId);
+        var res = deliveryService.listForAdmin(status, search, page, size, sort);
+        return new AdminOperationsService.PageResult<>(res.items(), res.pagination());
+    }
+
+    @Override
+    @Transactional
     public CouponResponseDto createCoupon(UUID actorCredentialId, CreateCouponRequestDto request) {
         AdminUser admin = requirePermission(actorCredentialId, "COUPON", "CREATE");
         CouponResponseDto created = couponAdminService.create(request);
@@ -288,6 +313,9 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
     }
 
     private AdminUser requireAdmin(UUID actorCredentialId) {
+        if (actorCredentialId == null) {
+            throw new UnauthorizedException(ErrorCode.UNAUTHORIZED, "Authentication required.");
+        }
         return adminUserRepository.findByUserCredentialId(actorCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Admin profile not found for this credential."));

@@ -41,6 +41,15 @@ import com.foodie.shared.contract.RestaurantPickupQuery;
 import com.foodie.shared.event.DeliveryCompletedEvent;
 import com.foodie.shared.event.DeliveryLocationUpdatedEvent;
 import com.foodie.shared.event.DeliveryPartnerAssignedEvent;
+import com.foodie.auth.entity.UserCredential;
+import com.foodie.auth.repository.UserCredentialRepository;
+import com.foodie.common.dto.PaginationMeta;
+import com.foodie.wallet.entity.WalletAccount;
+import com.foodie.common.enums.OwnerType;
+import com.foodie.wallet.repository.WalletAccountRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Duration;
@@ -57,13 +66,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto;
 import com.foodie.delivery.service.DeliveryPricingService;
 import java.math.BigDecimal;
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 
 @Service
 public class DeliveryServiceImpl implements DeliveryService {
@@ -77,6 +86,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
+    private final UserCredentialRepository userCredentialRepository;
+    private final WalletAccountRepository walletAccountRepository;
     private final DeliveryMapper deliveryMapper;
     private final ObjectStorageClient objectStorageClient;
     private final PartnerGeoService partnerGeoService;
@@ -92,6 +103,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             DeliveryPartnerRepository deliveryPartnerRepository,
             DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository,
             DeliveryAssignmentRepository deliveryAssignmentRepository,
+            UserCredentialRepository userCredentialRepository,
+            WalletAccountRepository walletAccountRepository,
             DeliveryMapper deliveryMapper,
             ObjectStorageClient objectStorageClient,
             PartnerGeoService partnerGeoService,
@@ -105,6 +118,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
+        this.userCredentialRepository = userCredentialRepository;
+        this.walletAccountRepository = walletAccountRepository;
         this.deliveryMapper = deliveryMapper;
         this.objectStorageClient = objectStorageClient;
         this.partnerGeoService = partnerGeoService;
@@ -127,11 +142,6 @@ public class DeliveryServiceImpl implements DeliveryService {
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
 
-        if (partner.getKycStatus() != com.foodie.common.enums.KycStatus.VERIFIED) {
-            partner.verifyKyc();
-            deliveryPartnerRepository.save(partner);
-            log.info("Auto-verified KYC for userCredentialId={}", userCredentialId);
-        }
         java.util.List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
                 .findByDeliveryPartnerId(partner.getId())
                 .stream()
@@ -397,6 +407,136 @@ public class DeliveryServiceImpl implements DeliveryService {
         return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs);
     }
 
+    @Override
+    @Transactional
+    public DeliveryProfileResponseDto rejectKyc(UUID partnerId, UUID adminId, String reason) {
+        DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        partner.rejectKyc();
+        log.info("Delivery partner {} KYC rejected by admin {} reason: {}", partnerId, adminId, reason);
+        java.util.List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
+                .findByDeliveryPartnerId(partner.getId())
+                .stream()
+                .map(deliveryMapper::toDocument)
+                .toList();
+        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<AdminDeliveryPartnerResponseDto> listForAdmin(
+            String status, String search, int page, int size, String sort) {
+        KycStatus kycFilter = null;
+        if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
+            try {
+                kycFilter = KycStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        String searchFilter = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        Sort sortSpec = Sort.by(Sort.Direction.DESC, "createdAt");
+        if (sort != null && !sort.isBlank()) {
+            String[] parts = sort.split(",");
+            if (parts.length > 0) {
+                String prop = parts[0].trim();
+                Sort.Direction dir = (parts.length > 1 && parts[1].trim().equalsIgnoreCase("asc"))
+                        ? Sort.Direction.ASC : Sort.Direction.DESC;
+                sortSpec = Sort.by(dir, prop);
+            }
+        }
+        PageRequest pageRequest = PageRequest.of(Math.max(0, page), Math.max(1, size), sortSpec);
+        Page<DeliveryPartner> paged;
+        if (kycFilter != null && searchFilter != null) {
+            paged = deliveryPartnerRepository.findByKycStatusAndFullNameContainingIgnoreCase(
+                    kycFilter, searchFilter, pageRequest);
+        } else if (kycFilter != null) {
+            paged = deliveryPartnerRepository.findByKycStatus(kycFilter, pageRequest);
+        } else if (searchFilter != null) {
+            paged = deliveryPartnerRepository.findByFullNameContainingIgnoreCaseOrVehicleNumberContainingIgnoreCase(
+                    searchFilter, searchFilter, pageRequest);
+        } else {
+            paged = deliveryPartnerRepository.findAll(pageRequest);
+        }
+
+        List<AdminDeliveryPartnerResponseDto> items = paged.getContent().stream().map(partner -> {
+            String phoneNumber = "—";
+            if (partner.getUserCredentialId() != null) {
+                try {
+                    phoneNumber = userCredentialRepository.findById(partner.getUserCredentialId())
+                            .map(UserCredential::getPhoneNumber)
+                            .orElse("—");
+                } catch (Exception e) {
+                    log.warn("Error fetching phone for credential {}: {}", partner.getUserCredentialId(), e.getMessage());
+                }
+            }
+
+            BigDecimal cashInHand = BigDecimal.ZERO;
+            if (partner.getId() != null) {
+                try {
+                    cashInHand = walletAccountRepository
+                            .findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partner.getId())
+                            .map(WalletAccount::getBalance)
+                            .orElse(BigDecimal.ZERO);
+                } catch (Exception e) {
+                    log.warn("Error fetching wallet for partner {}: {}", partner.getId(), e.getMessage());
+                }
+            }
+
+            long totalDeliveries = 0L;
+            if (partner.getId() != null) {
+                try {
+                    totalDeliveries = deliveryAssignmentRepository
+                            .countByDeliveryPartnerIdAndStatus(partner.getId(), DeliveryAssignmentStatus.DELIVERED);
+                } catch (Exception e) {
+                    log.warn("Error fetching delivery count for partner {}: {}", partner.getId(), e.getMessage());
+                }
+            }
+
+            List<DeliveryDocumentResponseDto> docs = List.of();
+            if (partner.getId() != null) {
+                try {
+                    docs = deliveryPartnerDocumentRepository
+                            .findByDeliveryPartnerId(partner.getId())
+                            .stream()
+                            .map(deliveryMapper::toDocument)
+                            .toList();
+                } catch (Exception e) {
+                    log.warn("Error fetching docs for partner {}: {}", partner.getId(), e.getMessage());
+                }
+            }
+
+            String profileImageUrl = signedOrNull(partner.getProfileImageKey());
+            String zone = "Downtown Central";
+
+            return new AdminDeliveryPartnerResponseDto(
+                    partner.getId(),
+                    partner.getUserCredentialId(),
+                    partner.getFullName() != null ? partner.getFullName() : "Delivery Partner",
+                    phoneNumber,
+                    partner.getVehicleType() != null ? partner.getVehicleType().name() : "BIKE",
+                    partner.getVehicleNumber() != null ? partner.getVehicleNumber() : "—",
+                    profileImageUrl,
+                    partner.getKycStatus() != null ? partner.getKycStatus().name() : "PENDING",
+                    partner.isOnline(),
+                    cashInHand,
+                    totalDeliveries,
+                    zone,
+                    docs,
+                    partner.getCreatedAt() != null ? partner.getCreatedAt() : java.time.Instant.now()
+            );
+        }).toList();
+
+        PaginationMeta meta = new PaginationMeta(
+                paged.getNumber(),
+                paged.getSize(),
+                paged.getTotalElements(),
+                paged.getTotalPages()
+        );
+
+        return new PageResult<>(items, meta);
+    }
+
     private DeliveryPartner requirePartner(UUID userCredentialId) {
         return deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner profile not found."));
@@ -443,7 +583,12 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (key == null || key.isBlank()) {
             return null;
         }
-        return objectStorageClient.createSignedGetUrl(key, SIGNED_URL_TTL);
+        try {
+            return objectStorageClient.createSignedGetUrl(key, SIGNED_URL_TTL);
+        } catch (Exception e) {
+            log.warn("Error creating signed URL for key {}: {}", key, e.getMessage());
+            return null;
+        }
     }
 
     private static byte[] readBytes(MultipartFile file, long maxBytes, String tooLargeMessage) {

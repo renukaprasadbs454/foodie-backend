@@ -278,7 +278,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         var pending = refundRequestRepository.findByPaymentIdAndStatus(paymentId, RefundStatus.INITIATED);
         if (!pending.isEmpty()) {
-            RefundRequest existing = pending.getFirst();
+            RefundRequest existing = pending.get(0);
             log.info("Returning existing INITIATED refundRequestId={} for paymentId={}",
                     existing.getId(), paymentId);
             return new RefundInitiationResponseDto(existing.getId(), existing.getStatus());

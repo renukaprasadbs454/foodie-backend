@@ -139,6 +139,23 @@ class AdminOperationsServiceImplTest {
         }
 
         @Test
+        void rejectDeliveryKyc_delegates() {
+                UUID partnerId = UUID.randomUUID();
+                stubAdminWithPermission("DELIVERY", "KYC_APPROVE");
+                when(deliveryService.rejectKyc(partnerId, adminUserId, "Incomplete docs")).thenReturn(
+                                new DeliveryProfileResponseDto(
+                                                partnerId, "Driver", "BIKE", "KA01", "REJECTED", false, null,
+                                                List.of()));
+
+                var result = service.rejectDeliveryKyc(credentialId, partnerId, "Incomplete docs");
+
+                assertThat(result.kycStatus()).isEqualTo("REJECTED");
+                verify(adminService).recordAudit(
+                                eq(adminUserId), eq("REJECT_DELIVERY_KYC"), eq("DELIVERY_PARTNER"), eq(partnerId),
+                                any(), any());
+        }
+
+        @Test
         void overrideOrderStatus_usesAdminActor() {
                 UUID orderId = UUID.randomUUID();
                 stubAdminWithPermission("ORDER", "OVERRIDE");
