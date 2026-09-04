@@ -29,15 +29,25 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
             @Value("${CASHFREE_ENV:SANDBOX}") String env,
             ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        
+        String realAppId = appId;
+        String realSecretKey = secretKey;
+        if (appId != null && appId.startsWith("cfsk_")) {
+            realAppId = secretKey;
+            realSecretKey = appId;
+            log.warn("Detecting swapped Cashfree keys in environment, auto-correcting.");
+        }
+
         String baseUrl = env.equalsIgnoreCase("PRODUCTION") 
                 ? "https://api.cashfree.com/pg" 
                 : "https://sandbox.cashfree.com/pg";
                 
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
-                .defaultHeader("x-client-id", appId)
-                .defaultHeader("x-client-secret", secretKey)
+                .defaultHeader("x-client-id", realAppId)
+                .defaultHeader("x-client-secret", realSecretKey)
                 .defaultHeader("x-api-version", "2023-08-01")
+                .defaultHeader("Accept", "application/json")
                 .build();
     }
 
