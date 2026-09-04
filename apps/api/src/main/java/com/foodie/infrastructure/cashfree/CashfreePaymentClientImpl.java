@@ -22,6 +22,13 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private String clean(String val) {
+        if (val == null) return "";
+        val = val.trim();
+        if (val.startsWith("\"") && val.endsWith("\"")) val = val.substring(1, val.length() - 1);
+        if (val.startsWith("'") && val.endsWith("'")) val = val.substring(1, val.length() - 1);
+        return val.trim();
+    }
 
     public CashfreePaymentClientImpl(
             @Value("${CASHFREE_APP_ID:}") String appId,
@@ -29,8 +36,8 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
             @Value("${CASHFREE_ENV:SANDBOX}") String env,
             ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        String realAppId = appId != null ? appId.trim() : "";
-        String realSecretKey = secretKey != null ? secretKey.trim() : "";
+        String realAppId = clean(appId);
+        String realSecretKey = clean(secretKey);
         if (realAppId.startsWith("cfsk_")) {
             String temp = realAppId;
             realAppId = realSecretKey;
@@ -38,7 +45,7 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
             log.warn("Detecting swapped Cashfree keys in environment, auto-correcting.");
         }
 
-        String baseUrl = env != null && env.trim().equalsIgnoreCase("PRODUCTION") 
+        String baseUrl = env != null && clean(env).equalsIgnoreCase("PRODUCTION") 
                 ? "https://api.cashfree.com/pg" 
                 : "https://sandbox.cashfree.com/pg";
                 
