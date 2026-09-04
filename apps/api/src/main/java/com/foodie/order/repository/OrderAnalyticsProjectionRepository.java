@@ -41,12 +41,12 @@ public interface OrderAnalyticsProjectionRepository extends JpaRepository<Order,
     List<Object[]> countByStatusPlacedBetween(@Param("from") Instant from, @Param("to") Instant to);
 
     @Query(value = """
-            SELECT CAST((o.placed_at AT TIME ZONE 'UTC') AS date) AS day,
-                   COUNT(*)::bigint AS order_count,
+            SELECT CAST(o.placed_at AS date) AS day,
+                   COUNT(o.id) AS order_count,
                    COALESCE(SUM(o.total_amount), 0) AS revenue
             FROM "order" o
             WHERE o.placed_at >= :from AND o.placed_at < :to
-            GROUP BY CAST((o.placed_at AT TIME ZONE 'UTC') AS date)
+            GROUP BY CAST(o.placed_at AS date)
             ORDER BY 1
             """, nativeQuery = true)
     List<Object[]> dailySalesByPlacedAt(@Param("from") Instant from, @Param("to") Instant to);

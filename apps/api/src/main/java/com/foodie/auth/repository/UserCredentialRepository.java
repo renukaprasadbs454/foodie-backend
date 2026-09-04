@@ -15,4 +15,6 @@ public interface UserCredentialRepository extends JpaRepository<UserCredential, 
     Optional<UserCredential> findByGoogleId(String googleId);
 
     Optional<UserCredential> findByEmailIgnoreCaseAndUserType(String email, UserType userType);
+
+    List<UserCredential> findByUserType(UserType userType);
 }
