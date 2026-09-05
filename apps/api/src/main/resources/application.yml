@@ -79,7 +79,7 @@ foodie:
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:local-razorpay-webhook-secret}
     api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
   payout:
-    provider: ${PAYMENT_PROVIDER:RAZORPAY}
+    provider: ${PAYMENT_PROVIDER:CASHFREE}
     mode: ${PAYOUT_MODE:live}
     razorpay:
       account-number: ${RAZORPAYX_ACCOUNT_NUMBER:2323230041387700}

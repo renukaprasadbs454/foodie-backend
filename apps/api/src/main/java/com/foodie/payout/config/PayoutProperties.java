@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "foodie.payout")
 public class PayoutProperties {
 
-    private String provider = "RAZORPAY";
+    private String provider = "CASHFREE";
     private String mode = "live";
     private RazorpayPayoutConfig razorpay = new RazorpayPayoutConfig();
     private CashfreePayoutConfig cashfree = new CashfreePayoutConfig();

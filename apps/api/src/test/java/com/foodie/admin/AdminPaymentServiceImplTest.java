@@ -16,7 +16,7 @@ class AdminPaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        paymentService = new AdminPaymentServiceImpl();
+        paymentService = new AdminPaymentServiceImpl(null, null, null);
     }
 
     @Test
@@ -57,15 +57,13 @@ class AdminPaymentServiceImplTest {
         CommissionConfigDto newRules = new CommissionConfigDto(
                 new BigDecimal("20.00"),
                 new BigDecimal("5.00"),
-                new BigDecimal("50.00")
-        );
+                new BigDecimal("50.00"));
 
         paymentService.updateCommissionRules(newRules);
 
         PaymentSplitBreakdownDto split = paymentService.calculateSplit(
                 new BigDecimal("500.00"),
-                new BigDecimal("100.00")
-        );
+                new BigDecimal("100.00"));
 
         assertThat(split.adminFoodCommission()).isEqualByComparingTo("100.00"); // 20% of 500
         assertThat(split.adminDeliveryCommission()).isEqualByComparingTo("5.00"); // 5% of 100

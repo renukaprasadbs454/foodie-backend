@@ -4,6 +4,8 @@ import com.foodie.admin.dto.request.CommissionConfigDto;
 import com.foodie.admin.dto.response.PaymentSettlementResponseDto;
 import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
 import com.foodie.admin.service.AdminPaymentService;
+import com.foodie.wallet.repository.PayoutRepository;
+import com.foodie.wallet.entity.Payout;
 import com.foodie.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,12 +28,15 @@ public class AdminPaymentController {
 
     private final AdminPaymentService adminPaymentService;
     private final com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService;
+    private final PayoutRepository payoutRepository;
 
     public AdminPaymentController(
             AdminPaymentService adminPaymentService,
-            com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService) {
+            com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService,
+            PayoutRepository payoutRepository) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
+        this.payoutRepository = payoutRepository;
     }
 
     @GetMapping("/settlements")
@@ -58,6 +63,13 @@ public class AdminPaymentController {
             @Valid @RequestBody com.foodie.restaurant.dto.request.DisburseSettlementRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(
                 restaurantSettlementService.disburseSettlement(request.settlementId(), request.paymentReference())));
+    }
+
+    @GetMapping("/payouts")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List all payouts for vendors and delivery partners")
+    public ResponseEntity<ApiResponse<List<Payout>>> listPayouts() {
+        return ResponseEntity.ok(ApiResponse.success(payoutRepository.findAll()));
     }
 
     @GetMapping("/commission-rules")

@@ -123,9 +123,9 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                                         split.foodSubtotal(),
                                         split.deliveryFee(),
                                         split.adminTotalRevenue(),
-                                        split.restaurantShare(),
+                                        split.restaurantNetShare(),
                                         restaurantName,
-                                        split.deliveryShare(),
+                                        split.deliveryPartnerNetShare(),
                                         driverName,
                                         "FUNDS_DISTRIBUTED",
                                         order.getPlacedAt()));
