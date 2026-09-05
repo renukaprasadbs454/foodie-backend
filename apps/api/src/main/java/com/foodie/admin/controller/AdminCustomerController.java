@@ -27,7 +27,8 @@ public class AdminCustomerController {
     private final CustomerRepository customerRepository;
     private final UserCredentialRepository userCredentialRepository;
 
-    public AdminCustomerController(CustomerRepository customerRepository, UserCredentialRepository userCredentialRepository) {
+    public AdminCustomerController(CustomerRepository customerRepository,
+            UserCredentialRepository userCredentialRepository) {
         this.customerRepository = customerRepository;
         this.userCredentialRepository = userCredentialRepository;
     }
@@ -35,14 +36,13 @@ public class AdminCustomerController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get all registered customers for admin dashboard")
-    public ResponseEntity<ApiResponse<List<AdminCustomerDto>>> getAllCustomers() {
+    public ResponseEntity<ApiResponse<CustomerDashboardResponse>> getAllCustomers() {
         List<Customer> customers = customerRepository.findAll();
         List<UserCredential> credentials = userCredentialRepository.findAllById(
-            customers.stream().map(Customer::getUserCredentialId).collect(Collectors.toList())
-        );
+                customers.stream().map(Customer::getUserCredentialId).collect(Collectors.toList()));
 
         Map<UUID, UserCredential> credMap = credentials.stream()
-            .collect(Collectors.toMap(UserCredential::getId, c -> c));
+                .collect(Collectors.toMap(UserCredential::getId, c -> c));
 
         List<AdminCustomerDto> dtos = customers.stream().map(c -> {
             UserCredential cred = credMap.get(c.getUserCredentialId());
@@ -50,36 +50,58 @@ public class AdminCustomerController {
             String email = c.getEmail() != null ? c.getEmail() : (cred != null ? cred.getEmail() : "Unknown");
             boolean isActive = cred == null || cred.isActive();
             String joinedDate = c.getCreatedAt() != null ? c.getCreatedAt().toString().substring(0, 10) : "unknown";
-            
+
             return new AdminCustomerDto(
-                c.getId().toString(),
-                c.getFullName(),
-                email,
-                phone,
-                0,
-                0.0,
-                0,
-                isActive ? "ACTIVE" : "SUSPENDED",
-                joinedDate,
-                joinedDate, // lastOrderDate fake
-                "BRONZE"
-            );
+                    c.getId().toString(),
+                    c.getFullName(),
+                    email,
+                    phone,
+                    0,
+                    0.0,
+                    0,
+                    isActive ? "ACTIVE" : "SUSPENDED",
+                    joinedDate,
+                    joinedDate, // lastOrderDate fake
+                    "BRONZE");
         }).collect(Collectors.toList());
 
-        return ResponseEntity.ok(ApiResponse.success(dtos));
+        long activeCount = dtos.stream().filter(c -> "ACTIVE".equals(c.accountStatus())).count();
+        long suspendedCount = dtos.stream().filter(c -> "SUSPENDED".equals(c.accountStatus())).count();
+
+        CustomerSummary summary = new CustomerSummary(
+                dtos.size(),
+                (int) activeCount,
+                (int) suspendedCount,
+                0.0);
+
+        CustomerDashboardResponse response = new CustomerDashboardResponse(
+                summary,
+                dtos,
+                dtos.size(),
+                0);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     public record AdminCustomerDto(
-        String id,
-        String name,
-        String email,
-        String phone,
-        int totalOrders,
-        double totalSpend,
-        int savedAddressesCount,
-        String accountStatus,
-        String joinedDate,
-        String lastOrderDate,
-        String loyaltyTier
-    ) {}
+            String id,
+            String name,
+            String email,
+            String phone,
+            int totalOrders,
+            double totalSpend,
+            int savedAddressesCount,
+            String accountStatus,
+            String joinedDate,
+            String lastOrderDate,
+            String loyaltyTier) {
+    }
+
+    public record CustomerSummary(int totalRegistered, int activeAccounts, int suspendedAccounts,
+            double averageCustomerLtv) {
+    }
+
+    public record CustomerDashboardResponse(CustomerSummary summary, List<AdminCustomerDto> customers, int total,
+            int openTicketsCount) {
+    }
 }

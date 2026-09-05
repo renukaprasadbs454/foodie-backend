@@ -1,19 +1,25 @@
 package com.foodie.admin.controller;
 
 import com.foodie.admin.service.AdminOperationsService;
+import com.foodie.admin.dto.response.ModerationResponseDto;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.coupon.dto.request.CreateCouponRequestDto;
 import com.foodie.coupon.dto.response.CouponResponseDto;
 import com.foodie.coupon.dto.response.DeactivateCouponResponseDto;
+import com.foodie.coupon.repository.CouponRepository;
+import com.foodie.coupon.mapper.CouponMapper;
 import com.foodie.security.principal.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,9 +37,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminCouponController {
 
     private final AdminOperationsService adminOperationsService;
+    private final CouponRepository couponRepository;
 
-    public AdminCouponController(AdminOperationsService adminOperationsService) {
+    public AdminCouponController(AdminOperationsService adminOperationsService, CouponRepository couponRepository) {
         this.adminOperationsService = adminOperationsService;
+        this.couponRepository = couponRepository;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Get all coupons")
+    public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons() {
+        return ResponseEntity.ok(ApiResponse.success(
+                couponRepository.findAll().stream()
+                        .map(CouponMapper::toResponse)
+                        .collect(Collectors.toList())));
     }
 
     @PostMapping
@@ -41,8 +59,7 @@ public class AdminCouponController {
     @Operation(summary = "Create a coupon")
     public ResponseEntity<ApiResponse<CouponResponseDto>> create(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody CreateCouponRequestDto request
-    ) {
+            @Valid @RequestBody CreateCouponRequestDto request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(adminOperationsService.createCoupon(principal.userId(), request)));
     }
@@ -52,8 +69,7 @@ public class AdminCouponController {
     @Operation(summary = "Deactivate a coupon")
     public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> deactivate(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable("id") UUID couponId
-    ) {
+            @PathVariable("id") UUID couponId) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.deactivateCoupon(principal.userId(), couponId)));
     }
