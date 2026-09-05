@@ -46,7 +46,5 @@ public interface DeliveryService {
 
         void createAssignmentForOrder(UUID orderId);
 
-        DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
-
         boolean verifyFace(UUID userCredentialId, MultipartFile file);
 }

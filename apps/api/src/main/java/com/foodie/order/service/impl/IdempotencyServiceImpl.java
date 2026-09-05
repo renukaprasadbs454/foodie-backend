@@ -31,11 +31,11 @@ public class IdempotencyServiceImpl implements IdempotencyService {
 
     @Override
     public Optional<OrderResponseDto> findCachedResponse(String key, String payloadHash) {
-        String raw = redisTemplate.opsForValue().get(PREFIX + key);
-        if (raw == null) {
-            return Optional.empty();
-        }
         try {
+            String raw = redisTemplate.opsForValue().get(PREFIX + key);
+            if (raw == null) {
+                return Optional.empty();
+            }
             JsonNode node = objectMapper.readTree(raw);
             String storedHash = node.path("payloadHash").asText(null);
             if (storedHash == null || !storedHash.equals(payloadHash)) {
@@ -46,8 +46,9 @@ public class IdempotencyServiceImpl implements IdempotencyService {
             }
             OrderResponseDto response = objectMapper.treeToValue(node.get("response"), OrderResponseDto.class);
             return Optional.ofNullable(response);
-        } catch (JsonProcessingException ex) {
-            redisTemplate.delete(PREFIX + key);
+        } catch (ConflictException ex) {
+            throw ex;
+        } catch (Exception ex) {
             return Optional.empty();
         }
     }
@@ -57,8 +58,8 @@ public class IdempotencyServiceImpl implements IdempotencyService {
         try {
             String json = objectMapper.writeValueAsString(new Stored(payloadHash, response));
             redisTemplate.opsForValue().set(PREFIX + key, json, TTL);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Unable to serialize idempotent order response.", ex);
+        } catch (Exception ex) {
+            // Silently ignore if Redis is down locally
         }
     }
 

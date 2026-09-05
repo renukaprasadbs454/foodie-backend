@@ -152,9 +152,9 @@ public class OrderServiceImpl implements OrderService {
                 } else {
                     addressId = UUID.randomUUID();
                     jdbcTemplate.update(
-                            "INSERT INTO address (id, customer_id, label, recipient_name, recipient_phone, line1, city, state, pincode, latitude, longitude, is_default, created_at, updated_at) "
+                            "INSERT INTO address (id, customer_id, label, line1, city, pincode, latitude, longitude, is_default, created_at, updated_at) "
                                     +
-                                    "VALUES (?, ?, 'Home', 'Customer', '9999999999', '123 Main St', 'Tumkur', 'Karnataka', '572101', 13.3379, 77.1173, true, NOW(), NOW())",
+                                    "VALUES (?, ?, 'Home', '123 Main St', 'Tumkur', '572101', 13.3379, 77.1173, true, NOW(), NOW())",
                             addressId, customerId);
                 }
             }
@@ -408,12 +408,14 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponseDto confirmAfterPayment(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+        if (order.getStatus() == OrderStatus.CONFIRMED) {
+            return toDetail(order);
+        }
         OrderStateMachine.Decision decision = OrderStateMachine.evaluate(order.getStatus(), OrderStatus.CONFIRMED,
                 OrderActorType.SYSTEM);
         if (decision != OrderStateMachine.Decision.ALLOW) {
-            throw new UnprocessableEntityException(
-                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Order cannot be confirmed from status " + order.getStatus() + ".");
+            log.info("Order {} status is {}, skipping transition to CONFIRMED.", orderId, order.getStatus());
+            return toDetail(order);
         }
         return applyTransition(order, OrderStatus.CONFIRMED, OrderActorType.SYSTEM, null, null);
     }

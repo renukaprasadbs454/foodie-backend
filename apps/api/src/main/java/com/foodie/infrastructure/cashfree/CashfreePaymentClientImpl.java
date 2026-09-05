@@ -31,8 +31,8 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
     }
 
     public CashfreePaymentClientImpl(
-            @Value("${CASHFREE_APP_ID:}") String appId,
-            @Value("${CASHFREE_SECRET_KEY:}") String secretKey,
+            @Value("${CASHFREE_APP_ID:${foodie.payment.cashfree.client-id:}}") String appId,
+            @Value("${CASHFREE_SECRET_KEY:${foodie.payment.cashfree.client-secret:}}") String secretKey,
             @Value("${CASHFREE_ENV:SANDBOX}") String env,
             ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -61,15 +61,24 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
     @Override
     public CashfreeOrderCreateResult createOrder(BigDecimal amount, String customerId, String customerPhone, String notesOrderId) {
         Map<String, Object> body = new LinkedHashMap<>();
-        String uniqueOrderId = notesOrderId != null 
-                ? (notesOrderId.length() > 36 ? notesOrderId.substring(0, 36) : notesOrderId) + "_" + (System.currentTimeMillis() % 10000000)
-                : ("OD_" + System.currentTimeMillis());
+        String cleanNotesId = notesOrderId != null ? notesOrderId.replace("-", "") : "";
+        String uniqueOrderId = "ord_" + System.currentTimeMillis() + (cleanNotesId.length() > 10 ? "_" + cleanNotesId.substring(0, 10) : "");
+
+        String cleanPhone = "9999999999";
+        if (customerPhone != null && !customerPhone.isBlank()) {
+            String digits = customerPhone.replaceAll("\\D", "");
+            if (digits.length() >= 10) {
+                cleanPhone = digits.substring(digits.length() - 10);
+            }
+        }
+
         body.put("order_id", uniqueOrderId);
         body.put("order_amount", amount.setScale(2, RoundingMode.HALF_UP));
         body.put("order_currency", "INR");
         body.put("customer_details", Map.of(
-            "customer_id", customerId,
-            "customer_phone", customerPhone != null && !customerPhone.isBlank() ? customerPhone : "9999999999"
+            "customer_id", customerId != null ? customerId : "CUST_" + System.currentTimeMillis(),
+            "customer_phone", cleanPhone,
+            "customer_email", "customer@foodie.com"
         ));
         body.put("order_meta", Map.of(
             "return_url", "https://api.foodie.kwiko.org/api/v1/payments/cashfree/return?order_id={order_id}"

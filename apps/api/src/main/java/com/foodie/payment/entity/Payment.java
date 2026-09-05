@@ -70,6 +70,10 @@ public class Payment extends BaseEntity {
         this.capturedAt = Instant.now();
     }
 
+    public void setCashfreeOrderId(String cashfreeOrderId) {
+        this.cashfreeOrderId = cashfreeOrderId;
+    }
+
     public void markFailed(String cashfreeOrderId) {
         this.status = PaymentStatus.FAILED;
         if (cashfreeOrderId != null) {

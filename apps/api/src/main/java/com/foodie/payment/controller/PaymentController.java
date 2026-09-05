@@ -37,7 +37,7 @@ public class PaymentController {
 
         @PostMapping("/orders/{orderId}/initiate")
         @PreAuthorize("hasRole('CUSTOMER')")
-        @Operation(summary = "Initiate Razorpay payment for an order (idempotent)")
+        @Operation(summary = "Initiate Cashfree payment for an order (idempotent)")
         public ResponseEntity<ApiResponse<PaymentInitiationResponseDto>> initiate(
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable UUID orderId,
@@ -49,7 +49,7 @@ public class PaymentController {
 
         @PostMapping("/verify")
         @PreAuthorize("hasRole('CUSTOMER')")
-        @Operation(summary = "Verify client-side Razorpay payment signature")
+        @Operation(summary = "Verify Cashfree payment status")
         public ResponseEntity<ApiResponse<Boolean>> verify(
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @Valid @RequestBody VerifyPaymentRequestDto request) {

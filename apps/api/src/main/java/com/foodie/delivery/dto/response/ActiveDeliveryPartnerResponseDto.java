@@ -9,4 +9,15 @@ public record ActiveDeliveryPartnerResponseDto(
         String mobileNumber,
         String signatureRating,
         int completedOrders
-) {}
+) {
+    public static ActiveDeliveryPartnerResponseDto unassigned() {
+        return new ActiveDeliveryPartnerResponseDto(
+                null,
+                "Assigning Delivery Partner...",
+                "",
+                "",
+                "5.0",
+                0
+        );
+    }
+}

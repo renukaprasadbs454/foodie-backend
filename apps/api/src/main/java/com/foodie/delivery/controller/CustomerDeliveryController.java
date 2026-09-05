@@ -44,7 +44,7 @@ public class CustomerDeliveryController {
         Optional<DeliveryAssignment> assignmentOpt = deliveryAssignmentRepository.findByOrderId(orderId);
 
         if (assignmentOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(ApiResponse.success(ActiveDeliveryPartnerResponseDto.unassigned()));
         }
 
         DeliveryAssignment assignment = assignmentOpt.get();
@@ -52,7 +52,7 @@ public class CustomerDeliveryController {
         // Only expose partner once they've accepted — OFFERED means not yet confirmed
         if (assignment.getStatus() == DeliveryAssignmentStatus.OFFERED
                 || assignment.getStatus() == DeliveryAssignmentStatus.CANCELLED) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(ApiResponse.success(ActiveDeliveryPartnerResponseDto.unassigned()));
         }
 
         DeliveryPartner partner = assignment.getDeliveryPartner();
