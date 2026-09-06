@@ -60,6 +60,12 @@ public final class OrderStateMachine {
                 case READY_FOR_PICKUP ->
                     (from == OrderStatus.PREPARING || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
                             || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
+                case DELIVERED ->
+                    (from == OrderStatus.READY_FOR_PICKUP || from == OrderStatus.PREPARING
+                            || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
+                            || from == OrderStatus.PLACED)
+                                    ? Decision.ALLOW
+                                    : Decision.ILLEGAL;
                 default -> Decision.FORBIDDEN;
             };
         }
