@@ -53,8 +53,7 @@ public class CustomerServiceImpl implements CustomerService {
             CustomerMapper customerMapper,
             ObjectStorageClient objectStorageClient,
             ActiveOrderAddressQuery activeOrderAddressQuery,
-            PasswordEncoder passwordEncoder
-    ) {
+            PasswordEncoder passwordEncoder) {
         this.customerRepository = customerRepository;
         this.addressRepository = addressRepository;
         this.userCredentialRepository = userCredentialRepository;
@@ -75,7 +74,8 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional
     public CustomerProfileResponseDto updateMyProfile(UUID userCredentialId, UpdateProfileRequestDto request) {
         Customer customer = requireCustomer(userCredentialId);
-        // PUT full-replace: omitted/null email clears the profile email (API Contracts §2.2).
+        // PUT full-replace: omitted/null email clears the profile email (API Contracts
+        // §2.2).
         customer.updateProfile(request.fullName(), request.email());
         return getMyProfile(userCredentialId);
     }
@@ -113,8 +113,7 @@ public class CustomerServiceImpl implements CustomerService {
                 request.city(),
                 request.pincode(),
                 request.latitude(),
-                request.longitude()
-        );
+                request.longitude());
         return customerMapper.toAddress(address);
     }
 
@@ -127,7 +126,9 @@ public class CustomerServiceImpl implements CustomerService {
 
         addressRepository.clearDefaultForCustomer(customer.getId());
         address.markDefault();
+        address = addressRepository.save(address);
         customer.setDefaultAddressId(address.getId());
+        customerRepository.save(customer);
         return customerMapper.toAddress(address);
     }
 
@@ -153,8 +154,7 @@ public class CustomerServiceImpl implements CustomerService {
                 request.pincode(),
                 request.latitude(),
                 request.longitude(),
-                makeDefault
-        );
+                makeDefault);
         address = addressRepository.save(address);
         if (makeDefault) {
             customer.setDefaultAddressId(address.getId());
@@ -181,8 +181,7 @@ public class CustomerServiceImpl implements CustomerService {
         if (activeOrderAddressQuery.isAddressReferencedByActiveOrder(addressId)) {
             throw new ConflictException(
                     ErrorCode.ADDRESS_IN_USE_BY_ACTIVE_ORDER,
-                    "Address is referenced by an active order and cannot be removed."
-            );
+                    "Address is referenced by an active order and cannot be removed.");
         }
 
         boolean wasDefault = address.isDefault()
@@ -217,8 +216,7 @@ public class CustomerServiceImpl implements CustomerService {
                     key,
                     new ByteArrayInputStream(bytes),
                     bytes.length,
-                    detected.contentType()
-            );
+                    detected.contentType());
 
             Instant uploadedAt = Instant.now();
             customer.setProfileImageKey(key);

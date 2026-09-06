@@ -420,6 +420,17 @@ public class OrderServiceImpl implements OrderService {
         return applyTransition(order, OrderStatus.CONFIRMED, OrderActorType.SYSTEM, null, null);
     }
 
+    @Override
+    @Transactional
+    public OrderResponseDto failAfterPayment(UUID orderId) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        if (order == null || order.getStatus() == OrderStatus.CANCELLED) {
+            return null;
+        }
+        return applyTransition(order, OrderStatus.CANCELLED, OrderActorType.SYSTEM, null,
+                "Payment failed securely via Cashfree Gateway.");
+    }
+
     private OrderResponseDto applyTransition(
             Order order,
             OrderStatus targetStatus,

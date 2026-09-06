@@ -6,8 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Live FCM adapter placeholder. Real HTTP/gRPC wiring requires service-account credentials
- * injected at runtime (never committed). Until credentials are configured, throws retryable
+ * Live FCM adapter placeholder. Real HTTP/gRPC wiring requires service-account
+ * credentials
+ * injected at runtime (never committed). Until credentials are configured,
+ * throws retryable
  * unavailable so RetryingFcmClient / callers mark delivery FAILED safely.
  */
 public class LiveFcmClient implements FcmClient {
@@ -25,11 +27,33 @@ public class LiveFcmClient implements FcmClient {
         if (deviceToken == null || deviceToken.isBlank()) {
             throw new ExternalServiceException("FCM device token missing for user.");
         }
-        if (properties.getCredentialsPath() == null || properties.getCredentialsPath().isBlank()) {
-            log.error("FCM live mode without credentials path — cannot send push");
-            throw new ExternalServiceException("FCM unavailable: credentials not configured.");
+
+        if (deviceToken.startsWith("ExponentPushToken") || deviceToken.startsWith("ExpoPushToken")) {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                String payload = String.format(
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\"}",
+                        deviceToken,
+                        title.replace("\"", "\\\""),
+                        body.replace("\"", "\\\""));
+
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("https://exp.host/--/api/v2/push/send"))
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                        .build();
+
+                java.net.http.HttpResponse<String> response = client.send(
+                        request, java.net.http.HttpResponse.BodyHandlers.ofString());
+
+                log.info("Expo Push Delivery Response for user {}: {}", userCredentialId, response.body());
+                return new FcmSendResult(true, "expo_" + System.currentTimeMillis());
+            } catch (Exception ex) {
+                log.error("Expo push network/API failure for user {}: {}", userCredentialId, ex.getMessage());
+                throw new ExternalServiceException("Expo Push failed: " + ex.getMessage());
+            }
         }
-        // Full Firebase Admin SDK integration is environment-specific; keep boundary here.
-        throw new ExternalServiceException("FCM live transport not configured in this environment (5xx unavailable).");
+
+        throw new ExternalServiceException("Unsupported device token format: " + deviceToken);
     }
 }

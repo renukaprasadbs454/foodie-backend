@@ -131,7 +131,8 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
 
-        CustomerSummaryProvider.CustomerSummary customer = customerSummaryProvider.findByUserCredentialId(userCredentialId).orElse(null);
+        CustomerSummaryProvider.CustomerSummary customer = customerSummaryProvider
+                .findByUserCredentialId(userCredentialId).orElse(null);
         String customerPhone = "9999999999";
 
         var existing = paymentRepository.findByOrderId(orderId);
@@ -147,7 +148,8 @@ public class PaymentServiceImpl implements PaymentService {
                 String cfOrderId = null;
                 if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
                     try {
-                        var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), customerPhone, orderId.toString());
+                        var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), customerPhone,
+                                orderId.toString());
                         paymentSessionId = created.paymentSessionId();
                         cfOrderId = created.cfOrderId();
                     } catch (Exception ex) {
@@ -168,7 +170,8 @@ public class PaymentServiceImpl implements PaymentService {
                     paymentRepository.save(payment);
                     eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
                 } else {
-                    if (cfOrderId != null) payment.setCashfreeOrderId(cfOrderId);
+                    if (cfOrderId != null)
+                        payment.setCashfreeOrderId(cfOrderId);
                     paymentRepository.save(payment);
                 }
 
@@ -184,7 +187,8 @@ public class PaymentServiceImpl implements PaymentService {
         String cfOrderId = null;
         if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
             try {
-                var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), customerPhone, orderId.toString());
+                var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), customerPhone,
+                        orderId.toString());
                 paymentSessionId = created.paymentSessionId();
                 cfOrderId = created.cfOrderId();
             } catch (Exception ex) {
@@ -219,7 +223,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public boolean verifyPayment(UUID userCredentialId,
             com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
-        
+
         Payment payment = paymentRepository.findByOrderId(request.orderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for order."));
 
@@ -232,7 +236,8 @@ public class PaymentServiceImpl implements PaymentService {
         if (cfOrderId != null && !cfOrderId.isBlank()) {
             try {
                 var fetch = cashfreeClient.fetchOrder(cfOrderId);
-                if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status()) || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status())
+                        || "SUCCESS".equalsIgnoreCase(fetch.status())) {
                     isPaid = true;
                 }
             } catch (Exception ex) {
@@ -241,11 +246,13 @@ public class PaymentServiceImpl implements PaymentService {
                 if (payment.getCashfreeOrderId() != null && !payment.getCashfreeOrderId().equals(cfOrderId)) {
                     try {
                         var fetch = cashfreeClient.fetchOrder(payment.getCashfreeOrderId());
-                        if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status()) || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                        if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status())
+                                || "SUCCESS".equalsIgnoreCase(fetch.status())) {
                             isPaid = true;
                             cfOrderId = payment.getCashfreeOrderId();
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
             }
         }
@@ -268,10 +275,27 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public void handleWebhook(String rawBody, String signatureHeader) {
-        // Implementation for Cashfree Webhook can be added here
-        log.info("Received cashfree webhook");
-    }
+        log.info("Received cashfree webhook payload");
+        try {
+            JsonNode root = objectMapper.readTree(rawBody);
+            String type = root.path("type").asText("");
 
+            if ("PAYMENT_SUCCESS_WEBHOOK".equalsIgnoreCase(type) || "payment.captured".equals(type)
+                    || "PAYMENT_CAPTURED".equals(type)) {
+                onPaymentCaptured(root);
+            } else if ("PAYMENT_FAILED_WEBHOOK".equalsIgnoreCase(type) || "payment.failed".equals(type)
+                    || "PAYMENT_FAILED".equals(type) || "PAYMENT_FAILED_DURING_AUTHORIZE".equalsIgnoreCase(type)) {
+                onPaymentFailed(root);
+            } else if ("REFUND_PROCESSED_WEBHOOK".equalsIgnoreCase(type) || "refund.processed".equals(type)
+                    || "REFUND_PROCESSED".equals(type)) {
+                onRefundProcessed(root);
+            } else {
+                log.info("Unhandled webhook type: {}", type);
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse cashfree webhook payload", e);
+        }
+    }
 
     @Override
     @Transactional
@@ -287,7 +311,8 @@ public class PaymentServiceImpl implements PaymentService {
             throw new UnprocessableEntityException(
                     ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment is not refundable in its current status.");
         }
-        if (payment.getCashfreeOrderId() == null || payment.getCashfreeOrderId().isBlank() || payment.getCashfreeOrderId().startsWith("WALLET_")) {
+        if (payment.getCashfreeOrderId() == null || payment.getCashfreeOrderId().isBlank()
+                || payment.getCashfreeOrderId().startsWith("WALLET_")) {
             throw new UnprocessableEntityException(
                     ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment has no Cashfree order id for refund.");
         }

@@ -10,15 +10,30 @@ public class StubFcmClient implements FcmClient {
 
     @Override
     public FcmSendResult sendPush(UUID userCredentialId, String deviceToken, String title, String body) {
-        String messageId = "stub-fcm-" + UUID.randomUUID();
-        log.info(
-                "Stub FCM push user={} tokenPresent={} title={} body={} messageId={}",
-                userCredentialId,
-                deviceToken != null && !deviceToken.isBlank(),
-                title,
-                body,
-                messageId
-        );
-        return new FcmSendResult(true, messageId);
+        if (deviceToken != null
+                && (deviceToken.startsWith("ExponentPushToken") || deviceToken.startsWith("ExpoPushToken"))) {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                String payload = String.format(
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\"}",
+                        deviceToken,
+                        title.replace("\"", "\\\""),
+                        body.replace("\"", "\\\""));
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("https://exp.host/--/api/v2/push/send"))
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                        .build();
+                java.net.http.HttpResponse<String> response = client.send(
+                        request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                log.info("Stub-bypassed real Expo Push Response for {}: {}", userCredentialId, response.body());
+            } catch (Exception ex) {
+                log.error("Expo push network/API failure for user {}: {}", userCredentialId, ex.getMessage());
+            }
+        } else {
+            log.info("STUB FCM (NoOp): Sending push to user={} token={} title='{}'",
+                    userCredentialId, deviceToken, title);
+        }
+        return new FcmSendResult(true, "stub_fcm_" + UUID.randomUUID());
     }
 }
