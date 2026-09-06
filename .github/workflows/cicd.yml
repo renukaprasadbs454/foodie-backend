@@ -56,7 +56,8 @@ jobs:
             cd /root/foodie/backend/apps/api
 
             echo "Starting Foodie backend stack..."
-            docker compose --profile full up -d --build --no-cache
+            docker compose --profile full build --no-cache
+            docker compose --profile full up -d --force-recreate
 
             echo "Waiting for Foodie backend to become healthy..."
 
