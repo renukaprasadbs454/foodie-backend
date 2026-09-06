@@ -32,11 +32,10 @@ public class LiveFcmClient implements FcmClient {
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
                 String payload = String.format(
-                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\"}",
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"badge\":1}",
                         deviceToken,
                         title.replace("\"", "\\\""),
                         body.replace("\"", "\\\""));
-
                 java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create("https://exp.host/--/api/v2/push/send"))
                         .header("Content-Type", "application/json")

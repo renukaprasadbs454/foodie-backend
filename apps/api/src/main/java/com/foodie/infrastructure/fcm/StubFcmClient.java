@@ -15,7 +15,7 @@ public class StubFcmClient implements FcmClient {
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
                 String payload = String.format(
-                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\"}",
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"badge\":1}",
                         deviceToken,
                         title.replace("\"", "\\\""),
                         body.replace("\"", "\\\""));
