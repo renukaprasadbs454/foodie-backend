@@ -278,7 +278,6 @@ public class RestaurantServiceImpl implements RestaurantService {
         return buildDetail(restaurant, true);
     }
 
-
     @Override
     @Transactional
     public RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request) {
@@ -551,7 +550,8 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         for (Order order : orders) {
             OrderStatus status = order.getStatus();
-            if (status == OrderStatus.DELIVERED) {
+            if (status == OrderStatus.DELIVERED || status == OrderStatus.PICKED_UP
+                    || status == OrderStatus.OUT_FOR_DELIVERY) {
                 completedOrders++;
                 if (order.getTotalAmount() != null) {
                     grossSales = grossSales.add(order.getTotalAmount());
