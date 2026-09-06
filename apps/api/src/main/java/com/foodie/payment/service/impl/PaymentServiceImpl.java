@@ -346,9 +346,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void onPaymentCaptured(JsonNode root) {
-        JsonNode data = root.path("data").path("payment");
-        String cfOrderId = data.path("order_id").asText(null);
-        if (cfOrderId == null) {
+        JsonNode dataOrder = root.path("data").path("order");
+        String cfOrderId = dataOrder.path("order_id").asText(null);
+        if (cfOrderId == null || cfOrderId.isBlank()) {
+            JsonNode dataPayment = root.path("data").path("payment");
+            cfOrderId = dataPayment.path("order_id").asText(null);
+        }
+        if (cfOrderId == null || cfOrderId.isBlank()) {
             log.warn("payment.captured missing order_id — ignored");
             return;
         }
@@ -370,9 +374,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void onPaymentFailed(JsonNode root) {
-        JsonNode data = root.path("data").path("payment");
-        String cfOrderId = data.path("order_id").asText(null);
-        if (cfOrderId == null) {
+        JsonNode dataOrder = root.path("data").path("order");
+        String cfOrderId = dataOrder.path("order_id").asText(null);
+        if (cfOrderId == null || cfOrderId.isBlank()) {
+            JsonNode dataPayment = root.path("data").path("payment");
+            cfOrderId = dataPayment.path("order_id").asText(null);
+        }
+        if (cfOrderId == null || cfOrderId.isBlank()) {
             return;
         }
         Payment payment = paymentRepository.findByCashfreeOrderId(cfOrderId).orElse(null);

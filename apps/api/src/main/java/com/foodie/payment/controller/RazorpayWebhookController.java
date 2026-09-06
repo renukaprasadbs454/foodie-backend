@@ -22,12 +22,11 @@ public class RazorpayWebhookController {
         this.paymentService = paymentService;
     }
 
-    @PostMapping("/razorpay")
-    @Operation(summary = "Razorpay webhook (HMAC verified; no JWT)")
+    @PostMapping({ "/razorpay", "/cashfree" })
+    @Operation(summary = "Payment Gateway Webhook (HMAC verified; no JWT)")
     public ResponseEntity<ApiResponse<Void>> razorpayWebhook(
             @RequestBody String rawBody,
-            @RequestHeader(value = "X-Razorpay-Signature", required = false) String signature
-    ) {
+            @RequestHeader(value = "X-Razorpay-Signature", required = false) String signature) {
         paymentService.handleWebhook(rawBody, signature);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
