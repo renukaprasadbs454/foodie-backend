@@ -43,8 +43,7 @@ public class ReviewServiceImpl implements ReviewService {
             OrderReviewQuery orderReviewQuery,
             CustomerSummaryProvider customerSummaryProvider,
             ReviewModerationStore moderationStore,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher) {
         this.reviewRepository = reviewRepository;
         this.orderReviewQuery = orderReviewQuery;
         this.customerSummaryProvider = customerSummaryProvider;
@@ -66,17 +65,16 @@ public class ReviewServiceImpl implements ReviewService {
             // Hide existence of others' orders
             throw new ResourceNotFoundException("Order not found.");
         }
-        if (order.status() != OrderStatus.DELIVERED) {
+        if (order.status() != OrderStatus.DELIVERED && order.status() != OrderStatus.PICKED_UP
+                && order.status() != OrderStatus.OUT_FOR_DELIVERY) {
             throw new UnprocessableEntityException(
                     ErrorCode.ORDER_NOT_DELIVERED,
-                    "Reviews are allowed only for delivered orders."
-            );
+                    "Reviews are allowed only for collected or delivered orders.");
         }
         if (reviewRepository.existsByOrderId(orderId)) {
             throw new ConflictException(
                     ErrorCode.REVIEW_ALREADY_EXISTS,
-                    "A review already exists for this order."
-            );
+                    "A review already exists for this order.");
         }
 
         Review review = Review.submit(
@@ -86,16 +84,14 @@ public class ReviewServiceImpl implements ReviewService {
                 order.deliveryPartnerId(),
                 request.restaurantRating(),
                 request.deliveryRating(),
-                request.comment()
-        );
+                request.comment());
 
         try {
             review = reviewRepository.save(review);
         } catch (DataIntegrityViolationException ex) {
             throw new ConflictException(
                     ErrorCode.REVIEW_ALREADY_EXISTS,
-                    "A review already exists for this order."
-            );
+                    "A review already exists for this order.");
         }
 
         eventPublisher.publishEvent(ReviewSubmittedEvent.of(
@@ -105,8 +101,7 @@ public class ReviewServiceImpl implements ReviewService {
                 review.getCustomerId(),
                 review.getDeliveryPartnerId(),
                 review.getRestaurantRating(),
-                review.getDeliveryRating() == null ? null : review.getDeliveryRating().intValue()
-        ));
+                review.getDeliveryRating() == null ? null : review.getDeliveryRating().intValue()));
 
         return ReviewMapper.toResponse(review);
     }
@@ -121,13 +116,13 @@ public class ReviewServiceImpl implements ReviewService {
                 .filter(review -> !moderationStore.isFlagged(review.getId()))
                 .map(ReviewMapper::toPublicItem)
                 .toList();
-        // Pagination meta reflects DB page; flagged rows may thin the page (acceptable V1 trade-off).
+        // Pagination meta reflects DB page; flagged rows may thin the page (acceptable
+        // V1 trade-off).
         return new PageResult<>(items, new PaginationMeta(
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
-                result.getTotalPages()
-        ));
+                result.getTotalPages()));
     }
 
     @Override
