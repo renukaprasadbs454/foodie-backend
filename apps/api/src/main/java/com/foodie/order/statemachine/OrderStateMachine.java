@@ -26,7 +26,9 @@ public final class OrderStateMachine {
     public static boolean isPrePreparing(OrderStatus status) {
         return status == OrderStatus.PLACED
                 || status == OrderStatus.CONFIRMED
-                || status == OrderStatus.ACCEPTED;
+                || status == OrderStatus.ACCEPTED
+                || status == OrderStatus.PREPARING
+                || status == OrderStatus.READY_FOR_PICKUP;
     }
 
     public static Decision evaluate(OrderStatus from, OrderStatus to, OrderActorType actor) {
