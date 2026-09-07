@@ -75,6 +75,13 @@ jobs:
             echo "Ensuring .env exists..."
             touch .env
 
+            echo "Starting PostgreSQL & Redis..."
+            $COMPOSE_CMD up -d postgres redis
+            sleep 5
+
+            echo "Cleaning any stale/failed Flyway migration history entries..."
+            docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34');" 2>/dev/null || true
+
             echo "Starting Foodie backend stack..."
             $COMPOSE_CMD --profile full build --no-cache
             $COMPOSE_CMD --profile full up -d --force-recreate

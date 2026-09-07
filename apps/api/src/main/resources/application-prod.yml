@@ -14,6 +14,11 @@ spring:
       password: ${REDIS_PASSWORD:}
   jpa:
     show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: false
+    out-of-order: true
 
 logging:
   level:
