@@ -1,5 +1,5 @@
 -- Migration V34: Customer Loyalty Points & First Order Discount
-CREATE TABLE customer_loyalty (
+CREATE TABLE IF NOT EXISTS customer_loyalty (
     id              UUID PRIMARY KEY,
     customer_id     UUID NOT NULL UNIQUE REFERENCES customer(id) ON DELETE CASCADE,
     points_balance  INT NOT NULL DEFAULT 0,
@@ -9,7 +9,7 @@ CREATE TABLE customer_loyalty (
     CONSTRAINT chk_points_balance CHECK (points_balance >= 0)
 );
 
-CREATE TABLE loyalty_point_ledger (
+CREATE TABLE IF NOT EXISTS loyalty_point_ledger (
     id                  UUID PRIMARY KEY,
     customer_loyalty_id UUID NOT NULL REFERENCES customer_loyalty(id) ON DELETE CASCADE,
     points              INT NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE loyalty_point_ledger (
     CONSTRAINT chk_loyalty_points CHECK (points > 0)
 );
 
-CREATE INDEX idx_loyalty_ledger_customer ON loyalty_point_ledger(customer_loyalty_id);
+CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_customer ON loyalty_point_ledger(customer_loyalty_id);
 
 ALTER TABLE coupon
     ADD COLUMN IF NOT EXISTS is_first_order_only BOOLEAN NOT NULL DEFAULT FALSE;
