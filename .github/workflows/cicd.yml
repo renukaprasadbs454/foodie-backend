@@ -83,8 +83,8 @@ jobs:
             docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34');" 2>/dev/null || true
 
             echo "Starting Foodie backend stack..."
-            $COMPOSE_CMD --profile full build --no-cache
-            $COMPOSE_CMD --profile full up -d --force-recreate
+            $COMPOSE_CMD build --no-cache backend
+            $COMPOSE_CMD up -d --force-recreate backend postgres redis
 
             echo "Waiting for Foodie backend to become healthy..."
 
