@@ -82,21 +82,21 @@ jobs:
             echo "Waiting for Foodie backend to become healthy..."
 
             for i in {1..60}; do
-              STATUS=$(docker inspect foodie-backend \
-                --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health 2>/dev/null || echo "000")
+              CONTAINER_STATE=$(docker inspect foodie-backend --format '{{.State.Status}}' 2>/dev/null || echo "unknown")
 
-              echo "Health status: $STATUS"
+              echo "[$i/60] HTTP response: $HTTP_CODE | Container state: $CONTAINER_STATE"
 
-              if [ "$STATUS" = "healthy" ]; then
+              if [ "$HTTP_CODE" = "200" ]; then
                 echo "======================================"
-                echo "Foodie backend is healthy!"
+                echo "Foodie backend is UP and HEALTHY (HTTP 200)!"
                 echo "======================================"
                 break
               fi
 
-              if [ "$STATUS" = "unhealthy" ]; then
+              if [ "$CONTAINER_STATE" = "exited" ] || [ "$CONTAINER_STATE" = "dead" ]; then
                 echo "======================================"
-                echo "Foodie backend is unhealthy!"
+                echo "Foodie backend container crashed or exited!"
                 echo "======================================"
                 $COMPOSE_CMD logs backend --tail=100
                 exit 1
@@ -106,7 +106,7 @@ jobs:
 
               if [ "$i" -eq 60 ]; then
                 echo "======================================"
-                echo "Foodie backend did not become healthy in time."
+                echo "Foodie backend did not return HTTP 200 in time."
                 echo "======================================"
                 $COMPOSE_CMD ps
                 $COMPOSE_CMD logs backend --tail=100
