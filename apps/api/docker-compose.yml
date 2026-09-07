@@ -61,6 +61,7 @@ services:
       DB_PASSWORD: foodie
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SERVER_PORT: 8080
       FOODIE_LOCAL_STORAGE_ROOT: /tmp/foodie-object-storage
       JWT_SECRET: local-dev-only-change-me-foodie-jwt-secret-key-32b
