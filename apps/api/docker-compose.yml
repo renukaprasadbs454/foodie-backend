@@ -74,8 +74,7 @@ services:
     image: nginx:1.27-alpine
     container_name: foodie-nginx
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     ports:
       - "80:80"
     volumes:
