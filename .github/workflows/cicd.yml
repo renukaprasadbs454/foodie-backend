@@ -70,7 +70,7 @@ jobs:
 
             echo "Waiting for Foodie backend to become healthy..."
 
-            for i in {1..30}; do
+            for i in {1..60}; do
               STATUS=$(docker inspect foodie-backend \
                 --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
 
@@ -93,7 +93,7 @@ jobs:
 
               sleep 5
 
-              if [ "$i" -eq 30 ]; then
+              if [ "$i" -eq 60 ]; then
                 echo "======================================"
                 echo "Foodie backend did not become healthy in time."
                 echo "======================================"
