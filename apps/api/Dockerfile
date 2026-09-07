@@ -15,6 +15,7 @@ RUN ./mvnw -q -B -DskipTests package \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+RUN apk add --no-cache curl
 RUN addgroup -S foodie && adduser -S foodie -G foodie
 USER foodie
 

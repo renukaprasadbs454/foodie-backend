@@ -64,12 +64,20 @@ jobs:
 
             cd apps/api
 
+            COMPOSE_CMD="docker compose"
+            if ! docker compose version >/dev/null 2>&1; then
+              if docker-compose version >/dev/null 2>&1; then
+                COMPOSE_CMD="docker-compose"
+              fi
+            fi
+            echo "Using Docker Compose command: $COMPOSE_CMD"
+
             echo "Ensuring .env exists..."
             touch .env
 
             echo "Starting Foodie backend stack..."
-            docker compose --profile full build --no-cache
-            docker compose --profile full up -d --force-recreate
+            $COMPOSE_CMD --profile full build --no-cache
+            $COMPOSE_CMD --profile full up -d --force-recreate
 
             echo "Waiting for Foodie backend to become healthy..."
 
@@ -90,7 +98,7 @@ jobs:
                 echo "======================================"
                 echo "Foodie backend is unhealthy!"
                 echo "======================================"
-                docker compose logs backend --tail=100
+                $COMPOSE_CMD logs backend --tail=100
                 exit 1
               fi
 
@@ -100,17 +108,17 @@ jobs:
                 echo "======================================"
                 echo "Foodie backend did not become healthy in time."
                 echo "======================================"
-                docker compose ps
-                docker compose logs backend --tail=100
+                $COMPOSE_CMD ps
+                $COMPOSE_CMD logs backend --tail=100
                 exit 1
               fi
             done
 
             echo "Checking Docker containers..."
-            docker compose ps
+            $COMPOSE_CMD ps
 
             echo "Checking backend logs..."
-            docker compose logs backend --tail=50
+            $COMPOSE_CMD logs backend --tail=50
 
             echo "======================================"
             echo "Foodie deployment completed successfully"
