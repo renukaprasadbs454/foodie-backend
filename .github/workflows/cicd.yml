@@ -64,6 +64,9 @@ jobs:
 
             cd apps/api
 
+            echo "Ensuring .env exists..."
+            touch .env
+
             echo "Starting Foodie backend stack..."
             docker compose --profile full build --no-cache
             docker compose --profile full up -d --force-recreate
