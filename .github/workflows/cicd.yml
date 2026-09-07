@@ -45,7 +45,15 @@ jobs:
             echo "Starting Foodie deployment"
             echo "======================================"
 
-            cd /root/foodie/backend
+            if [ -d "/root/foodie/backend" ]; then
+              cd /root/foodie/backend
+            elif [ -d "/root/foodie-backend" ]; then
+              cd /root/foodie-backend
+            elif [ -d "$HOME/foodie/backend" ]; then
+              cd "$HOME/foodie/backend"
+            else
+              cd "$HOME/foodie-backend"
+            fi
 
             echo "Checking current Git status..."
             git status
@@ -54,7 +62,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            cd /root/foodie/backend/apps/api
+            cd apps/api
 
             echo "Starting Foodie backend stack..."
             docker compose --profile full build --no-cache
