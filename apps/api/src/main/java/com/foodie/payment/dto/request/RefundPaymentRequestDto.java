@@ -8,6 +8,10 @@ import java.math.BigDecimal;
 
 public record RefundPaymentRequestDto(
         @NotNull @DecimalMin(value = "0.01", inclusive = true) BigDecimal amount,
-        @NotBlank @Size(max = 500) String reason
+        @NotBlank @Size(max = 500) String reason,
+        Boolean refundToWallet
 ) {
+    public RefundPaymentRequestDto(BigDecimal amount, String reason) {
+        this(amount, reason, false);
+    }
 }

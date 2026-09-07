@@ -4,6 +4,7 @@ import com.foodie.auth.entity.UserCredential;
 import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.user.entity.Customer;
+import com.foodie.user.repository.CustomerLoyaltyRepository;
 import com.foodie.user.repository.CustomerRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,11 +13,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -26,11 +25,15 @@ public class AdminCustomerController {
 
     private final CustomerRepository customerRepository;
     private final UserCredentialRepository userCredentialRepository;
+    private final CustomerLoyaltyRepository customerLoyaltyRepository;
 
-    public AdminCustomerController(CustomerRepository customerRepository,
-            UserCredentialRepository userCredentialRepository) {
+    public AdminCustomerController(
+            CustomerRepository customerRepository,
+            UserCredentialRepository userCredentialRepository,
+            CustomerLoyaltyRepository customerLoyaltyRepository) {
         this.customerRepository = customerRepository;
         this.userCredentialRepository = userCredentialRepository;
+        this.customerLoyaltyRepository = customerLoyaltyRepository;
     }
 
     @GetMapping
@@ -50,6 +53,9 @@ public class AdminCustomerController {
             String email = c.getEmail() != null ? c.getEmail() : (cred != null ? cred.getEmail() : "Unknown");
             boolean isActive = cred == null || cred.isActive();
             String joinedDate = c.getCreatedAt() != null ? c.getCreatedAt().toString().substring(0, 10) : "unknown";
+            
+            var loyaltyOpt = customerLoyaltyRepository.findByCustomerId(c.getId());
+            String tier = loyaltyOpt.map(l -> l.getLoyaltyTier().name()).orElse("BRONZE");
 
             return new AdminCustomerDto(
                     c.getId().toString(),
@@ -61,8 +67,8 @@ public class AdminCustomerController {
                     0,
                     isActive ? "ACTIVE" : "SUSPENDED",
                     joinedDate,
-                    joinedDate, // lastOrderDate fake
-                    "BRONZE");
+                    joinedDate,
+                    tier);
         }).collect(Collectors.toList());
 
         long activeCount = dtos.stream().filter(c -> "ACTIVE".equals(c.accountStatus())).count();

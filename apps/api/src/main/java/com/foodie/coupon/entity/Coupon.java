@@ -48,6 +48,9 @@ public class Coupon extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "is_first_order_only", nullable = false)
+    private boolean firstOrderOnly = false;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -133,6 +136,14 @@ public class Coupon extends BaseEntity {
 
     public boolean isActive() {
         return active;
+    }
+
+    public boolean isFirstOrderOnly() {
+        return firstOrderOnly;
+    }
+
+    public void setFirstOrderOnly(boolean firstOrderOnly) {
+        this.firstOrderOnly = firstOrderOnly;
     }
 
     public Long getVersion() {

@@ -187,4 +187,22 @@ public class DeliveryController {
         return ResponseEntity.ok(ApiResponse.success(
                 deliveryService.verifyFace(principal.userId(), file)));
     }
+
+    @GetMapping("/cash-in-hand")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Get delivery partner cash in hand status and deposit history")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CashInHandResponseDto>> getCashInHand(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getCashInHand(principal.userId())));
+    }
+
+    @PostMapping("/cash-deposits")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Submit a cash deposit request to clear cash in hand balance")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CashDepositResponseDto>> submitCashDeposit(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody com.foodie.delivery.dto.request.CashDepositRequestDto request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(deliveryService.submitCashDeposit(principal.userId(), request)));
+    }
 }

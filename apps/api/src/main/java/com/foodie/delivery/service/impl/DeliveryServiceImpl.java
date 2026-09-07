@@ -59,6 +59,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.delivery.entity.DeliveryLocationHistory;
+import com.foodie.delivery.repository.DeliveryLocationHistoryRepository;
+import com.foodie.delivery.repository.DeliveryCashDepositRepository;
+import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.delivery.service.DeliveryPricingService;
 import java.math.BigDecimal;
 import javax.imageio.ImageIO;
@@ -79,6 +83,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
+    private final DeliveryLocationHistoryRepository deliveryLocationHistoryRepository;
+    private final DeliveryCashDepositRepository deliveryCashDepositRepository;
+    private final PaymentRepository paymentRepository;
     private final DeliveryMapper deliveryMapper;
     private final ObjectStorageClient objectStorageClient;
     private final PartnerGeoService partnerGeoService;
@@ -94,6 +101,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             DeliveryPartnerRepository deliveryPartnerRepository,
             DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository,
             DeliveryAssignmentRepository deliveryAssignmentRepository,
+            DeliveryLocationHistoryRepository deliveryLocationHistoryRepository,
+            DeliveryCashDepositRepository deliveryCashDepositRepository,
+            PaymentRepository paymentRepository,
             DeliveryMapper deliveryMapper,
             ObjectStorageClient objectStorageClient,
             PartnerGeoService partnerGeoService,
@@ -107,6 +117,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
+        this.deliveryLocationHistoryRepository = deliveryLocationHistoryRepository;
+        this.deliveryCashDepositRepository = deliveryCashDepositRepository;
+        this.paymentRepository = paymentRepository;
         this.deliveryMapper = deliveryMapper;
         this.objectStorageClient = objectStorageClient;
         this.partnerGeoService = partnerGeoService;
@@ -300,6 +313,16 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
         assignment.markDelivered();
         deliveryAssignmentRepository.save(assignment);
+
+        // Update Cash in Hand if COD payment
+        paymentRepository.findByOrderId(assignment.getOrderId()).ifPresent(payment -> {
+            if (payment.getWalletAmount() == null || payment.getWalletAmount().compareTo(BigDecimal.ZERO) == 0) {
+                DeliveryPartner partner = assignment.getDeliveryPartner();
+                partner.addCash(payment.getAmount());
+                deliveryPartnerRepository.save(partner);
+            }
+        });
+
         orderDeliveryPort.markDelivered(assignment.getOrderId());
         eventPublisher.publishEvent(DeliveryCompletedEvent.of(
                 assignment.getOrderId(), assignment.getDeliveryPartner().getId(), assignment.getId()));
@@ -307,7 +330,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public void locationPing(UUID userCredentialId, LocationPingRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
         redisRateLimiter.check("ratelimit:location:" + partner.getId(), 100, LOCATION_PING_WINDOW);
@@ -320,8 +343,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .findFirstByDeliveryPartnerIdAndStatusIn(
                         partner.getId(),
                         List.of(DeliveryAssignmentStatus.PICKED_UP))
-                .ifPresent(assignment -> eventPublisher.publishEvent(
-                        DeliveryLocationUpdatedEvent.of(assignment.getOrderId(), lat, lng)));
+                .ifPresent(assignment -> {
+                    deliveryLocationHistoryRepository.save(DeliveryLocationHistory.create(
+                            assignment.getId(), partner.getId(), request.latitude(), request.longitude()));
+                    eventPublisher.publishEvent(
+                            DeliveryLocationUpdatedEvent.of(assignment.getOrderId(), lat, lng));
+                });
     }
 
     @Override
@@ -353,7 +380,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                 Optional<DeliveryPartner> candidate = deliveryPartnerRepository.findById(hit.partnerId());
                 if (candidate.isPresent()
                         && candidate.get().isOnline()
-                        && candidate.get().getKycStatus() == KycStatus.VERIFIED) {
+                        && candidate.get().getKycStatus() == KycStatus.VERIFIED
+                        && !candidate.get().isCashLimitExceeded()) {
                     selectedPartner = candidate;
                     selectedDistance = hit.distanceKm();
                     break;
@@ -384,7 +412,20 @@ public class DeliveryServiceImpl implements DeliveryService {
                 selectedDistance);
     }
 
-
+    @Override
+    @Transactional
+    public DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId) {
+        DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        partner.verifyKyc();
+        log.info("Delivery partner {} KYC verified by admin {}", partnerId, adminId);
+        List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
+                .findByDeliveryPartnerId(partner.getId())
+                .stream()
+                .map(deliveryMapper::toDocument)
+                .toList();
+        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs);
+    }
 
     private DeliveryPartner requirePartner(UUID userCredentialId) {
         return deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
@@ -533,5 +574,156 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
         return pixels;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.foodie.delivery.dto.response.DeliveryLocationResponseDto getLatestLocationForOrder(UUID orderId) {
+        DeliveryAssignment assignment = deliveryAssignmentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Assignment not found for order."));
+        return deliveryLocationHistoryRepository.findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(assignment.getDeliveryPartner().getId())
+                .map(loc -> new com.foodie.delivery.dto.response.DeliveryLocationResponseDto(loc.getLatitude(), loc.getLongitude(), loc.getRecordedAt()))
+                .orElseThrow(() -> new ResourceNotFoundException("No location data found for order."));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.foodie.delivery.dto.response.LivePartnerLocationDto> getLiveFleetLocations() {
+        return deliveryPartnerRepository.findAll().stream()
+                .filter(DeliveryPartner::isOnline)
+                .map(partner -> {
+                    var locOpt = deliveryLocationHistoryRepository.findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(partner.getId());
+                    BigDecimal lat = locOpt.map(DeliveryLocationHistory::getLatitude).orElse(BigDecimal.ZERO);
+                    BigDecimal lng = locOpt.map(DeliveryLocationHistory::getLongitude).orElse(BigDecimal.ZERO);
+                    return new com.foodie.delivery.dto.response.LivePartnerLocationDto(
+                            partner.getId(),
+                            partner.getFullName(),
+                            partner.getVehicleNumber(),
+                            lat,
+                            lng,
+                            partner.isOnline(),
+                            partner.getCashInHand(),
+                            partner.isCashLimitExceeded()
+                    );
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.foodie.delivery.dto.response.CashInHandResponseDto getCashInHand(UUID userCredentialId) {
+        DeliveryPartner partner = requirePartner(userCredentialId);
+        List<com.foodie.delivery.dto.response.CashDepositResponseDto> deposits = deliveryCashDepositRepository
+                .findByDeliveryPartnerIdOrderByCreatedAtDesc(partner.getId())
+                .stream()
+                .map(d -> new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                        d.getId(),
+                        partner.getId(),
+                        partner.getFullName(),
+                        d.getAmount(),
+                        d.getStatus().name(),
+                        d.getReferenceNumber(),
+                        d.getRejectionReason(),
+                        d.getCreatedAt(),
+                        d.getApprovedAt()
+                ))
+                .toList();
+
+        return new com.foodie.delivery.dto.response.CashInHandResponseDto(
+                partner.getCashInHand(),
+                partner.getMaxCashInHandLimit(),
+                partner.isCashLimitExceeded(),
+                deposits
+        );
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CashDepositResponseDto submitCashDeposit(
+            UUID userCredentialId, com.foodie.delivery.dto.request.CashDepositRequestDto request) {
+        DeliveryPartner partner = requirePartner(userCredentialId);
+        com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.save(
+                com.foodie.delivery.entity.DeliveryCashDeposit.create(partner, request.amount(), request.referenceNumber())
+        );
+        return new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                deposit.getId(),
+                partner.getId(),
+                partner.getFullName(),
+                deposit.getAmount(),
+                deposit.getStatus().name(),
+                deposit.getReferenceNumber(),
+                deposit.getRejectionReason(),
+                deposit.getCreatedAt(),
+                deposit.getApprovedAt()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.foodie.delivery.dto.response.CashDepositResponseDto> listPendingCashDeposits() {
+        return deliveryCashDepositRepository.findByStatusOrderByCreatedAtDesc(com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING)
+                .stream()
+                .map(d -> new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                        d.getId(),
+                        d.getDeliveryPartner().getId(),
+                        d.getDeliveryPartner().getFullName(),
+                        d.getAmount(),
+                        d.getStatus().name(),
+                        d.getReferenceNumber(),
+                        d.getRejectionReason(),
+                        d.getCreatedAt(),
+                        d.getApprovedAt()
+                ))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CashDepositResponseDto approveCashDeposit(UUID depositId, UUID adminId) {
+        com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cash deposit not found."));
+        if (deposit.getStatus() != com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Cash deposit is already processed.");
+        }
+        deposit.approve(adminId);
+        deposit.getDeliveryPartner().deductCash(deposit.getAmount());
+        deliveryPartnerRepository.save(deposit.getDeliveryPartner());
+        deliveryCashDepositRepository.save(deposit);
+
+        return new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                deposit.getId(),
+                deposit.getDeliveryPartner().getId(),
+                deposit.getDeliveryPartner().getFullName(),
+                deposit.getAmount(),
+                deposit.getStatus().name(),
+                deposit.getReferenceNumber(),
+                deposit.getRejectionReason(),
+                deposit.getCreatedAt(),
+                deposit.getApprovedAt()
+        );
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId, String reason) {
+        com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cash deposit not found."));
+        if (deposit.getStatus() != com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Cash deposit is already processed.");
+        }
+        deposit.reject(adminId, reason);
+        deliveryCashDepositRepository.save(deposit);
+
+        return new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                deposit.getId(),
+                deposit.getDeliveryPartner().getId(),
+                deposit.getDeliveryPartner().getFullName(),
+                deposit.getAmount(),
+                deposit.getStatus().name(),
+                deposit.getReferenceNumber(),
+                deposit.getRejectionReason(),
+                deposit.getCreatedAt(),
+                deposit.getApprovedAt()
+        );
     }
 }

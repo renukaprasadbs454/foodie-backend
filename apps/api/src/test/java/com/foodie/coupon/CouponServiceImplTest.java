@@ -44,6 +44,7 @@ class CouponServiceImplTest {
     @Mock private CustomerSummaryProvider customerSummaryProvider;
     @Mock private RestaurantSummaryProvider restaurantSummaryProvider;
     @Mock private CouponEligibilityCache eligibilityCache;
+    @Mock private com.foodie.order.repository.OrderRepository orderRepository;
 
     private CouponServiceImpl service;
 
@@ -58,7 +59,8 @@ class CouponServiceImplTest {
                 redemptionRepository,
                 customerSummaryProvider,
                 restaurantSummaryProvider,
-                eligibilityCache
+                eligibilityCache,
+                orderRepository
         );
     }
 

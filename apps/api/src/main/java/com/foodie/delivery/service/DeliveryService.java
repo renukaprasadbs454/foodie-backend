@@ -46,5 +46,22 @@ public interface DeliveryService {
 
         void createAssignmentForOrder(UUID orderId);
 
+        DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
+
         boolean verifyFace(UUID userCredentialId, MultipartFile file);
+
+        com.foodie.delivery.dto.response.DeliveryLocationResponseDto getLatestLocationForOrder(UUID orderId);
+
+        List<com.foodie.delivery.dto.response.LivePartnerLocationDto> getLiveFleetLocations();
+
+        com.foodie.delivery.dto.response.CashInHandResponseDto getCashInHand(UUID userCredentialId);
+
+        com.foodie.delivery.dto.response.CashDepositResponseDto submitCashDeposit(
+                        UUID userCredentialId, com.foodie.delivery.dto.request.CashDepositRequestDto request);
+
+        List<com.foodie.delivery.dto.response.CashDepositResponseDto> listPendingCashDeposits();
+
+        com.foodie.delivery.dto.response.CashDepositResponseDto approveCashDeposit(UUID depositId, UUID adminId);
+
+        com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId, String reason);
 }

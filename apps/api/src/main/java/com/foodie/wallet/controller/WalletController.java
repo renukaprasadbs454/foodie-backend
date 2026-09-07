@@ -31,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class WalletController {
 
         private final WalletService walletService;
+        private final com.foodie.payment.service.PaymentService paymentService;
 
-        public WalletController(WalletService walletService) {
+        public WalletController(WalletService walletService, com.foodie.payment.service.PaymentService paymentService) {
                 this.walletService = walletService;
+                this.paymentService = paymentService;
         }
 
         @GetMapping("/balance")
@@ -71,5 +73,26 @@ public class WalletController {
                                 .body(ApiResponse.success(
                                                 walletService.requestPayout(principal.userId(), request,
                                                                 idempotencyKey)));
+        }
+
+        @PostMapping("/topup/initiate")
+        @PreAuthorize("hasRole('CUSTOMER')")
+        @Operation(summary = "Initiate wallet top-up payment via Razorpay")
+        public ResponseEntity<ApiResponse<com.foodie.payment.dto.response.PaymentInitiationResponseDto>> initiateTopup(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @RequestParam java.math.BigDecimal amount,
+                        @RequestHeader(value = "Idempotency-Key") String idempotencyKey) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                paymentService.initiateWalletTopup(principal.userId(), amount, idempotencyKey)));
+        }
+
+        @PostMapping("/topup/verify")
+        @PreAuthorize("hasRole('CUSTOMER')")
+        @Operation(summary = "Verify Razorpay payment signature and credit customer wallet")
+        public ResponseEntity<ApiResponse<Boolean>> verifyTopup(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @Valid @RequestBody com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                paymentService.verifyWalletTopup(principal.userId(), request)));
         }
 }

@@ -21,4 +21,8 @@ public interface PaymentService {
             RefundPaymentRequestDto request,
             UUID actorId,
             boolean systemActor);
+
+    PaymentInitiationResponseDto initiateWalletTopup(UUID userCredentialId, java.math.BigDecimal amount, String idempotencyKey);
+
+    boolean verifyWalletTopup(UUID userCredentialId, VerifyPaymentRequestDto request);
 }

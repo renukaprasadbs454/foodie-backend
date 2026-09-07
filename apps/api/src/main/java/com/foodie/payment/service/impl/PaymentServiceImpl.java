@@ -331,10 +331,27 @@ public class PaymentServiceImpl implements PaymentService {
             return new RefundInitiationResponseDto(existing.getId(), existing.getStatus());
         }
 
+        UUID initiator = actorId != null ? actorId : SYSTEM_ACTOR_ID;
+
+        if (Boolean.TRUE.equals(request.refundToWallet())) {
+            OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(payment.getOrderId()).orElse(null);
+            if (order != null) {
+                walletService.credit(OwnerType.CUSTOMER, order.customerId(), amount, LedgerReferenceType.REFUND, payment.getId());
+                RefundRequest refundRequest = RefundRequest.initiate(paymentId, amount, request.reason(), initiator, "WALLET_REFUND_" + UUID.randomUUID());
+                refundRequest.markProcessed();
+                refundRequestRepository.save(refundRequest);
+                payment.markRefunded();
+                paymentRepository.save(payment);
+
+                eventPublisher.publishEvent(RefundProcessedEvent.of(payment.getId(), refundRequest.getId(), amount));
+                log.info("Refund to WALLET PROCESSED refundRequestId={} paymentId={} customerId={}", refundRequest.getId(), payment.getId(), order.customerId());
+                return new RefundInitiationResponseDto(refundRequest.getId(), refundRequest.getStatus());
+            }
+        }
+
         var cashfreeRefund = cashfreeClient.createRefund(
                 payment.getCashfreeOrderId(), amount, request.reason());
 
-        UUID initiator = actorId != null ? actorId : SYSTEM_ACTOR_ID;
         RefundRequest refundRequest = refundRequestRepository.save(RefundRequest.initiate(
                 paymentId, amount, request.reason(), initiator, cashfreeRefund.cfRefundId()));
 
@@ -468,5 +485,60 @@ public class PaymentServiceImpl implements PaymentService {
             return b;
         }
         return null;
+    }
+
+    @Override
+    @Transactional
+    public PaymentInitiationResponseDto initiateWalletTopup(UUID userCredentialId, BigDecimal amount, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BadRequestException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "Idempotency-Key header is required.");
+        }
+
+        UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
+
+        BigDecimal topupAmount = amount.setScale(2, RoundingMode.HALF_UP);
+        if (topupAmount.compareTo(BigDecimal.ONE) < 0) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Minimum top-up amount is 1.00");
+        }
+
+        UUID pseudoOrderId = UUID.randomUUID();
+        String customerPhone = "9999999999";
+        var created = cashfreeClient.createOrder(topupAmount, customerId.toString(), customerPhone, pseudoOrderId.toString());
+
+        Payment payment = paymentRepository.save(Payment.initiate(
+                pseudoOrderId, created.paymentSessionId(), topupAmount, BigDecimal.ZERO, idempotencyKey));
+        if (created.cfOrderId() != null) {
+            payment.setCashfreeOrderId(created.cfOrderId());
+            paymentRepository.save(payment);
+        }
+
+        return toInitiationView(payment);
+    }
+
+    @Override
+    @Transactional
+    public boolean verifyWalletTopup(UUID userCredentialId, com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
+        String cfOrderId = request.cashfreeOrderId();
+        if (cfOrderId == null || cfOrderId.isBlank()) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "cashfreeOrderId is required.");
+        }
+
+        Payment payment = paymentRepository.findByCashfreeOrderId(cfOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for top-up."));
+
+        if (payment.getStatus() == PaymentStatus.PENDING) {
+            payment.markCaptured("CF_TOPUP_" + cfOrderId);
+            paymentRepository.save(payment);
+
+            UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                    .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
+
+            walletService.credit(OwnerType.CUSTOMER, customerId, payment.getAmount(), LedgerReferenceType.WALLET_TOPUP, payment.getId());
+            log.info("Wallet top-up CAPTURED paymentId={} amount={} customerId={}", payment.getId(), payment.getAmount(), customerId);
+        }
+        return true;
     }
 }

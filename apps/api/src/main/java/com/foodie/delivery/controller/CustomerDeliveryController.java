@@ -71,4 +71,12 @@ public class CustomerDeliveryController {
 
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
+
+    @GetMapping("/{orderId}/location")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryLocationResponseDto>> getDeliveryLocationForOrder(
+            @PathVariable UUID orderId,
+            @org.springframework.beans.factory.annotation.Autowired com.foodie.delivery.service.DeliveryService deliveryService) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getLatestLocationForOrder(orderId)));
+    }
 }

@@ -47,19 +47,22 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     private final CustomerSummaryProvider customerSummaryProvider;
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final CouponEligibilityCache eligibilityCache;
+    private final com.foodie.order.repository.OrderRepository orderRepository;
 
     public CouponServiceImpl(
             CouponRepository couponRepository,
             CouponRedemptionRepository redemptionRepository,
             CustomerSummaryProvider customerSummaryProvider,
             RestaurantSummaryProvider restaurantSummaryProvider,
-            CouponEligibilityCache eligibilityCache
+            CouponEligibilityCache eligibilityCache,
+            com.foodie.order.repository.OrderRepository orderRepository
     ) {
         this.couponRepository = couponRepository;
         this.redemptionRepository = redemptionRepository;
         this.customerSummaryProvider = customerSummaryProvider;
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.eligibilityCache = eligibilityCache;
+        this.orderRepository = orderRepository;
     }
 
     @Override
@@ -213,6 +216,16 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                     "Cart total does not meet the coupon minimum order amount."
             );
         }
+        if (coupon.isFirstOrderOnly() && customerId != null) {
+            long priorOrders = orderRepository.countByCustomerIdAndStatusIn(
+                    customerId, List.of(com.foodie.common.enums.OrderStatus.DELIVERED));
+            if (priorOrders > 0) {
+                throw new UnprocessableEntityException(
+                        ErrorCode.FIRST_ORDER_ONLY_COUPON,
+                        "This coupon is valid for your first order only."
+                );
+            }
+        }
         if (!isWithinUsageLimits(coupon, customerId)) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_USAGE_LIMIT_REACHED,
@@ -222,6 +235,13 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     }
 
     private boolean isWithinUsageLimits(Coupon coupon, UUID customerId) {
+        if (coupon.isFirstOrderOnly() && customerId != null) {
+            long priorOrders = orderRepository.countByCustomerIdAndStatusIn(
+                    customerId, List.of(com.foodie.common.enums.OrderStatus.DELIVERED));
+            if (priorOrders > 0) {
+                return false;
+            }
+        }
         // Eligibility cache is write-through hint only; usage counts always come from PostgreSQL.
         long perUser = redemptionRepository.countByCouponIdAndCustomerId(coupon.getId(), customerId);
         if (perUser >= coupon.getUsageLimitPerUser()) {

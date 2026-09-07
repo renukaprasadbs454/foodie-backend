@@ -37,6 +37,12 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "is_online", nullable = false)
     private boolean online;
 
+    @Column(name = "cash_in_hand", nullable = false, precision = 10, scale = 2)
+    private java.math.BigDecimal cashInHand = java.math.BigDecimal.ZERO;
+
+    @Column(name = "max_cash_in_hand_limit", nullable = false, precision = 10, scale = 2)
+    private java.math.BigDecimal maxCashInHandLimit = new java.math.BigDecimal("2000.00");
+
     protected DeliveryPartner() {
     }
 
@@ -52,6 +58,8 @@ public class DeliveryPartner extends BaseEntity {
         partner.vehicleNumber = vehicleNumber;
         partner.kycStatus = KycStatus.PENDING;
         partner.online = false;
+        partner.cashInHand = java.math.BigDecimal.ZERO;
+        partner.maxCashInHandLimit = new java.math.BigDecimal("2000.00");
         return partner;
     }
 
@@ -71,6 +79,38 @@ public class DeliveryPartner extends BaseEntity {
 
     public void verifyKyc() {
         this.kycStatus = KycStatus.VERIFIED;
+    }
+
+    public void addCash(java.math.BigDecimal amount) {
+        if (amount != null && amount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            this.cashInHand = this.cashInHand.add(amount);
+        }
+    }
+
+    public void deductCash(java.math.BigDecimal amount) {
+        if (amount != null && amount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            this.cashInHand = this.cashInHand.subtract(amount).max(java.math.BigDecimal.ZERO);
+        }
+    }
+
+    public boolean isCashLimitExceeded() {
+        return this.cashInHand.compareTo(this.maxCashInHandLimit) >= 0;
+    }
+
+    public java.math.BigDecimal getCashInHand() {
+        return cashInHand;
+    }
+
+    public void setCashInHand(java.math.BigDecimal cashInHand) {
+        this.cashInHand = cashInHand;
+    }
+
+    public java.math.BigDecimal getMaxCashInHandLimit() {
+        return maxCashInHandLimit;
+    }
+
+    public void setMaxCashInHandLimit(java.math.BigDecimal maxCashInHandLimit) {
+        this.maxCashInHandLimit = maxCashInHandLimit;
     }
 
     public UUID getUserCredentialId() {
