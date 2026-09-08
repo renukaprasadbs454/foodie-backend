@@ -52,8 +52,7 @@ public class NotificationServiceImpl implements NotificationService {
             NotificationPreferenceStore preferenceStore,
             DeviceTokenStore deviceTokenStore,
             FcmClient fcmClient,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher) {
         this.templateRepository = templateRepository;
         this.logRepository = logRepository;
         this.templateRenderer = templateRenderer;
@@ -87,8 +86,7 @@ public class NotificationServiceImpl implements NotificationService {
                     template.getId(),
                     title,
                     body,
-                    NotificationDeliveryStatus.SKIPPED
-            ));
+                    NotificationDeliveryStatus.SKIPPED));
             publishDispatched(skipped);
             return;
         }
@@ -98,22 +96,23 @@ public class NotificationServiceImpl implements NotificationService {
                 template.getId(),
                 title,
                 body,
-                NotificationDeliveryStatus.PENDING
-        ));
+                NotificationDeliveryStatus.PENDING));
 
         try {
             String token = deviceTokenStore.find(userCredentialId).orElse(null);
             fcmClient.sendPush(userCredentialId, token, title, body);
             entry.markDeliveryStatus(NotificationDeliveryStatus.SENT);
         } catch (RuntimeException ex) {
-            // Must never fail the originating business transaction (listener is AFTER_COMMIT).
+            // Must never fail the originating business transaction (listener is
+            // AFTER_COMMIT).
             log.error("FCM delivery failed for user={} eventType={}: {}",
                     userCredentialId, eventType, ex.getMessage());
             entry.markDeliveryStatus(NotificationDeliveryStatus.FAILED);
         }
         logRepository.save(entry);
         publishDispatched(entry);
-        // SMS/EMAIL: infrastructure abstractions exist; Phase3 §2.10 V1 may call FCM exclusively.
+        // SMS/EMAIL: infrastructure abstractions exist; Phase3 §2.10 V1 may call FCM
+        // exclusively.
     }
 
     @Override
@@ -123,8 +122,7 @@ public class NotificationServiceImpl implements NotificationService {
         var pageable = PageRequest.of(
                 Math.max(page, 0),
                 clampSize(size),
-                Sort.by(Sort.Direction.DESC, "sentAt")
-        );
+                Sort.by(Sort.Direction.DESC, "sentAt"));
         Page<NotificationLog> result = unreadOnly
                 ? logRepository.findByUserCredentialIdAndReadAtIsNull(userCredentialId, pageable)
                 : logRepository.findByUserCredentialId(userCredentialId, pageable);
@@ -167,8 +165,7 @@ public class NotificationServiceImpl implements NotificationService {
                 entry.getId(),
                 entry.getTitle(),
                 entry.getBody(),
-                entry.getSentAt()
-        ));
+                entry.getSentAt()));
     }
 
     private static int clampSize(int size) {
@@ -176,5 +173,13 @@ public class NotificationServiceImpl implements NotificationService {
             return 20;
         }
         return Math.min(size, 100);
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 7200000)
+    @Transactional
+    public void cleanupOldNotifications() {
+        int deleted = logRepository
+                .deleteOlderThan(java.time.Instant.now().minus(2, java.time.temporal.ChronoUnit.HOURS));
+        log.info("Cleaned up {} old notifications", deleted);
     }
 }

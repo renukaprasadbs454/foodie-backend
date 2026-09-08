@@ -14,4 +14,8 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
     Page<NotificationLog> findByUserCredentialIdAndReadAtIsNull(UUID userCredentialId, Pageable pageable);
 
     Optional<NotificationLog> findByIdAndUserCredentialId(UUID id, UUID userCredentialId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM NotificationLog n WHERE n.sentAt < :cutoff")
+    int deleteOlderThan(@org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
 }
