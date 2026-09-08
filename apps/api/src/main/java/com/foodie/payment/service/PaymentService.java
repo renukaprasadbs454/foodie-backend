@@ -14,7 +14,7 @@ public interface PaymentService {
 
     boolean verifyPayment(UUID userCredentialId, VerifyPaymentRequestDto request);
 
-    void handleWebhook(String rawBody, String signatureHeader);
+    void handleWebhook(String rawBody, String signatureHeader, String timestamp);
 
     RefundInitiationResponseDto refund(
             UUID paymentId,

@@ -22,6 +22,10 @@ import com.foodie.payment.repository.RefundRequestRepository;
 import com.foodie.payment.service.PaymentIdempotencyStore;
 import com.foodie.payment.service.PaymentService;
 import com.foodie.payment.service.WebhookDedupService;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.OrderPaymentPort;
 import com.foodie.shared.event.PaymentCapturedEvent;
@@ -69,7 +73,7 @@ public class PaymentServiceImpl implements PaymentService {
             ObjectMapper objectMapper,
             ApplicationEventPublisher eventPublisher,
             WalletService walletService,
-            @Value("${CASHFREE_APP_ID:${foodie.payment.cashfree.client-id:TEST11201264a9f4217dcbbe3eef910f46210211}}") String appId) {
+            @Value("${CASHFREE_APP_ID:${foodie.payment.cashfree.client-id:}}") String appId) {
         this.paymentRepository = paymentRepository;
         this.refundRequestRepository = refundRequestRepository;
         this.orderPaymentPort = orderPaymentPort;
@@ -82,6 +86,9 @@ public class PaymentServiceImpl implements PaymentService {
         this.walletService = walletService;
         this.appId = appId;
     }
+
+    @Value("${CASHFREE_SECRET_KEY:${foodie.payment.cashfree.client-secret:}}")
+    private String cfSecretKey;
 
     @Override
     @Transactional
@@ -274,21 +281,43 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public void handleWebhook(String rawBody, String signatureHeader) {
+    public void handleWebhook(String rawBody, String signatureHeader, String timestamp) {
         log.info("Received cashfree webhook payload");
+        
+        if (cfSecretKey != null && !cfSecretKey.isBlank() && signatureHeader != null && timestamp != null) {
+            try {
+                Mac mac = Mac.getInstance("HmacSHA256");
+                SecretKeySpec secretKeySpec = new SecretKeySpec(cfSecretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+                mac.init(secretKeySpec);
+                String payload = timestamp + rawBody;
+                byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+                String computedSignature = Base64.getEncoder().encodeToString(hash);
+                
+                if (!computedSignature.equals(signatureHeader)) {
+                    log.error("Webhook signature mismatch. Expected: {}, Got: {}", computedSignature, signatureHeader);
+                    return;
+                }
+            } catch (Exception e) {
+                log.error("Failed to verify webhook signature", e);
+                return;
+            }
+        }
+
         try {
             JsonNode root = objectMapper.readTree(rawBody);
             String type = root.path("type").asText("");
 
             if ("PAYMENT_SUCCESS_WEBHOOK".equalsIgnoreCase(type) || "payment.captured".equals(type)
-                    || "PAYMENT_CAPTURED".equals(type)) {
+                    || "PAYMENT_CAPTURED".equals(type) || "SUCCESS".equalsIgnoreCase(type)) {
                 onPaymentCaptured(root);
             } else if ("PAYMENT_FAILED_WEBHOOK".equalsIgnoreCase(type) || "payment.failed".equals(type)
-                    || "PAYMENT_FAILED".equals(type) || "PAYMENT_FAILED_DURING_AUTHORIZE".equalsIgnoreCase(type)) {
+                    || "PAYMENT_FAILED".equals(type) || "PAYMENT_FAILED_DURING_AUTHORIZE".equalsIgnoreCase(type) || "FAILED".equalsIgnoreCase(type)) {
                 onPaymentFailed(root);
             } else if ("REFUND_PROCESSED_WEBHOOK".equalsIgnoreCase(type) || "refund.processed".equals(type)
-                    || "REFUND_PROCESSED".equals(type)) {
+                    || "REFUND_PROCESSED".equals(type) || "REFUND".equalsIgnoreCase(type)) {
                 onRefundProcessed(root);
+            } else if ("PAYMENT_PENDING_WEBHOOK".equalsIgnoreCase(type) || "payment.pending".equals(type) || "PENDING".equalsIgnoreCase(type)) {
+                log.info("Payment pending webhook received: {}", type);
             } else {
                 log.info("Unhandled webhook type: {}", type);
             }

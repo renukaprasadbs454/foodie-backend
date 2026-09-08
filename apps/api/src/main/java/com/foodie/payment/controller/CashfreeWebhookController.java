@@ -33,7 +33,7 @@ public class CashfreeWebhookController {
             @RequestHeader(value = "x-webhook-signature", required = false) String signature,
             @RequestHeader(value = "x-webhook-timestamp", required = false) String timestamp) {
         log.info("Receiving Cashfree webhook traffic...");
-        paymentService.handleWebhook(rawBody, signature);
+        paymentService.handleWebhook(rawBody, signature, timestamp);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }
