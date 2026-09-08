@@ -33,6 +33,9 @@ public class RestaurantDataSeeder implements ApplicationRunner {
         private final CategoryRepository categoryRepository;
         private final MenuItemRepository menuItemRepository;
         private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+        private final com.foodie.admin.repository.RoleRepository roleRepository;
+        private final com.foodie.admin.repository.AdminUserRepository adminUserRepository;
+        private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
         public RestaurantDataSeeder(
                         UserCredentialRepository userCredentialRepository,
@@ -40,31 +43,61 @@ public class RestaurantDataSeeder implements ApplicationRunner {
                         RestaurantAddressRepository restaurantAddressRepository,
                         CategoryRepository categoryRepository,
                         MenuItemRepository menuItemRepository,
-                        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+                        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+                        com.foodie.admin.repository.RoleRepository roleRepository,
+                        com.foodie.admin.repository.AdminUserRepository adminUserRepository,
+                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
                 this.userCredentialRepository = userCredentialRepository;
                 this.restaurantRepository = restaurantRepository;
                 this.restaurantAddressRepository = restaurantAddressRepository;
                 this.categoryRepository = categoryRepository;
                 this.menuItemRepository = menuItemRepository;
                 this.jdbcTemplate = jdbcTemplate;
+                this.roleRepository = roleRepository;
+                this.adminUserRepository = adminUserRepository;
+                this.passwordEncoder = passwordEncoder;
         }
 
         @Override
         @Transactional
         public void run(ApplicationArguments args) {
-                if (true)
-                        return;
+                seedRolesAndAdmin();
                 log.info("Seeding 4 realistic approved restaurants with 10 menu items each...");
 
                 seedRestaurant1();
-
                 seedRestaurant2();
-
                 seedRestaurant3();
-
                 seedRestaurant4();
 
                 log.info("Successfully seeded 4 approved restaurants with full menus!");
+        }
+
+        private void seedRolesAndAdmin() {
+                try {
+                        com.foodie.admin.entity.Role superAdminRole = roleRepository.findByName(com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN)
+                                        .orElseGet(() -> roleRepository.save(com.foodie.admin.entity.Role.ref(UUID.randomUUID(), com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN)));
+
+                        for (com.foodie.admin.entity.AdminRoleName roleName : com.foodie.admin.entity.AdminRoleName.values()) {
+                                if (roleRepository.findByName(roleName).isEmpty()) {
+                                        roleRepository.save(com.foodie.admin.entity.Role.ref(UUID.randomUUID(), roleName));
+                                }
+                        }
+
+                        String adminEmail = "admin@foodie.local";
+                        UserCredential adminCred = userCredentialRepository.findByEmailIgnoreCaseAndUserType(adminEmail, UserType.ADMIN)
+                                        .orElseGet(() -> userCredentialRepository.save(
+                                                        UserCredential.adminProvisionWithPassword(
+                                                                        "+919999999999",
+                                                                        adminEmail,
+                                                                        passwordEncoder.encode("ChangeMe@123"))));
+
+                        if (!adminUserRepository.existsByUserCredentialId(adminCred.getId())) {
+                                adminUserRepository.save(com.foodie.admin.entity.AdminUser.create(adminCred.getId(), superAdminRole, "Bootstrap Super Admin"));
+                        }
+                        log.info("Seeded admin account: {} / ChangeMe@123", adminEmail);
+                } catch (Exception e) {
+                        log.warn("Could not seed admin user: {}", e.getMessage());
+                }
         }
 
         private void seedRestaurant1() {

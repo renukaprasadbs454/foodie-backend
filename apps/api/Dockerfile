@@ -5,10 +5,10 @@ WORKDIR /workspace
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
-RUN chmod +x mvnw && ./mvnw -q -B dependency:go-offline
+RUN chmod +x mvnw && ./mvnw -B --no-transfer-progress dependency:resolve || true
 
 COPY src ./src
-RUN ./mvnw -q -B -DskipTests package \
+RUN ./mvnw -B --no-transfer-progress -DskipTests clean package \
     && cp target/foodie-backend.jar /workspace/app.jar
 
 # Runtime stage
