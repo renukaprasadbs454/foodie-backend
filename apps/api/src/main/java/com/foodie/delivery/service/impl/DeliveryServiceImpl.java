@@ -142,11 +142,6 @@ public class DeliveryServiceImpl implements DeliveryService {
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
 
-        if (partner.getKycStatus() != com.foodie.common.enums.KycStatus.VERIFIED) {
-            partner.verifyKyc();
-            deliveryPartnerRepository.save(partner);
-            log.info("Auto-verified KYC for userCredentialId={}", userCredentialId);
-        }
         java.util.List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
                 .findByDeliveryPartnerId(partner.getId())
                 .stream()
