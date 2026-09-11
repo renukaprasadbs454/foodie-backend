@@ -34,8 +34,10 @@ public class WalletBackfillRunner implements CommandLineRunner {
         try {
             @SuppressWarnings("unchecked")
             java.util.List<Object[]> orders = entityManager.createQuery(
-                    "SELECT o.id, o.restaurantId, o.subtotal, o.taxAmount FROM Order o WHERE o.status = :status")
-                    .setParameter("status", OrderStatus.DELIVERED)
+                    "SELECT o.id, o.restaurantId, o.subtotal, o.taxAmount FROM Order o WHERE o.status IN (:status1, :status2, :status3)")
+                    .setParameter("status1", OrderStatus.DELIVERED)
+                    .setParameter("status2", OrderStatus.PICKED_UP)
+                    .setParameter("status3", OrderStatus.OUT_FOR_DELIVERY)
                     .getResultList();
 
             for (Object[] row : orders) {
