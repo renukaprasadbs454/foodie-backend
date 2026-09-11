@@ -39,7 +39,7 @@ public class RestaurantSummaryProviderImpl implements RestaurantSummaryProvider 
                 r.getId(),
                 r.getName(),
                 r.getStatus().name(),
-                r.getLogoImageKey()
-        );
+                r.getLogoImageKey(),
+                r.getCommissionPct());
     }
 }

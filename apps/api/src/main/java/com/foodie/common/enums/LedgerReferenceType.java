@@ -7,5 +7,6 @@ public enum LedgerReferenceType {
     INCENTIVE,
     ORDER_PAYMENT,
     WALLET_TOPUP,
-    LOYALTY_CONVERSION
+    LOYALTY_CONVERSION,
+    ORDER_EARNING
 }

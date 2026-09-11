@@ -307,7 +307,7 @@ class MenuServiceImplTest {
 
         private RestaurantSummaryProvider.RestaurantSummary summary() {
                 return new RestaurantSummaryProvider.RestaurantSummary(
-                                restaurantId, "Spice Route", "APPROVED", null);
+                                restaurantId, "Spice Route", "APPROVED", null, null);
         }
 
         private static void setId(Object entity, UUID id) {

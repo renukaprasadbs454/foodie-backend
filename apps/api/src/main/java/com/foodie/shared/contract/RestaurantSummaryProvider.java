@@ -10,7 +10,10 @@ public interface RestaurantSummaryProvider {
 
     Optional<RestaurantSummary> findByRestaurantId(UUID restaurantId);
 
-    /** Used by Menu (and similar) to resolve the caller's owned restaurant without reading Restaurant tables. */
+    /**
+     * Used by Menu (and similar) to resolve the caller's owned restaurant without
+     * reading Restaurant tables.
+     */
     Optional<RestaurantSummary> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
 
     /** Used by Notification to resolve restaurant-owner push recipient. */
@@ -20,7 +23,7 @@ public interface RestaurantSummaryProvider {
             UUID restaurantId,
             String name,
             String status,
-            String logoImageKey
-    ) {
+            String logoImageKey,
+            java.math.BigDecimal commissionPct) {
     }
 }
