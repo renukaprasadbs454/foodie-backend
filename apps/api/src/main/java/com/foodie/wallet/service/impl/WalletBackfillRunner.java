@@ -109,6 +109,21 @@ public class WalletBackfillRunner implements CommandLineRunner {
                     }
                 }
             }
+
+            // 5. THE ULTIMATE RECALIBRATION: Fix any desynchronized balances from previous
+            // run failures
+            int updatedWallets = jdbcTemplate
+                    .update("""
+                                UPDATE wallet_account w
+                                SET balance = COALESCE(
+                                    (SELECT COALESCE(SUM(amount), 0) FROM ledger_entry l WHERE l.wallet_account_id = w.id AND l.entry_type = 'CREDIT')
+                                    -
+                                    (SELECT COALESCE(SUM(amount), 0) FROM ledger_entry l WHERE l.wallet_account_id = w.id AND l.entry_type = 'DEBIT'),
+                                0)
+                                WHERE w.owner_type = 'RESTAURANT'
+                            """);
+            log.info("Recalibrated {} restaurant wallets to match their true ledger sums.", updatedWallets);
+
             log.info("Finished Native Restaurant Wallet backfill!");
         } catch (Exception fatal) {
             log.error("Wallet backfill runner failed entirely: ", fatal);
