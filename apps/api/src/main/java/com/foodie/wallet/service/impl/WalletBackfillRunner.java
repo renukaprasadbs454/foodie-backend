@@ -20,21 +20,16 @@ public class WalletBackfillRunner implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(WalletBackfillRunner.class);
 
     private final JdbcTemplate jdbcTemplate;
-    private final WalletService walletService;
-    private final WalletAccountRepository walletAccountRepository;
     private final jakarta.persistence.EntityManager entityManager;
 
-    public WalletBackfillRunner(JdbcTemplate jdbcTemplate, WalletService walletService,
-            WalletAccountRepository walletAccountRepository, jakarta.persistence.EntityManager entityManager) {
+    public WalletBackfillRunner(JdbcTemplate jdbcTemplate, jakarta.persistence.EntityManager entityManager) {
         this.jdbcTemplate = jdbcTemplate;
-        this.walletService = walletService;
-        this.walletAccountRepository = walletAccountRepository;
         this.entityManager = entityManager;
     }
 
     @Override
     public void run(String... args) {
-        log.info("Starting missing Restuarant Wallet backfill...");
+        log.info("Starting native SQL missing Restaurant Wallet backfill...");
 
         try {
             @SuppressWarnings("unchecked")
@@ -54,22 +49,14 @@ public class WalletBackfillRunner implements CommandLineRunner {
                 if (taxFee == null)
                     taxFee = BigDecimal.ZERO;
 
-                // Check if ledger entry exists
-                Integer count = jdbcTemplate.queryForObject(
-                        "SELECT count(1) FROM ledger_entry WHERE reference_id = ? AND reference_type = 'ORDER_EARNING'",
-                        Integer.class, orderId);
-                if (count != null && count > 0)
-                    continue;
-
                 // Get commission %
                 BigDecimal commissionPct = null;
                 try {
                     commissionPct = jdbcTemplate.queryForObject(
-                            "SELECT commission_pct FROM restaurant r WHERE r.id = ?",
-                            BigDecimal.class, restaurantId);
+                            "SELECT commission_pct FROM restaurant r WHERE r.id = ?::uuid",
+                            BigDecimal.class, restaurantId.toString());
                 } catch (Exception ignored) {
                 }
-
                 if (commissionPct == null)
                     commissionPct = new BigDecimal("18.00");
 
@@ -80,39 +67,49 @@ public class WalletBackfillRunner implements CommandLineRunner {
 
                 if (finalEarnings.compareTo(BigDecimal.ZERO) > 0) {
                     try {
-                        // 1. Ensure WalletAccount exists natively
+                        // 1. Check if ledger exists
+                        Integer existCount = jdbcTemplate.queryForObject(
+                                "SELECT count(1) FROM ledger_entry WHERE reference_id = ?::uuid AND reference_type = 'ORDER_EARNING'",
+                                Integer.class, orderId.toString());
+                        if (existCount != null && existCount > 0) {
+                            continue;
+                        }
+
+                        // 2. Ensure WalletAccount exists
                         jdbcTemplate.update(
                                 """
                                             INSERT INTO wallet_account (id, owner_type, owner_id, balance, version, created_at, updated_at)
-                                            VALUES (?, 'RESTAURANT', ?, 0, 0, now(), now())
+                                            VALUES (?::uuid, 'RESTAURANT', ?::uuid, 0, 0, now(), now())
                                             ON CONFLICT (owner_type, owner_id) DO NOTHING
                                         """,
-                                UUID.randomUUID(), restaurantId);
+                                UUID.randomUUID().toString(), restaurantId.toString());
 
-                        // 2. Insert Ledger Entry natively
+                        // 3. Insert Ledger Entry
                         jdbcTemplate.update(
                                 """
                                             INSERT INTO ledger_entry (id, wallet_account_id, entry_type, amount, reference_type, reference_id, created_at)
-                                            SELECT ?, id, 'CREDIT', ?, 'ORDER_EARNING', ?, now()
-                                            FROM wallet_account WHERE owner_type = 'RESTAURANT' AND owner_id = ?
+                                            SELECT ?::uuid, id, 'CREDIT', ?, 'ORDER_EARNING', ?::uuid, now()
+                                            FROM wallet_account WHERE owner_type = 'RESTAURANT' AND owner_id = ?::uuid
                                         """,
-                                UUID.randomUUID(), finalEarnings, orderId, restaurantId);
+                                UUID.randomUUID().toString(), finalEarnings, orderId.toString(),
+                                restaurantId.toString());
 
-                        // 3. Update Balance atomically natively
+                        // 4. Update Balance Atomically
                         jdbcTemplate.update("""
                                     UPDATE wallet_account SET balance = balance + ?, updated_at = now()
-                                    WHERE owner_type = 'RESTAURANT' AND owner_id = ?
-                                """, finalEarnings, restaurantId);
+                                    WHERE owner_type = 'RESTAURANT' AND owner_id = ?::uuid
+                                """, finalEarnings, restaurantId.toString());
 
-                        log.info("Backfilled wallet natively for delivered order {} -> +{}", orderId, finalEarnings);
+                        log.info("Backfilled natively for delivered order {} -> +{}", orderId, finalEarnings);
                     } catch (Exception ex) {
-                        log.error("Failed native backfill for {} {}: {}", orderId, restaurantId, ex.getMessage());
+                        log.error("Failed to backfill natively {} for restaurant {}. Error: {}", orderId, restaurantId,
+                                ex.getMessage());
                     }
                 }
             }
-            log.info("Finished Restaurant Wallet backfill!");
+            log.info("Finished Native Restaurant Wallet backfill!");
         } catch (Exception fatal) {
-            log.error("Wallet backfill runner failed entirely, but bypassing crash so application can start: ", fatal);
+            log.error("Wallet backfill runner failed entirely: ", fatal);
         }
     }
 }
