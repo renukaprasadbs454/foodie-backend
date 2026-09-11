@@ -51,6 +51,11 @@ public class WalletAccount extends BaseEntity {
         this.balance = this.balance.subtract(amount).setScale(2, RoundingMode.HALF_UP);
     }
 
+    /** Hard override balance for mathematical syncs */
+    public void setBalance(BigDecimal newBalance) {
+        this.balance = newBalance.setScale(2, RoundingMode.HALF_UP);
+    }
+
     public OwnerType getOwnerType() {
         return ownerType;
     }

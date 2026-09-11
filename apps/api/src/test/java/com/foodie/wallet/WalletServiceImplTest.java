@@ -70,6 +70,8 @@ class WalletServiceImplTest {
         private PayoutIdempotencyStore payoutIdempotencyStore;
         @Mock
         private ApplicationEventPublisher eventPublisher;
+        @Mock
+        private com.foodie.order.repository.OrderRepository orderRepository;
 
         private WalletServiceImpl service;
 
@@ -87,7 +89,8 @@ class WalletServiceImplTest {
                                 customerSummaryProvider,
                                 restaurantSummaryProvider,
                                 payoutIdempotencyStore,
-                                eventPublisher);
+                                eventPublisher,
+                                orderRepository);
         }
 
         @Test

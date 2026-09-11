@@ -64,6 +64,7 @@ public class WalletServiceImpl implements WalletService {
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final PayoutIdempotencyStore payoutIdempotencyStore;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.foodie.order.repository.OrderRepository orderRepository;
 
     public WalletServiceImpl(
             WalletAccountRepository walletAccountRepository,
@@ -74,7 +75,8 @@ public class WalletServiceImpl implements WalletService {
             CustomerSummaryProvider customerSummaryProvider,
             RestaurantSummaryProvider restaurantSummaryProvider,
             PayoutIdempotencyStore payoutIdempotencyStore,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            com.foodie.order.repository.OrderRepository orderRepository) {
         this.walletAccountRepository = walletAccountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.payoutRepository = payoutRepository;
@@ -84,6 +86,7 @@ public class WalletServiceImpl implements WalletService {
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.payoutIdempotencyStore = payoutIdempotencyStore;
         this.eventPublisher = eventPublisher;
+        this.orderRepository = orderRepository;
     }
 
     private UUID resolveOwnerId(UUID userCredentialId, UserType userType) {
@@ -280,6 +283,14 @@ public class WalletServiceImpl implements WalletService {
     public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = findOrDefault(OwnerType.RESTAURANT, restaurantId);
+
+        // Self-Healing Balance Calculator
+        BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
+        if (account.getBalance().compareTo(actualBalance) != 0) {
+            account.setBalance(actualBalance);
+            walletAccountRepository.save(account);
+        }
+
         return WalletMapper.toBalance(account);
     }
 
@@ -323,6 +334,14 @@ public class WalletServiceImpl implements WalletService {
 
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = getOrCreateForUpdate(OwnerType.RESTAURANT, restaurantId);
+
+        // Self-Healing Balance Calculator before checking limits
+        BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
+        if (account.getBalance().compareTo(actualBalance) != 0) {
+            account.setBalance(actualBalance);
+            account = walletAccountRepository.save(account);
+        }
+
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
@@ -403,6 +422,37 @@ public class WalletServiceImpl implements WalletService {
                                 .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
                     }
                 });
+    }
+
+    private BigDecimal calculateTrueRestaurantBalance(UUID restaurantId, UUID walletAccountId) {
+        BigDecimal totalEarning = BigDecimal.ZERO;
+        List<com.foodie.order.entity.Order> orders = orderRepository.findByRestaurantId(restaurantId);
+        Restaurant restaurant = restaurantRepository.findById(restaurantId).orElse(null);
+        BigDecimal commissionPct = restaurant != null && restaurant.getCommissionPct() != null
+                ? restaurant.getCommissionPct()
+                : BigDecimal.ZERO;
+
+        for (com.foodie.order.entity.Order order : orders) {
+            com.foodie.common.enums.OrderStatus status = order.getStatus();
+            if (status == com.foodie.common.enums.OrderStatus.DELIVERED
+                    || status == com.foodie.common.enums.OrderStatus.PICKED_UP
+                    || status == com.foodie.common.enums.OrderStatus.OUT_FOR_DELIVERY) {
+                if (order.getTotalAmount() != null) {
+                    BigDecimal dFee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+                    BigDecimal earning = order.getTotalAmount().subtract(dFee);
+                    BigDecimal comm = earning.multiply(commissionPct).divide(new BigDecimal("100"), 2,
+                            RoundingMode.HALF_UP);
+                    totalEarning = totalEarning.add(earning.subtract(comm));
+                }
+            }
+        }
+
+        BigDecimal allPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(walletAccountId,
+                EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING, PayoutStatus.COMPLETED));
+        if (allPayouts == null)
+            allPayouts = BigDecimal.ZERO;
+
+        return totalEarning.subtract(allPayouts).setScale(2, RoundingMode.HALF_UP);
     }
 
     private static int clampSize(int size) {
