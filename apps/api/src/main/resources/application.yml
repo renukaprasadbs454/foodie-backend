@@ -89,8 +89,8 @@ foodie:
       webhook-secret: ${RAZORPAY_PAYOUT_WEBHOOK_SECRET:local-razorpay-payout-webhook-secret}
       api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com/v1}
     cashfree:
-      client-id: ${CASHFREE_CLIENT_ID:}
-      client-secret: ${CASHFREE_CLIENT_SECRET:}
+      client-id: ${CASHFREE_APP_ID:${CASHFREE_CLIENT_ID:}}
+      client-secret: ${CASHFREE_SECRET_KEY:${CASHFREE_CLIENT_SECRET:}}
       webhook-secret: ${CASHFREE_WEBHOOK_SECRET:local-cashfree-webhook-secret}
       api-base-url: ${CASHFREE_API_BASE_URL:https://payout-api.cashfree.com/payout/v1.2}
   delivery:

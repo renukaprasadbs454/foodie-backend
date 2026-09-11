@@ -175,7 +175,7 @@ public class NotificationServiceImpl implements NotificationService {
         return Math.min(size, 100);
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 7200000)
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 300000)
     @Transactional
     public void cleanupOldNotifications() {
         int deleted = logRepository

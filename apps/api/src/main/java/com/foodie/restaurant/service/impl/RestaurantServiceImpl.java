@@ -547,6 +547,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         long pendingOrders = 0;
 
         BigDecimal grossSales = BigDecimal.ZERO;
+        BigDecimal totalEarning = BigDecimal.ZERO;
 
         for (Order order : orders) {
             OrderStatus status = order.getStatus();
@@ -555,22 +556,27 @@ public class RestaurantServiceImpl implements RestaurantService {
                 completedOrders++;
                 if (order.getTotalAmount() != null) {
                     grossSales = grossSales.add(order.getTotalAmount());
+                    BigDecimal deliveryFee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+                    totalEarning = totalEarning.add(order.getTotalAmount().subtract(deliveryFee));
                 }
             } else if (status == OrderStatus.CANCELLED || status == OrderStatus.REJECTED) {
                 cancelledOrders++;
-            } else {
+            } else if (status == OrderStatus.ACCEPTED || status == OrderStatus.PREPARING
+                    || status == OrderStatus.READY_FOR_PICKUP || status == OrderStatus.ASSIGNED) {
                 pendingOrders++;
             }
+            // Note: PLACED/CONFIRMED are treated as new orders not pending for kitchen
+            // action
         }
 
         BigDecimal commissionPct = restaurant.getCommissionPct() != null ? restaurant.getCommissionPct()
                 : BigDecimal.ZERO;
-        BigDecimal commissionDeducted = grossSales.multiply(commissionPct)
+        BigDecimal commissionDeducted = totalEarning.multiply(commissionPct)
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        BigDecimal netEarnings = grossSales.subtract(commissionDeducted);
+        BigDecimal netEarnings = totalEarning.subtract(commissionDeducted);
 
         BigDecimal avgOrderValue = completedOrders > 0
-                ? grossSales.divide(BigDecimal.valueOf(completedOrders), 2, RoundingMode.HALF_UP)
+                ? totalEarning.divide(BigDecimal.valueOf(completedOrders), 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
         long activeMenuItemsCount = menuItemRepository.findByRestaurantIdAndAvailableTrue(restaurant.getId()).size();
@@ -581,6 +587,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 cancelledOrders,
                 pendingOrders,
                 grossSales.setScale(2, RoundingMode.HALF_UP),
+                totalEarning.setScale(2, RoundingMode.HALF_UP),
                 commissionDeducted.setScale(2, RoundingMode.HALF_UP),
                 netEarnings.setScale(2, RoundingMode.HALF_UP),
                 avgOrderValue,

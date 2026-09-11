@@ -28,8 +28,9 @@ public class MenuMapper {
                 item.isVeg(),
                 item.getFoodType(),
                 item.isAvailable(),
-                imageUrl
-        );
+                imageUrl,
+                item.getPackageSize(),
+                item.getGstPct());
     }
 
     public VariantResponseDto toVariant(Variant variant) {
@@ -43,8 +44,7 @@ public class MenuMapper {
     public FullMenuResponseDto.MenuItemDto toFullMenuItem(
             MenuItem item,
             String imageUrl,
-            List<VariantResponseDto> variants
-    ) {
+            List<VariantResponseDto> variants) {
         return new FullMenuResponseDto.MenuItemDto(
                 item.getId(),
                 item.getName(),
@@ -54,19 +54,18 @@ public class MenuMapper {
                 item.getFoodType(),
                 item.isAvailable(),
                 imageUrl,
-                variants
-        );
+                item.getPackageSize(),
+                item.getGstPct(),
+                variants);
     }
 
     public FullMenuResponseDto.MenuCategoryDto toFullMenuCategory(
             Category category,
-            List<FullMenuResponseDto.MenuItemDto> items
-    ) {
+            List<FullMenuResponseDto.MenuItemDto> items) {
         return new FullMenuResponseDto.MenuCategoryDto(
                 category.getId(),
                 category.getName(),
                 category.getDisplayOrder(),
-                items
-        );
+                items);
     }
 }

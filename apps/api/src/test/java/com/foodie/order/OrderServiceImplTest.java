@@ -153,7 +153,7 @@ class OrderServiceImplTest {
                 when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
                                                 menuItemId, null, restaurantId, new BigDecimal("220.00"), true,
-                                                "Paneer Tikka")));
+                                                "Paneer Tikka", null)));
                 when(orderNumberGenerator.next()).thenReturn("FD-20260801-000123");
                 when(orderRepository.saveAndFlush(any())).thenAnswer(inv -> {
                         Order order = inv.getArgument(0);
@@ -196,7 +196,7 @@ class OrderServiceImplTest {
                 when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
                                                 menuItemId, null, restaurantId, new BigDecimal("220.00"), true,
-                                                "Paneer Tikka")));
+                                                "Paneer Tikka", null)));
                 when(couponService.apply(eq("WELCOME50"), eq(customerId), eq(restaurantId), any()))
                                 .thenReturn(new CouponService.DiscountResult(
                                                 couponId, "WELCOME50", new BigDecimal("50.00"),
@@ -238,7 +238,7 @@ class OrderServiceImplTest {
                 when(menuItemPriceProvider.getPriceSnapshot(menuItemId, null)).thenReturn(Optional.of(
                                 new MenuItemPriceProvider.MenuItemPriceSnapshot(
                                                 menuItemId, null, restaurantId, new BigDecimal("100.00"), true,
-                                                "Item")));
+                                                "Item", null)));
                 when(couponService.apply(any(), any(), any(), any()))
                                 .thenThrow(new UnprocessableEntityException(
                                                 ErrorCode.COUPON_EXPIRED, "Coupon has expired."));

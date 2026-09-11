@@ -19,8 +19,7 @@ public class MenuItemPriceProviderImpl implements MenuItemPriceProvider {
 
     public MenuItemPriceProviderImpl(
             MenuItemRepository menuItemRepository,
-            VariantRepository variantRepository
-    ) {
+            VariantRepository variantRepository) {
         this.menuItemRepository = menuItemRepository;
         this.variantRepository = variantRepository;
     }
@@ -50,7 +49,7 @@ public class MenuItemPriceProviderImpl implements MenuItemPriceProvider {
                 item.getRestaurantId(),
                 unitPrice,
                 item.isAvailable(),
-                item.getName()
-        ));
+                item.getName(),
+                item.getGstPct()));
     }
 }

@@ -247,6 +247,9 @@ public class MenuServiceImpl implements MenuService {
                 request.basePrice(),
                 request.resolveIsVeg(),
                 request.resolveFoodType()));
+
+        item.updateDetails(request.packageSize(), request.gstPct());
+
         publishPriceChanged(restaurantId, item.getId());
         menuCacheService.evict(restaurantId);
         return menuMapper.toMenuItem(item, null);
@@ -281,6 +284,8 @@ public class MenuServiceImpl implements MenuService {
                 request.basePrice(),
                 request.resolveIsVeg(),
                 request.resolveFoodType());
+
+        item.updateDetails(request.packageSize(), request.gstPct());
 
         if (priceChanged) {
             publishPriceChanged(restaurantId, item.getId());

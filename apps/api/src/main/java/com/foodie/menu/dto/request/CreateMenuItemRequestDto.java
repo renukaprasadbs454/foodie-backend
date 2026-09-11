@@ -15,14 +15,27 @@ public record CreateMenuItemRequestDto(
         String description,
         BigDecimal basePrice,
         Boolean isVeg,
-        String foodType) {
+        String foodType,
+        String packageSize,
+        BigDecimal gstPct) {
+    public CreateMenuItemRequestDto(
+            UUID categoryId,
+            String name,
+            String description,
+            BigDecimal basePrice,
+            Boolean isVeg,
+            String foodType) {
+        this(categoryId, name, description, basePrice, isVeg, foodType, null, null);
+    }
+
     public CreateMenuItemRequestDto(
             UUID categoryId,
             String name,
             String description,
             BigDecimal basePrice,
             Boolean isVeg) {
-        this(categoryId, name, description, basePrice, isVeg, isVeg != null ? (isVeg ? "VEG" : "NON_VEG") : null);
+        this(categoryId, name, description, basePrice, isVeg, isVeg != null ? (isVeg ? "VEG" : "NON_VEG") : null, null,
+                null);
     }
 
     public boolean resolveIsVeg() {

@@ -209,6 +209,20 @@ public class OrderServiceImpl implements OrderService {
                 itemNames.put(line.menuItemId(), snapshot.itemName());
             }
 
+            // Calculate base tax from properties as fallback, but accumulate item-level tax
+            BigDecimal rawTaxAcc = BigDecimal.ZERO;
+            for (CartCheckoutPort.Line line : cart.items()) {
+                MenuItemPriceProvider.MenuItemPriceSnapshot snapshot = menuItemPriceProvider
+                        .getPriceSnapshot(line.menuItemId(), line.variantId()).orElse(null);
+
+                BigDecimal itemTaxRate = (snapshot != null && snapshot.gstPct() != null)
+                        ? snapshot.gstPct().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+                        : orderProperties.getTaxRate();
+
+                rawTaxAcc = rawTaxAcc.add(line.lineTotal().multiply(itemTaxRate));
+            }
+            BigDecimal taxAmount = rawTaxAcc.setScale(2, RoundingMode.HALF_UP);
+
             BigDecimal subtotal = cart.subtotal().setScale(2, RoundingMode.HALF_UP);
             BigDecimal discount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
             UUID appliedCouponId = null;
@@ -224,7 +238,6 @@ public class OrderServiceImpl implements OrderService {
                 appliedCouponId = applied.couponId();
             }
             BigDecimal deliveryFee = orderProperties.getDefaultDeliveryFee().setScale(2, RoundingMode.HALF_UP);
-            BigDecimal taxAmount = subtotal.multiply(orderProperties.getTaxRate()).setScale(2, RoundingMode.HALF_UP);
             BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
                     .setScale(2, RoundingMode.HALF_UP);
 

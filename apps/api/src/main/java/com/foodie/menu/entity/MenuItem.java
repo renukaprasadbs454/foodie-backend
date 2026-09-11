@@ -41,6 +41,12 @@ public class MenuItem extends BaseEntity {
     @Column(name = "food_type", length = 20)
     private String foodType;
 
+    @Column(name = "package_size", length = 100)
+    private String packageSize;
+
+    @Column(name = "gst_pct", precision = 5, scale = 2)
+    private BigDecimal gstPct;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -100,6 +106,13 @@ public class MenuItem extends BaseEntity {
         }
     }
 
+    public void updateDetails(String packageSize, BigDecimal gstPct) {
+        this.packageSize = packageSize;
+        if (gstPct != null) {
+            this.gstPct = gstPct;
+        }
+    }
+
     public void setAvailable(boolean available) {
         this.available = available;
     }
@@ -146,6 +159,14 @@ public class MenuItem extends BaseEntity {
 
     public String getFoodType() {
         return foodType != null ? foodType : (veg ? "VEG" : "NON_VEG");
+    }
+
+    public String getPackageSize() {
+        return packageSize;
+    }
+
+    public BigDecimal getGstPct() {
+        return gstPct != null ? gstPct : BigDecimal.ZERO;
     }
 
     public Instant getDeletedAt() {
