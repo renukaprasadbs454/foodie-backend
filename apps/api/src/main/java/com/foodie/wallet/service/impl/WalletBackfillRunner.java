@@ -80,12 +80,33 @@ public class WalletBackfillRunner implements CommandLineRunner {
 
                 if (finalEarnings.compareTo(BigDecimal.ZERO) > 0) {
                     try {
-                        walletService.credit(OwnerType.RESTAURANT, restaurantId, finalEarnings,
-                                LedgerReferenceType.ORDER_EARNING, orderId);
-                        log.info("Backfilled wallet for delivered order {} -> +{}", orderId, finalEarnings);
+                        // 1. Ensure WalletAccount exists natively
+                        jdbcTemplate.update(
+                                """
+                                            INSERT INTO wallet_account (id, owner_type, owner_id, balance, version, created_at, updated_at)
+                                            VALUES (?, 'RESTAURANT', ?, 0, 0, now(), now())
+                                            ON CONFLICT (owner_type, owner_id) DO NOTHING
+                                        """,
+                                UUID.randomUUID(), restaurantId);
+
+                        // 2. Insert Ledger Entry natively
+                        jdbcTemplate.update(
+                                """
+                                            INSERT INTO ledger_entry (id, wallet_account_id, entry_type, amount, reference_type, reference_id, created_at)
+                                            SELECT ?, id, 'CREDIT', ?, 'ORDER_EARNING', ?, now()
+                                            FROM wallet_account WHERE owner_type = 'RESTAURANT' AND owner_id = ?
+                                        """,
+                                UUID.randomUUID(), finalEarnings, orderId, restaurantId);
+
+                        // 3. Update Balance atomically natively
+                        jdbcTemplate.update("""
+                                    UPDATE wallet_account SET balance = balance + ?, updated_at = now()
+                                    WHERE owner_type = 'RESTAURANT' AND owner_id = ?
+                                """, finalEarnings, restaurantId);
+
+                        log.info("Backfilled wallet natively for delivered order {} -> +{}", orderId, finalEarnings);
                     } catch (Exception ex) {
-                        log.error("Failed to backfill order {} for restaurant {}: {}", orderId, restaurantId,
-                                ex.getMessage());
+                        log.error("Failed native backfill for {} {}: {}", orderId, restaurantId, ex.getMessage());
                     }
                 }
             }
