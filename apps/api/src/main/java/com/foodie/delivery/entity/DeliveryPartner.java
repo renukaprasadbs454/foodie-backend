@@ -37,6 +37,9 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "is_online", nullable = false)
     private boolean online;
 
+    @Column(name = "kyc_rejection_reason", length = 500)
+    private String kycRejectionReason;
+
     @Column(name = "cash_in_hand", nullable = false, precision = 10, scale = 2)
     private java.math.BigDecimal cashInHand = java.math.BigDecimal.ZERO;
 
@@ -79,6 +82,21 @@ public class DeliveryPartner extends BaseEntity {
 
     public void verifyKyc() {
         this.kycStatus = KycStatus.VERIFIED;
+        this.kycRejectionReason = null;
+    }
+
+    public void rejectKyc(String reason) {
+        this.kycStatus = KycStatus.REJECTED;
+        this.kycRejectionReason = reason;
+        this.online = false;
+    }
+
+    public String getKycRejectionReason() {
+        return kycRejectionReason;
+    }
+
+    public void setKycRejectionReason(String kycRejectionReason) {
+        this.kycRejectionReason = kycRejectionReason;
     }
 
     public void addCash(java.math.BigDecimal amount) {

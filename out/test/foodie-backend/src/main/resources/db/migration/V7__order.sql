@@ -1,4 +1,6 @@
--- Module 6: Order
+docker compose up -d postgres redis
+./mvnw test
+./mvnw spring-boot:run-- Module 6: Order
 -- Owns: "order", order_item, order_status_event (Phase3 §3.5)
 -- Never soft-deleted. coupon_id / delivery_partner_id are UUID columns without FK
 -- until Coupon / Delivery modules introduce their tables (no invented stub tables).

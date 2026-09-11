@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.foodie.security.principal.AuthPrincipal;
 
 @RestController
 @RequestMapping("/v1/orders/{orderId}/messages")
@@ -41,9 +42,9 @@ public class OrderMessageController {
     public ResponseEntity<OrderMessageResponseDto> sendMessage(
             @PathVariable UUID orderId,
             @Valid @RequestBody CreateOrderMessageRequestDto req,
-            @RequestHeader("X-User-Credential-Id") UUID userCredentialId) {
+            @AuthenticationPrincipal AuthPrincipal principal) {
 
-        OrderMessage msg = OrderMessage.create(orderId, req.senderRole(), userCredentialId, req.messageText());
+        OrderMessage msg = OrderMessage.create(orderId, req.senderRole(), principal.userId(), req.messageText());
         msg = orderMessageRepository.save(msg);
 
         OrderMessageResponseDto dto = new OrderMessageResponseDto(
