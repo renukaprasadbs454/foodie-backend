@@ -24,70 +24,70 @@ public class WalletBackfillRunner implements CommandLineRunner {
     private final JdbcTemplate jdbcTemplate;
     private final WalletService walletService;
     private final WalletAccountRepository walletAccountRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
     public WalletBackfillRunner(JdbcTemplate jdbcTemplate, WalletService walletService,
-            WalletAccountRepository walletAccountRepository) {
+            WalletAccountRepository walletAccountRepository, jakarta.persistence.EntityManager entityManager) {
         this.jdbcTemplate = jdbcTemplate;
         this.walletService = walletService;
         this.walletAccountRepository = walletAccountRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
     public void run(String... args) throws Exception {
         log.info("Starting missing Restuarant Wallet backfill...");
 
-        String query = """
-                    SELECT o.id, o.restaurant_id, o.subtotal, o.tax_fee
-                    FROM "order" o
-                    WHERE o.status = 'DELIVERED'
-                    AND NOT EXISTS (
-                        SELECT 1 FROM ledger_entry l
-                        WHERE l.reference_id = o.id AND l.reference_type = 'ORDER_EARNING'
-                    )
-                """;
+        org.springframework.transaction.support.TransactionTemplate txTemplate = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbcTemplate.getDataSource()));
 
-        jdbcTemplate.query(query, new RowCallbackHandler() {
-            @Override
-            public void processRow(ResultSet rs) throws SQLException {
-                UUID orderId = (UUID) rs.getObject("id");
-                UUID restaurantId = (UUID) rs.getObject("restaurant_id");
-                BigDecimal subtotal = rs.getBigDecimal("subtotal");
-                BigDecimal taxFee = rs.getBigDecimal("tax_fee");
+        @SuppressWarnings("unchecked")
+        java.util.List<Object[]> orders = entityManager.createQuery(
+                "SELECT o.id, o.restaurantId, o.subtotal, o.taxAmount FROM Order o WHERE o.status = com.foodie.common.enums.OrderStatus.DELIVERED")
+                .getResultList();
 
-                if (subtotal == null) {
-                    subtotal = BigDecimal.ZERO;
-                }
-                if (taxFee == null) {
-                    taxFee = BigDecimal.ZERO;
-                }
+        for (Object[] row : orders) {
+            UUID orderId = (UUID) row[0];
+            UUID restaurantId = (UUID) row[1];
+            BigDecimal subtotal = (BigDecimal) row[2];
+            BigDecimal taxFee = (BigDecimal) row[3];
 
-                // Get commission % (default 18.00 if missing)
-                BigDecimal commissionPct = jdbcTemplate.queryForObject(
-                        "SELECT commission_pct FROM restaurant r WHERE r.id = ?",
-                        BigDecimal.class,
-                        restaurantId);
+            if (subtotal == null)
+                subtotal = BigDecimal.ZERO;
+            if (taxFee == null)
+                taxFee = BigDecimal.ZERO;
 
-                if (commissionPct == null) {
-                    commissionPct = new BigDecimal("18.00");
-                }
+            // Check if ledger entry exists
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT count(1) FROM ledger_entry WHERE reference_id = ? AND reference_type = 'ORDER_EARNING'",
+                    Integer.class, orderId);
+            if (count != null && count > 0)
+                continue;
 
-                BigDecimal commissionAmount = subtotal.multiply(commissionPct).divide(new BigDecimal("100"), 2,
-                        java.math.RoundingMode.HALF_UP);
-                BigDecimal netEarnings = subtotal.subtract(commissionAmount);
-                BigDecimal finalEarnings = netEarnings.add(taxFee);
+            // Get commission %
+            BigDecimal commissionPct = jdbcTemplate.queryForObject(
+                    "SELECT commission_pct FROM restaurant r WHERE r.id = ?",
+                    BigDecimal.class, restaurantId);
 
-                if (finalEarnings.compareTo(BigDecimal.ZERO) > 0) {
-                    try {
-                        walletService.credit(OwnerType.RESTAURANT, restaurantId, finalEarnings,
-                                LedgerReferenceType.ORDER_EARNING, orderId);
-                        log.info("Backfilled wallet for delivered order {} -> +{}", orderId, finalEarnings);
-                    } catch (Exception ex) {
-                        log.error("Failed to backfill order {} for restaurant {}: {}", orderId, restaurantId,
-                                ex.getMessage());
-                    }
+            if (commissionPct == null)
+                commissionPct = new BigDecimal("18.00");
+
+            BigDecimal commissionAmount = subtotal.multiply(commissionPct).divide(new BigDecimal("100"), 2,
+                    java.math.RoundingMode.HALF_UP);
+            BigDecimal netEarnings = subtotal.subtract(commissionAmount);
+            BigDecimal finalEarnings = netEarnings.add(taxFee);
+
+            if (finalEarnings.compareTo(BigDecimal.ZERO) > 0) {
+                try {
+                    walletService.credit(OwnerType.RESTAURANT, restaurantId, finalEarnings,
+                            LedgerReferenceType.ORDER_EARNING, orderId);
+                    log.info("Backfilled wallet for delivered order {} -> +{}", orderId, finalEarnings);
+                } catch (Exception ex) {
+                    log.error("Failed to backfill order {} for restaurant {}: {}", orderId, restaurantId,
+                            ex.getMessage());
                 }
             }
-        });
+        }
 
         // Also fix any Payout Requests that failed to sync UI to Bank because DB had
         // issue
