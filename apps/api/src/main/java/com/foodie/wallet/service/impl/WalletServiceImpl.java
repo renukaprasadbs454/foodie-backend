@@ -114,7 +114,7 @@ public class WalletServiceImpl implements WalletService {
     public WalletBalanceResponseDto getBalance(UUID userCredentialId, UserType userType) {
         UUID ownerId = resolveOwnerId(userCredentialId, userType);
         OwnerType ownerTypeEnum = resolveOwnerType(userType);
-        WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
         return WalletMapper.toBalance(account);
     }
 
@@ -130,7 +130,7 @@ public class WalletServiceImpl implements WalletService {
             Instant createdAtTo) {
         UUID ownerId = resolveOwnerId(userCredentialId, userType);
         OwnerType ownerTypeEnum = resolveOwnerType(userType);
-        WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
         Page<LedgerEntry> result;
 
@@ -279,7 +279,7 @@ public class WalletServiceImpl implements WalletService {
     @Transactional
     public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
-        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        WalletAccount account = findOrDefault(OwnerType.RESTAURANT, restaurantId);
         return WalletMapper.toBalance(account);
     }
 
@@ -293,7 +293,7 @@ public class WalletServiceImpl implements WalletService {
             Instant createdAtFrom,
             Instant createdAtTo) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
-        WalletAccount account = getOrCreate(OwnerType.RESTAURANT, restaurantId);
+        WalletAccount account = findOrDefault(OwnerType.RESTAURANT, restaurantId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
         Page<LedgerEntry> result = ledgerEntryRepository.findHistory(
                 account.getId(), createdAtFrom, createdAtTo, pageable);
@@ -374,6 +374,11 @@ public class WalletServiceImpl implements WalletService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Amount must be greater than zero.");
         }
+    }
+
+    private WalletAccount findOrDefault(OwnerType ownerType, UUID ownerId) {
+        return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
     }
 
     private WalletAccount getOrCreate(OwnerType ownerType, UUID ownerId) {
