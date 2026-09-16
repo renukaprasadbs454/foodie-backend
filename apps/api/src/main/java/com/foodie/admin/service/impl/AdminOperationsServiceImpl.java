@@ -330,10 +330,10 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
     }
 
     private static Sort resolveSort(String sort) {
-        if (sort == null || sort.isBlank() || "createdAt".equals(sort) || "-createdAt".equals(sort)) {
+        if (sort == null || sort.isBlank() || "createdAt".equalsIgnoreCase(sort) || "-createdAt".equals(sort) || "createdAt,desc".equalsIgnoreCase(sort)) {
             return Sort.by(Sort.Direction.DESC, "createdAt");
         }
-        if ("+createdAt".equals(sort)) {
+        if ("+createdAt".equals(sort) || "createdAt,asc".equalsIgnoreCase(sort)) {
             return Sort.by(Sort.Direction.ASC, "createdAt");
         }
         throw new BadRequestException(ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: createdAt.");

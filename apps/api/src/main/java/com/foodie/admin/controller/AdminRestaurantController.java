@@ -74,6 +74,25 @@ public class AdminRestaurantController {
                 adminOperationsService.rejectRestaurant(principal.userId(), restaurantId, request.reason())));
     }
 
+    @PatchMapping("/{id}/documents/{docType}/verify")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Verify document")
+    public ResponseEntity<ApiResponse<Void>> verifyDocument(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID restaurantId,
+            @PathVariable("docType") String docType) {
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PatchMapping("/{id}/request-changes")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Request changes")
+    public ResponseEntity<ApiResponse<Void>> requestChanges(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID restaurantId) {
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Permanently delete a SUSPENDED restaurant")

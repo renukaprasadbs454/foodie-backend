@@ -4,8 +4,12 @@ import com.foodie.admin.dto.request.CommissionConfigDto;
 import com.foodie.admin.dto.response.PaymentSettlementResponseDto;
 import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
 import com.foodie.admin.service.AdminPaymentService;
-import com.foodie.wallet.repository.PayoutRepository;
+import com.foodie.payment.entity.Payment;
+import com.foodie.payment.repository.PaymentRepository;
+import com.foodie.wallet.entity.LedgerEntry;
 import com.foodie.wallet.entity.Payout;
+import com.foodie.wallet.repository.LedgerEntryRepository;
+import com.foodie.wallet.repository.PayoutRepository;
 import com.foodie.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,14 +33,20 @@ public class AdminPaymentController {
     private final AdminPaymentService adminPaymentService;
     private final com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService;
     private final PayoutRepository payoutRepository;
+    private final PaymentRepository paymentRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
 
     public AdminPaymentController(
             AdminPaymentService adminPaymentService,
             com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService,
-            PayoutRepository payoutRepository) {
+            PayoutRepository payoutRepository,
+            PaymentRepository paymentRepository,
+            LedgerEntryRepository ledgerEntryRepository) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
         this.payoutRepository = payoutRepository;
+        this.paymentRepository = paymentRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
     }
 
     @GetMapping("/settlements")
@@ -44,6 +54,20 @@ public class AdminPaymentController {
     @Operation(summary = "List payment settlements with admin escrow & split breakdown")
     public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements() {
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements()));
+    }
+
+    @GetMapping("/transactions")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List real payment transactions from database")
+    public ResponseEntity<ApiResponse<List<Payment>>> listTransactions() {
+        return ResponseEntity.ok(ApiResponse.success(paymentRepository.findAll()));
+    }
+
+    @GetMapping("/ledger")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List authoritative double-entry financial ledger records")
+    public ResponseEntity<ApiResponse<List<LedgerEntry>>> listLedger() {
+        return ResponseEntity.ok(ApiResponse.success(ledgerEntryRepository.findAll()));
     }
 
     @GetMapping("/restaurant-settlements")
