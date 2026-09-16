@@ -174,7 +174,8 @@ public class WalletServiceImpl implements WalletService {
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
-        if (openPayouts == null) openPayouts = BigDecimal.ZERO;
+        if (openPayouts == null)
+            openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
@@ -280,19 +281,15 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = findOrDefault(OwnerType.RESTAURANT, restaurantId);
 
-        // Self-Healing Balance Calculator
+        // Return pure dynamic calculation to dodge JPA persist crashes on GET endpoint
         BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
-        if (account.getBalance().compareTo(actualBalance) != 0) {
-            account.setBalance(actualBalance);
-            walletAccountRepository.save(account);
-        }
 
-        return WalletMapper.toBalance(account);
+        return new WalletBalanceResponseDto(account.getId(), actualBalance);
     }
 
     @Override
@@ -347,7 +344,8 @@ public class WalletServiceImpl implements WalletService {
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
-        if (openPayouts == null) openPayouts = BigDecimal.ZERO;
+        if (openPayouts == null)
+            openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
