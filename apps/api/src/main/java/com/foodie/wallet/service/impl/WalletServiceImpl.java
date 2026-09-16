@@ -358,7 +358,7 @@ public class WalletServiceImpl implements WalletService {
                     "Requested payout exceeds available wallet balance.");
         }
 
-        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount, request.accountHolderName(),
+        Payout payout = payoutRepository.saveAndFlush(Payout.request(account.getId(), amount, request.accountHolderName(),
                 request.accountNumber(), request.ifscCode(), request.bankName()));
         PayoutResponseDto response = WalletMapper.toPayout(payout);
         eventPublisher.publishEvent(PayoutRequestedEvent.of(
