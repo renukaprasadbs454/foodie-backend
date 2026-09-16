@@ -447,10 +447,13 @@ public class WalletServiceImpl implements WalletService {
             }
         }
 
-        BigDecimal allPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(walletAccountId,
-                EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING, PayoutStatus.COMPLETED));
-        if (allPayouts == null)
-            allPayouts = BigDecimal.ZERO;
+        BigDecimal allPayouts = BigDecimal.ZERO;
+        if (walletAccountId != null) {
+            allPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(walletAccountId,
+                    EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING, PayoutStatus.COMPLETED));
+            if (allPayouts == null)
+                allPayouts = BigDecimal.ZERO;
+        }
 
         return totalEarning.subtract(allPayouts).setScale(2, RoundingMode.HALF_UP);
     }
