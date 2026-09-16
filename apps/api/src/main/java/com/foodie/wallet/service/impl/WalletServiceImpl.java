@@ -360,6 +360,10 @@ public class WalletServiceImpl implements WalletService {
 
         Payout payout = payoutRepository.saveAndFlush(Payout.request(account.getId(), amount, request.accountHolderName(),
                 request.accountNumber(), request.ifscCode(), request.bankName()));
+        
+        ledgerEntryRepository.save(com.foodie.wallet.entity.LedgerEntry.debit(
+                account.getId(), amount, com.foodie.common.enums.LedgerReferenceType.PAYOUT, payout.getId()));
+
         PayoutResponseDto response = WalletMapper.toPayout(payout);
         eventPublisher.publishEvent(PayoutRequestedEvent.of(
                 payout.getId(), account.getId(), restaurantId, amount));
@@ -419,14 +423,7 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletAccount getOrCreateForUpdate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                .orElseGet(() -> {
-                    try {
-                        return walletAccountRepository.save(WalletAccount.open(ownerType, ownerId));
-                    } catch (Exception ex) {
-                        return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
-                    }
-                });
+                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
     }
 
     private BigDecimal calculateTrueRestaurantBalance(UUID restaurantId, UUID walletAccountId) {
