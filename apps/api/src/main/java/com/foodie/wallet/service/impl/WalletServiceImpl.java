@@ -333,11 +333,16 @@ public class WalletServiceImpl implements WalletService {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = getOrCreateForUpdate(OwnerType.RESTAURANT, restaurantId);
 
+        // Pre-save to assure a UUID is assigned if it was transient
+        if (account.getId() == null) {
+            account = walletAccountRepository.saveAndFlush(account);
+        }
+
         // Self-Healing Balance Calculator before checking limits
         BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
         if (account.getBalance().compareTo(actualBalance) != 0) {
             account.setBalance(actualBalance);
-            account = walletAccountRepository.save(account);
+            account = walletAccountRepository.saveAndFlush(account);
         }
 
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
