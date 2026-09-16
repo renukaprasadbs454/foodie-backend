@@ -2,37 +2,40 @@ server:
   address: 0.0.0.0
 spring:
   datasource:
-    url: ${DB_URL:jdbc:h2:file:./data/foodie-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE;INIT=ALTER TABLE IF EXISTS "restaurant" ADD COLUMN IF NOT EXISTS "is_open" BOOLEAN DEFAULT TRUE\;UPDATE "restaurant" SET "is_open" = TRUE WHERE "is_open" IS NULL\;ALTER TABLE IF EXISTS "delivery_partner" ADD COLUMN IF NOT EXISTS "cash_in_hand" NUMERIC(10,2) DEFAULT 0\;ALTER TABLE IF EXISTS "delivery_partner" ADD COLUMN IF NOT EXISTS "max_cash_in_hand_limit" NUMERIC(10,2) DEFAULT 1500}
+    url: ${DB_URL:jdbc:h2:file:./data/foodie-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE}
     username: ${DB_USER:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
   h2:
     console:
       enabled: true
       path: /h2-console
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
   flyway:
     enabled: false
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: false
+    out-of-order: true
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      timeout: 2s
+      repositories:
+        enabled: false
   jpa:
     show-sql: false
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
-        globally_quoted_identifiers: true
+        globally_quoted_identifiers: false
         type:
           preferred_enum_jdbc_type: VARCHAR
 
 foodie:
   razorpay:
-    mode: live
+    mode: test
 
 logging:
   level:
@@ -43,4 +46,3 @@ management:
   endpoint:
     health:
       show-details: always
-

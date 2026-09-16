@@ -35,18 +35,24 @@ public class AdminPaymentController {
     private final PayoutRepository payoutRepository;
     private final PaymentRepository paymentRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final com.foodie.payment.service.PaymentReconciliationService reconciliationService;
+    private final com.foodie.payment.scheduler.WeeklySettlementScheduler weeklySettlementScheduler;
 
     public AdminPaymentController(
             AdminPaymentService adminPaymentService,
             com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService,
             PayoutRepository payoutRepository,
             PaymentRepository paymentRepository,
-            LedgerEntryRepository ledgerEntryRepository) {
+            LedgerEntryRepository ledgerEntryRepository,
+            com.foodie.payment.service.PaymentReconciliationService reconciliationService,
+            com.foodie.payment.scheduler.WeeklySettlementScheduler weeklySettlementScheduler) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
         this.payoutRepository = payoutRepository;
         this.paymentRepository = paymentRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
+        this.reconciliationService = reconciliationService;
+        this.weeklySettlementScheduler = weeklySettlementScheduler;
     }
 
     @GetMapping("/settlements")
@@ -120,4 +126,20 @@ public class AdminPaymentController {
         return ResponseEntity.ok(ApiResponse.success(
                 adminPaymentService.calculateSplit(foodSubtotal, deliveryFee)));
     }
+
+    @GetMapping("/reconciliation")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Audit and reconcile internal payments against Cashfree gateway status")
+    public ResponseEntity<ApiResponse<com.foodie.payment.service.PaymentReconciliationService.ReconciliationReportDto>> runReconciliation() {
+        return ResponseEntity.ok(ApiResponse.success(reconciliationService.runReconciliation()));
+    }
+
+    @PostMapping("/weekly-settlement/trigger")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Trigger weekly automated payment settlement and payout batch cycle")
+    public ResponseEntity<ApiResponse<String>> triggerWeeklySettlement() {
+        weeklySettlementScheduler.executeWeeklySettlementCycle();
+        return ResponseEntity.ok(ApiResponse.success("Weekly settlement batch processing triggered successfully."));
+    }
 }
+

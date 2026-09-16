@@ -13,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 
 @Primary
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(name = "capturingSmsSender")
 public class WhatsAppSmsSender implements SmsSender {
 
     private static final Logger log = LoggerFactory.getLogger(WhatsAppSmsSender.class);

@@ -23,7 +23,7 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
             log.info("Updating wallet_account check constraints for CUSTOMER owner_type...");
             jdbcTemplate.execute("ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type");
             jdbcTemplate.execute(
-                    "ALTER TABLE wallet_account ADD CONSTRAINT chk_wallet_owner_type CHECK (owner_type IN ('DELIVERY_PARTNER', 'PLATFORM', 'CUSTOMER'))");
+                    "ALTER TABLE wallet_account ADD CONSTRAINT chk_wallet_owner_type CHECK (owner_type IN ('DELIVERY_PARTNER', 'PLATFORM', 'CUSTOMER', 'RESTAURANT'))");
         } catch (Exception e) {
             log.warn("Could not alter wallet_account check constraint: {}", e.getMessage());
         }
