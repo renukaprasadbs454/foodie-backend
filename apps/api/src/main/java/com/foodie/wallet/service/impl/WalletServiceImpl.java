@@ -174,6 +174,7 @@ public class WalletServiceImpl implements WalletService {
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
+        if (openPayouts == null) openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
@@ -346,6 +347,7 @@ public class WalletServiceImpl implements WalletService {
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
+        if (openPayouts == null) openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
