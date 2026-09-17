@@ -197,6 +197,21 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public DeactivateCouponResponseDto activateCoupon(UUID actorCredentialId, UUID couponId) {
+        AdminUser admin = requirePermission(actorCredentialId, "COUPON", "DEACTIVATE");
+        DeactivateCouponResponseDto after = couponAdminService.activate(couponId);
+        adminService.recordAudit(
+                admin.getId(),
+                "ACTIVATE_COUPON",
+                "COUPON",
+                couponId,
+                Map.of("isActive", false),
+                Map.of("isActive", after.isActive()));
+        return after;
+    }
+
+    @Override
+    @Transactional
     public OrderResponseDto overrideOrderStatus(
             UUID actorCredentialId, UUID orderId, OverrideOrderStatusRequestDto request) {
         AdminUser admin = requirePermission(actorCredentialId, "ORDER", "OVERRIDE");

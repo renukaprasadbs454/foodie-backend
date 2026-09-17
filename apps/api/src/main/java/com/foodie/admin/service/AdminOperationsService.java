@@ -37,6 +37,8 @@ public interface AdminOperationsService {
 
         DeactivateCouponResponseDto deactivateCoupon(UUID actorCredentialId, UUID couponId);
 
+        DeactivateCouponResponseDto activateCoupon(UUID actorCredentialId, UUID couponId);
+
         OrderResponseDto overrideOrderStatus(
                         UUID actorCredentialId, UUID orderId, OverrideOrderStatusRequestDto request);
 

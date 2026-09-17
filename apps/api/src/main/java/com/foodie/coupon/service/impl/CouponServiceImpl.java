@@ -195,6 +195,16 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         return new DeactivateCouponResponseDto(coupon.getId(), coupon.isActive());
     }
 
+    @Override
+    @Transactional
+    public DeactivateCouponResponseDto activate(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.setActive(true);
+        couponRepository.save(coupon);
+        return new DeactivateCouponResponseDto(coupon.getId(), coupon.isActive());
+    }
+
     private void assertEligible(
             Coupon coupon,
             UUID customerId,
