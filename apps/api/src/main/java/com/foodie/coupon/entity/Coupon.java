@@ -89,6 +89,10 @@ public class Coupon extends BaseEntity {
         this.active = false;
     }
 
+    public void activate() {
+        this.active = true;
+    }
+
     public void softDelete() {
         this.deletedAt = Instant.now();
         this.active = false;

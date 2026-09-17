@@ -17,5 +17,7 @@ public interface CouponAdminService {
 
     DeactivateCouponResponseDto deactivate(UUID couponId);
 
+    DeactivateCouponResponseDto activate(UUID couponId);
+
     boolean delete(UUID couponId);
 }
