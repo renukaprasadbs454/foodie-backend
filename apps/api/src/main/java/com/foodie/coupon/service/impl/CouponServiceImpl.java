@@ -139,6 +139,14 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CouponResponseDto> listAll() {
+        return couponRepository.findAll().stream()
+                .map(CouponMapper::toResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public CouponResponseDto create(CreateCouponRequestDto request) {
         validateCreateRules(request);

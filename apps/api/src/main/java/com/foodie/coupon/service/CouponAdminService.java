@@ -3,6 +3,7 @@ package com.foodie.coupon.service;
 import com.foodie.coupon.dto.request.CreateCouponRequestDto;
 import com.foodie.coupon.dto.response.CouponResponseDto;
 import com.foodie.coupon.dto.response.DeactivateCouponResponseDto;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -10,6 +11,7 @@ import java.util.UUID;
  * Audit_log writes are owned by the Admin module and deferred until that module lands.
  */
 public interface CouponAdminService {
+    List<CouponResponseDto> listAll();
 
     CouponResponseDto create(CreateCouponRequestDto request);
 
