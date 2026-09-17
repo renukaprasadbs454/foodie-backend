@@ -91,7 +91,9 @@ public class AdminDeliveryController {
             }
         }
 
-        String searchFilter = (search != null && !search.trim().isBlank()) ? search.trim() : null;
+        String searchFilter = (search != null && !search.trim().isBlank())
+                ? "%" + search.trim().toLowerCase() + "%"
+                : null;
         PageRequest pageRequest = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<DeliveryPartner> partnerPage = deliveryPartnerRepository.searchDeliveryPartners(kycFilter, searchFilter, pageRequest);
