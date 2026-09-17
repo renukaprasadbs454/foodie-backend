@@ -22,9 +22,9 @@ public interface DeliveryPartnerRepository extends JpaRepository<DeliveryPartner
 
     @Query("SELECT p FROM DeliveryPartner p WHERE " +
            "(:kycStatus IS NULL OR p.kycStatus = :kycStatus) AND " +
-           "(:search IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR LOWER(p.vehicleNumber) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR EXISTS (SELECT u FROM com.foodie.auth.entity.UserCredential u WHERE u.id = p.userCredentialId AND (LOWER(u.phoneNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))))")
+           "(:search IS NULL OR LOWER(p.fullName) LIKE :search " +
+           "OR LOWER(p.vehicleNumber) LIKE :search " +
+           "OR EXISTS (SELECT u FROM com.foodie.auth.entity.UserCredential u WHERE u.id = p.userCredentialId AND (LOWER(u.phoneNumber) LIKE :search OR LOWER(u.email) LIKE :search)))")
     Page<DeliveryPartner> searchDeliveryPartners(
             @Param("kycStatus") KycStatus kycStatus,
             @Param("search") String search,
