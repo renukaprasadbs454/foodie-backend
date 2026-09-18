@@ -344,7 +344,7 @@ public class OrderServiceImpl implements OrderService {
         UUID customerId = resolveCustomerId(userCredentialId);
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveCustomerSort(sort));
         Page<Order> result = statusFilter == null
-                ? orderRepository.findByCustomerId(customerId, pageable)
+                ? orderRepository.findByCustomerIdAndStatusNot(customerId, OrderStatus.PENDING_PAYMENT, pageable)
                 : orderRepository.findByCustomerIdAndStatus(customerId, statusFilter, pageable);
         return toPage(result);
     }
@@ -362,7 +362,7 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
         Pageable pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveRestaurantSort(sort));
         Page<Order> result = statusFilter == null
-                ? orderRepository.findByRestaurantId(restaurantId, pageable)
+                ? orderRepository.findByRestaurantIdAndStatusNot(restaurantId, OrderStatus.PENDING_PAYMENT, pageable)
                 : orderRepository.findByRestaurantIdAndStatus(restaurantId, statusFilter, pageable);
         return toPage(result);
     }
