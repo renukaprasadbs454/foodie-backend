@@ -20,12 +20,10 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
             WHERE c.active = true
               AND c.expiryDate > :now
               AND (c.restaurantId IS NULL OR c.restaurantId = :restaurantId)
-              AND c.minOrderAmount <= :cartTotal
             ORDER BY c.code ASC
             """)
     List<Coupon> findEligibleCandidates(
             @Param("restaurantId") UUID restaurantId,
-            @Param("cartTotal") java.math.BigDecimal cartTotal,
             @Param("now") Instant now
     );
 }

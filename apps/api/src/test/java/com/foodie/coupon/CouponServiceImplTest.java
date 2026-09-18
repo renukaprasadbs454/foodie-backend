@@ -168,7 +168,7 @@ class CouponServiceImplTest {
                 stubRestaurant();
                 Coupon ok = activeFlat("OK", "10.00", "0.00", null);
                 Coupon used = activeFlat("USED", "10.00", "0.00", null);
-                when(couponRepository.findEligibleCandidates(any(), any(), any())).thenReturn(List.of(ok, used));
+                when(couponRepository.findEligibleCandidates(any(), any())).thenReturn(List.of(ok, used));
                 when(redemptionRepository.countByCouponIdAndCustomerId(ok.getId(), customerId)).thenReturn(0L);
                 when(redemptionRepository.countByCouponIdAndCustomerId(used.getId(), customerId)).thenReturn(1L);
 
@@ -277,7 +277,7 @@ class CouponServiceImplTest {
                 stubRestaurant();
                 when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
                                 new CustomerSummaryProvider.CustomerSummary(customerId, "A", null)));
-                when(couponRepository.findEligibleCandidates(any(), any(), any())).thenReturn(List.of());
+                when(couponRepository.findEligibleCandidates(any(), any())).thenReturn(List.of());
 
                 assertThat(service.listEligibleForCaller(credentialId, restaurantId, new BigDecimal("10.00")))
                                 .isEmpty();

@@ -70,8 +70,7 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     public List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal) {
         requireRestaurant(restaurantId);
         Instant now = Instant.now();
-        BigDecimal total = CouponMapper.scaleMoney(cartTotal);
-        List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, total, now);
+        List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, now);
         List<CouponView> eligible = new ArrayList<>();
         for (Coupon coupon : candidates) {
             if (isWithinUsageLimits(coupon, customerId)) {
