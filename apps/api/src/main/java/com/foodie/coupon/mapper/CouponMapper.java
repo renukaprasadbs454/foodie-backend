@@ -19,8 +19,7 @@ public final class CouponMapper {
                 coupon.getValue(),
                 coupon.getMinOrderAmount(),
                 coupon.getMaxDiscountAmount(),
-                coupon.getExpiryDate()
-        );
+                coupon.getExpiryDate());
     }
 
     public static EligibleCouponResponseDto toEligibleDto(CouponService.CouponView view) {
@@ -30,8 +29,7 @@ public final class CouponMapper {
                 view.value(),
                 view.minOrderAmount(),
                 view.maxDiscountAmount(),
-                view.expiryDate()
-        );
+                view.expiryDate());
     }
 
     public static ApplyCouponResponseDto toApplyDto(CouponService.DiscountResult result) {
@@ -43,6 +41,9 @@ public final class CouponMapper {
                 coupon.getId(),
                 coupon.getCode(),
                 coupon.getDiscountType().name(),
+                coupon.getFunderType() != null ? coupon.getFunderType().name() : null,
+                coupon.getCouponType() != null ? coupon.getCouponType().name() : null,
+                coupon.getBenefitMode() != null ? coupon.getBenefitMode().name() : null,
                 coupon.getValue(),
                 coupon.getMinOrderAmount(),
                 coupon.getMaxDiscountAmount(),
@@ -50,8 +51,7 @@ public final class CouponMapper {
                 coupon.getUsageLimitTotal(),
                 coupon.getUsageLimitPerUser(),
                 coupon.getRestaurantId(),
-                coupon.isActive()
-        );
+                coupon.isActive());
     }
 
     public static BigDecimal scaleMoney(BigDecimal amount) {

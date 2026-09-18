@@ -15,7 +15,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * Admin create body (API Contracts MODULE 13.4). Unknown fields → 400 UNKNOWN_FIELD.
+ * Admin create body (API Contracts MODULE 13.4). Unknown fields → 400
+ * UNKNOWN_FIELD.
  */
 public class CreateCouponRequestDto {
 
@@ -25,6 +26,10 @@ public class CreateCouponRequestDto {
 
     @NotNull
     private DiscountType discountType;
+
+    private String funderType;
+    private String couponType;
+    private String benefitMode;
 
     @NotNull
     @DecimalMin(value = "0.01", inclusive = true)
@@ -61,8 +66,7 @@ public class CreateCouponRequestDto {
             LocalDate expiryDate,
             Integer usageLimitTotal,
             Integer usageLimitPerUser,
-            UUID restaurantId
-    ) {
+            UUID restaurantId) {
         this.code = code;
         this.discountType = discountType;
         this.value = value;
@@ -93,6 +97,30 @@ public class CreateCouponRequestDto {
 
     public void setDiscountType(DiscountType discountType) {
         this.discountType = discountType;
+    }
+
+    public String getFunderType() {
+        return funderType;
+    }
+
+    public void setFunderType(String funderType) {
+        this.funderType = funderType;
+    }
+
+    public String getCouponType() {
+        return couponType;
+    }
+
+    public void setCouponType(String couponType) {
+        this.couponType = couponType;
+    }
+
+    public String getBenefitMode() {
+        return benefitMode;
+    }
+
+    public void setBenefitMode(String benefitMode) {
+        this.benefitMode = benefitMode;
     }
 
     public BigDecimal getValue() {

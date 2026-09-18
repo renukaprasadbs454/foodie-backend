@@ -24,6 +24,30 @@ public class Coupon extends BaseEntity {
     @Column(name = "discount_type", nullable = false, length = 10)
     private DiscountType discountType;
 
+    public enum FunderType {
+        FOODIE, RESTAURANT, SHARED, PARTNER
+    }
+
+    public enum CouponType {
+        NEW_USER, RESTAURANT_FIRST_ORDER, REPEAT_ORDER, REACTIVATION, GENERIC, COMBO, REFERRAL, FESTIVAL
+    }
+
+    public enum BenefitMode {
+        FLAT, PERCENTAGE, FREE_ITEM, COMBO, CONDITIONAL
+    }
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "funder_type", length = 30)
+    private FunderType funderType = FunderType.FOODIE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coupon_type", length = 30)
+    private CouponType couponType = CouponType.GENERIC;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "benefit_mode", length = 30)
+    private BenefitMode benefitMode = BenefitMode.FLAT;
+
     @Column(name = "value", nullable = false, precision = 10, scale = 2)
     private BigDecimal value;
 
@@ -64,6 +88,9 @@ public class Coupon extends BaseEntity {
     public static Coupon create(
             String code,
             DiscountType discountType,
+            String funderTypeStr,
+            String couponTypeStr,
+            String benefitModeStr,
             BigDecimal value,
             BigDecimal minOrderAmount,
             BigDecimal maxDiscountAmount,
@@ -74,6 +101,26 @@ public class Coupon extends BaseEntity {
         Coupon coupon = new Coupon();
         coupon.code = code;
         coupon.discountType = discountType;
+
+        if (funderTypeStr != null && !funderTypeStr.isBlank()) {
+            try {
+                coupon.funderType = FunderType.valueOf(funderTypeStr);
+            } catch (Exception e) {
+            }
+        }
+        if (couponTypeStr != null && !couponTypeStr.isBlank()) {
+            try {
+                coupon.couponType = CouponType.valueOf(couponTypeStr);
+            } catch (Exception e) {
+            }
+        }
+        if (benefitModeStr != null && !benefitModeStr.isBlank()) {
+            try {
+                coupon.benefitMode = BenefitMode.valueOf(benefitModeStr);
+            } catch (Exception e) {
+            }
+        }
+
         coupon.value = value;
         coupon.minOrderAmount = minOrderAmount;
         coupon.maxDiscountAmount = maxDiscountAmount;
@@ -108,6 +155,30 @@ public class Coupon extends BaseEntity {
 
     public DiscountType getDiscountType() {
         return discountType;
+    }
+
+    public FunderType getFunderType() {
+        return funderType;
+    }
+
+    public void setFunderType(FunderType funderType) {
+        this.funderType = funderType;
+    }
+
+    public CouponType getCouponType() {
+        return couponType;
+    }
+
+    public void setCouponType(CouponType type) {
+        this.couponType = type;
+    }
+
+    public BenefitMode getBenefitMode() {
+        return benefitMode;
+    }
+
+    public void setBenefitMode(BenefitMode benefitMode) {
+        this.benefitMode = benefitMode;
     }
 
     public BigDecimal getValue() {

@@ -162,12 +162,15 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         Coupon coupon = Coupon.create(
                 code,
                 request.getDiscountType(),
+                request.getFunderType(),
+                request.getCouponType(),
+                request.getBenefitMode(),
                 CouponMapper.scaleMoney(request.getValue()),
                 CouponMapper.scaleMoney(request.getMinOrderAmount()),
                 request.getMaxDiscountAmount() == null
                         ? null
                         : CouponMapper.scaleMoney(request.getMaxDiscountAmount()),
-                expiry,
+                request.getExpiryDate().atTime(23, 59, 59).toInstant(java.time.ZoneOffset.UTC),
                 request.getUsageLimitTotal(),
                 request.getUsageLimitPerUser(),
                 request.getRestaurantId());
