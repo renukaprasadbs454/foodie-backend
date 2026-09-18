@@ -279,7 +279,7 @@ public class OrderServiceImpl implements OrderService {
             orderStatusEventRepository.save(OrderStatusEvent.append(
                     order.getId(),
                     null,
-                    OrderStatus.PLACED,
+                    OrderStatus.PENDING_PAYMENT,
                     OrderActorType.CUSTOMER,
                     userCredentialId,
                     null));
