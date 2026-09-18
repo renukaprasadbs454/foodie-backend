@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 public interface PayoutRepository extends JpaRepository<Payout, UUID> {
 
     @Query("""
-            select coalesce(sum(p.amount), 0)
+            select sum(p.amount)
             from Payout p
             where p.walletAccountId = :walletAccountId
               and p.status in :statuses

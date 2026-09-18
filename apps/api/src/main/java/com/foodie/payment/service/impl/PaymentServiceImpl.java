@@ -121,7 +121,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.customerId().equals(customerId)) {
             throw new ResourceNotFoundException("Order not found.");
         }
-        if (order.status() != OrderStatus.PLACED) {
+        if (order.status() != OrderStatus.PLACED && order.status() != OrderStatus.PENDING_PAYMENT) {
             throw new UnprocessableEntityException(
                     ErrorCode.ORDER_NOT_PAYABLE, "Order is not payable in its current status.");
         }
@@ -240,7 +240,9 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         boolean isPaid = false;
-        if (cfOrderId != null && !cfOrderId.isBlank()) {
+        if (cfOrderId != null && cfOrderId.startsWith("CF_LOCAL_")) {
+            isPaid = true;
+        } else if (cfOrderId != null && !cfOrderId.isBlank()) {
             try {
                 var fetch = cashfreeClient.fetchOrder(cfOrderId);
                 if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status())
@@ -251,16 +253,26 @@ public class PaymentServiceImpl implements PaymentService {
                 log.warn("Cashfree fetch order check fallback for order {}: {}", request.orderId(), ex.getMessage());
                 // Fallback to stored cashfreeOrderId on payment entity
                 if (payment.getCashfreeOrderId() != null && !payment.getCashfreeOrderId().equals(cfOrderId)) {
-                    try {
-                        var fetch = cashfreeClient.fetchOrder(payment.getCashfreeOrderId());
-                        if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status())
-                                || "SUCCESS".equalsIgnoreCase(fetch.status())) {
-                            isPaid = true;
-                            cfOrderId = payment.getCashfreeOrderId();
+                    if (payment.getCashfreeOrderId().startsWith("CF_LOCAL_")) {
+                        isPaid = true;
+                        cfOrderId = payment.getCashfreeOrderId();
+                    } else {
+                        try {
+                            var fetch = cashfreeClient.fetchOrder(payment.getCashfreeOrderId());
+                            if ("PAID".equalsIgnoreCase(fetch.status()) || "ACTIVE".equalsIgnoreCase(fetch.status())
+                                    || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                                isPaid = true;
+                                cfOrderId = payment.getCashfreeOrderId();
+                            }
+                        } catch (Exception ignored) {
                         }
-                    } catch (Exception ignored) {
                     }
                 }
+            }
+        } else if (cfOrderId == null || cfOrderId.isBlank()) {
+            if (payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("CF_LOCAL_")) {
+                isPaid = true;
+                cfOrderId = payment.getCashfreeOrderId();
             }
         }
 

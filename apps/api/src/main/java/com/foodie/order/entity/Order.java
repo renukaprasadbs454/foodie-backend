@@ -78,7 +78,7 @@ public class Order extends BaseEntity {
         order.customerId = customerId;
         order.restaurantId = restaurantId;
         order.addressId = addressId;
-        order.status = OrderStatus.PLACED;
+        order.status = OrderStatus.PENDING_PAYMENT;
         order.subtotal = subtotal;
         order.deliveryFee = deliveryFee;
         order.discountAmount = discountAmount;

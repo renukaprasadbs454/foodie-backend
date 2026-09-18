@@ -174,6 +174,8 @@ public class WalletServiceImpl implements WalletService {
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
+        if (openPayouts == null)
+            openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
@@ -279,19 +281,15 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId) {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = findOrDefault(OwnerType.RESTAURANT, restaurantId);
 
-        // Self-Healing Balance Calculator
+        // Return pure dynamic calculation to dodge JPA persist crashes on GET endpoint
         BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
-        if (account.getBalance().compareTo(actualBalance) != 0) {
-            account.setBalance(actualBalance);
-            walletAccountRepository.save(account);
-        }
 
-        return WalletMapper.toBalance(account);
+        return new WalletBalanceResponseDto(account.getId(), actualBalance);
     }
 
     @Override
@@ -335,17 +333,24 @@ public class WalletServiceImpl implements WalletService {
         UUID restaurantId = requireRestaurantId(ownerCredentialId);
         WalletAccount account = getOrCreateForUpdate(OwnerType.RESTAURANT, restaurantId);
 
+        // Pre-save to assure a UUID is assigned if it was transient
+        if (account.getId() == null) {
+            account = walletAccountRepository.saveAndFlush(account);
+        }
+
         // Self-Healing Balance Calculator before checking limits
         BigDecimal actualBalance = calculateTrueRestaurantBalance(restaurantId, account.getId());
         if (account.getBalance().compareTo(actualBalance) != 0) {
             account.setBalance(actualBalance);
-            account = walletAccountRepository.save(account);
+            account = walletAccountRepository.saveAndFlush(account);
         }
 
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
+        if (openPayouts == null)
+            openPayouts = BigDecimal.ZERO;
         BigDecimal available = account.getBalance().subtract(openPayouts);
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
@@ -353,8 +358,12 @@ public class WalletServiceImpl implements WalletService {
                     "Requested payout exceeds available wallet balance.");
         }
 
-        Payout payout = payoutRepository.save(Payout.request(account.getId(), amount, request.accountHolderName(),
+        Payout payout = payoutRepository.saveAndFlush(Payout.request(account.getId(), amount, request.accountHolderName(),
                 request.accountNumber(), request.ifscCode(), request.bankName()));
+        
+        ledgerEntryRepository.save(com.foodie.wallet.entity.LedgerEntry.debit(
+                account.getId(), amount, com.foodie.common.enums.LedgerReferenceType.PAYOUT, payout.getId()));
+
         PayoutResponseDto response = WalletMapper.toPayout(payout);
         eventPublisher.publishEvent(PayoutRequestedEvent.of(
                 payout.getId(), account.getId(), restaurantId, amount));
@@ -414,14 +423,7 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletAccount getOrCreateForUpdate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                .orElseGet(() -> {
-                    try {
-                        return walletAccountRepository.save(WalletAccount.open(ownerType, ownerId));
-                    } catch (Exception ex) {
-                        return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
-                    }
-                });
+                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
     }
 
     private BigDecimal calculateTrueRestaurantBalance(UUID restaurantId, UUID walletAccountId) {
@@ -447,10 +449,13 @@ public class WalletServiceImpl implements WalletService {
             }
         }
 
-        BigDecimal allPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(walletAccountId,
-                EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING, PayoutStatus.COMPLETED));
-        if (allPayouts == null)
-            allPayouts = BigDecimal.ZERO;
+        BigDecimal allPayouts = BigDecimal.ZERO;
+        if (walletAccountId != null) {
+            allPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(walletAccountId,
+                    EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING, PayoutStatus.COMPLETED));
+            if (allPayouts == null)
+                allPayouts = BigDecimal.ZERO;
+        }
 
         return totalEarning.subtract(allPayouts).setScale(2, RoundingMode.HALF_UP);
     }

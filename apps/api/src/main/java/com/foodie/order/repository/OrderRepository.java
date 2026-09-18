@@ -15,6 +15,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     boolean existsByOrderNumber(String orderNumber);
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
+    
+    Page<Order> findByCustomerIdAndStatusNot(UUID customerId, OrderStatus status, Pageable pageable);
 
     Page<Order> findByCustomerIdAndStatus(UUID customerId, OrderStatus status, Pageable pageable);
 
@@ -23,6 +25,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     long countByCustomerIdAndStatusIn(UUID customerId, java.util.Collection<OrderStatus> statuses);
 
     Page<Order> findByRestaurantId(UUID restaurantId, Pageable pageable);
+    
+    Page<Order> findByRestaurantIdAndStatusNot(UUID restaurantId, OrderStatus status, Pageable pageable);
 
     Page<Order> findByRestaurantIdAndStatus(UUID restaurantId, OrderStatus status, Pageable pageable);
 

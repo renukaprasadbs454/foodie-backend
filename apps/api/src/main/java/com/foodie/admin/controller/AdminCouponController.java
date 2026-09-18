@@ -73,4 +73,24 @@ public class AdminCouponController {
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.deactivateCoupon(principal.userId(), couponId)));
     }
+
+    @PatchMapping("/{id}/activate")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Activate a coupon")
+    public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> activate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID couponId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.activateCoupon(principal.userId(), couponId)));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN', 'OPS', 'FINANCE')")
+    @Operation(summary = "Delete a coupon permanently")
+    public ResponseEntity<ApiResponse<Boolean>> deleteCoupon(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable("id") UUID couponId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.deleteCoupon(principal.userId(), couponId)));
+    }
 }

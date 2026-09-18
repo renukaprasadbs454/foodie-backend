@@ -1,6 +1,7 @@
 package com.foodie.common.enums;
 
 public enum OrderStatus {
+    PENDING_PAYMENT,
     PLACED,
     CONFIRMED,
     ACCEPTED,

@@ -70,8 +70,7 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     public List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal) {
         requireRestaurant(restaurantId);
         Instant now = Instant.now();
-        BigDecimal total = CouponMapper.scaleMoney(cartTotal);
-        List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, total, now);
+        List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, now);
         List<CouponView> eligible = new ArrayList<>();
         for (Coupon coupon : candidates) {
             if (isWithinUsageLimits(coupon, customerId)) {
@@ -139,6 +138,14 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CouponResponseDto> listAll() {
+        return couponRepository.findAll().stream()
+                .map(CouponMapper::toResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public CouponResponseDto create(CreateCouponRequestDto request) {
         validateCreateRules(request);
@@ -185,6 +192,26 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         coupon.deactivate();
         couponRepository.save(coupon);
         return new DeactivateCouponResponseDto(coupon.getId(), coupon.isActive());
+    }
+
+    @Override
+    @Transactional
+    public DeactivateCouponResponseDto activate(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.activate();
+        couponRepository.save(coupon);
+        return new DeactivateCouponResponseDto(coupon.getId(), coupon.isActive());
+    }
+
+    @Override
+    @Transactional
+    public boolean delete(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.softDelete();
+        couponRepository.save(coupon);
+        return true;
     }
 
     private void assertEligible(

@@ -24,7 +24,8 @@ public final class OrderStateMachine {
     }
 
     public static boolean isPrePreparing(OrderStatus status) {
-        return status == OrderStatus.PLACED
+        return status == OrderStatus.PENDING_PAYMENT
+                || status == OrderStatus.PLACED
                 || status == OrderStatus.CONFIRMED
                 || status == OrderStatus.ACCEPTED
                 || status == OrderStatus.PREPARING
@@ -43,6 +44,9 @@ public final class OrderStateMachine {
         if (actor == OrderActorType.CUSTOMER) {
             if (to == OrderStatus.CANCELLED) {
                 return isPrePreparing(from) ? Decision.ALLOW : Decision.ILLEGAL;
+            }
+            if (from == OrderStatus.PENDING_PAYMENT && to == OrderStatus.CONFIRMED) {
+                return Decision.ALLOW;
             }
             return Decision.FORBIDDEN;
         }
@@ -79,7 +83,9 @@ public final class OrderStateMachine {
     }
 
     private static boolean isSystemEdge(OrderStatus from, OrderStatus to) {
-        return (from == OrderStatus.PLACED && to == OrderStatus.CONFIRMED)
+        return (from == OrderStatus.PENDING_PAYMENT && to == OrderStatus.CONFIRMED)
+                || (from == OrderStatus.PENDING_PAYMENT && to == OrderStatus.CANCELLED)
+                || (from == OrderStatus.PLACED && to == OrderStatus.CONFIRMED)
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.OUT_FOR_DELIVERY)
