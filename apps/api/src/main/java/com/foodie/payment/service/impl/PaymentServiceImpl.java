@@ -121,7 +121,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.customerId().equals(customerId)) {
             throw new ResourceNotFoundException("Order not found.");
         }
-        if (order.status() != OrderStatus.PLACED) {
+        if (order.status() != OrderStatus.PLACED && order.status() != OrderStatus.PENDING_PAYMENT) {
             throw new UnprocessableEntityException(
                     ErrorCode.ORDER_NOT_PAYABLE, "Order is not payable in its current status.");
         }
