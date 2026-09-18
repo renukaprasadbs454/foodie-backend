@@ -2,7 +2,7 @@ server:
   address: 0.0.0.0
 spring:
   datasource:
-    url: ${DB_URL:jdbc:h2:file:./data/foodie-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE;INIT=ALTER TABLE IF EXISTS "restaurant" ADD COLUMN IF NOT EXISTS "is_open" BOOLEAN DEFAULT TRUE\;UPDATE "restaurant" SET "is_open" = TRUE WHERE "is_open" IS NULL\;ALTER TABLE IF EXISTS "delivery_partner" ADD COLUMN IF NOT EXISTS "cash_in_hand" NUMERIC(10,2) DEFAULT 0\;ALTER TABLE IF EXISTS "delivery_partner" ADD COLUMN IF NOT EXISTS "max_cash_in_hand_limit" NUMERIC(10,2) DEFAULT 1500}
+    url: ${DB_URL:jdbc:h2:file:./data/foodie-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE;INIT=CREATE DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE\;CREATE DOMAIN IF NOT EXISTS JSONB AS JSON}
     username: ${DB_USER:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
@@ -22,10 +22,12 @@ spring:
       timeout: 2s
   jpa:
     show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
         globally_quoted_identifiers: true
         type:
           preferred_enum_jdbc_type: VARCHAR
