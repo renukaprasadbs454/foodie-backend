@@ -177,9 +177,14 @@ public class RestaurantSettlementServiceImpl implements RestaurantSettlementServ
     }
 
     private RestaurantSettlementResponseDto toDto(RestaurantSettlement s) {
+        String resName = restaurantRepository.findById(s.getRestaurantId())
+                .map(Restaurant::getName)
+                .orElse("Unknown Restaurant");
+
         return new RestaurantSettlementResponseDto(
                 s.getId(),
                 s.getRestaurantId(),
+                resName,
                 s.getSettlementNumber(),
                 s.getSettlementPeriodStart(),
                 s.getSettlementPeriodEnd(),
