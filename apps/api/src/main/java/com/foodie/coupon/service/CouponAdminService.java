@@ -8,7 +8,8 @@ import java.util.UUID;
 
 /**
  * Admin-facing coupon mutations (API Contracts MODULE 13.4 / 13.5).
- * Audit_log writes are owned by the Admin module and deferred until that module lands.
+ * Audit_log writes are owned by the Admin module and deferred until that module
+ * lands.
  */
 public interface CouponAdminService {
     List<CouponResponseDto> listAll();
@@ -18,6 +19,10 @@ public interface CouponAdminService {
     DeactivateCouponResponseDto deactivate(UUID couponId);
 
     DeactivateCouponResponseDto activate(UUID couponId);
+
+    CouponResponseDto approve(UUID couponId);
+
+    CouponResponseDto reject(UUID couponId);
 
     boolean delete(UUID couponId);
 }

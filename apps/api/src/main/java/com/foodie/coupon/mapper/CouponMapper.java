@@ -44,6 +44,7 @@ public final class CouponMapper {
                 coupon.getFunderType() != null ? coupon.getFunderType().name() : null,
                 coupon.getCouponType() != null ? coupon.getCouponType().name() : null,
                 coupon.getBenefitMode() != null ? coupon.getBenefitMode().name() : null,
+                coupon.getApprovalStatus() != null ? coupon.getApprovalStatus().name() : null,
                 coupon.getValue(),
                 coupon.getMinOrderAmount(),
                 coupon.getMaxDiscountAmount(),

@@ -11,6 +11,7 @@ public record CouponResponseDto(
                 String funderType,
                 String couponType,
                 String benefitMode,
+                String approvalStatus,
                 BigDecimal value,
                 BigDecimal minOrderAmount,
                 BigDecimal maxDiscountAmount,

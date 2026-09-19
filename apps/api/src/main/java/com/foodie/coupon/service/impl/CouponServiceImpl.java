@@ -148,29 +148,47 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     @Override
     @Transactional
     public CouponResponseDto create(CreateCouponRequestDto request) {
-        validateCreateRules(request);
-        if (request.getRestaurantId() != null) {
-            requireRestaurant(request.getRestaurantId());
+        return createCouponWithStatus(request, Coupon.ApprovalStatus.APPROVED);
+    }
+
+    public CouponResponseDto createForRestaurant(CreateCouponRequestDto request, UUID restaurantCredentialId) {
+        // Enforce the restaurant's own UUID based on their credential
+        UUID restId = restaurantSummaryProvider.findByOwnerUserCredentialId(restaurantCredentialId)
+                .map(com.foodie.shared.contract.RestaurantSummaryProvider.RestaurantSummary::restaurantId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException(
+                        com.foodie.common.exception.ErrorCode.RESTAURANT_NOT_FOUND, "Restaurant null"));
+
+        request.setRestaurantId(restId);
+        return createCouponWithStatus(request, Coupon.ApprovalStatus.PENDING);
+    }
+
+    private CouponResponseDto createCouponWithStatus(CreateCouponRequestDto request,
+            Coupon.ApprovalStatus approvalStatus) {
+        if (request.getDiscountType() == DiscountType.PERCENT && request.getMaxDiscountAmount() == null) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.MAX_DISCOUNT_REQUIRED_FOR_PERCENT,
+                    "maxDiscountAmount is required when discountType is PERCENT");
         }
-        String code = request.getCode().trim().toUpperCase(Locale.ROOT);
-        if (couponRepository.existsByCode(code)) {
-            throw new ConflictException(
-                    ErrorCode.COUPON_CODE_ALREADY_EXISTS,
-                    "Coupon code already exists.");
+        if (couponRepository.existsByCode(request.getCode().toUpperCase())) {
+            throw new ConflictException(ErrorCode.COUPON_CODE_ALREADY_EXISTS, "Coupon code already exists");
         }
-        Instant expiry = endOfDayUtc(request.getExpiryDate());
+
+        String code = request.getCode().toUpperCase();
+        Instant expiry = request.getExpiryDate().atTime(23, 59, 59).toInstant(java.time.ZoneOffset.UTC);
+
         Coupon coupon = Coupon.create(
                 code,
                 request.getDiscountType(),
                 request.getFunderType(),
                 request.getCouponType(),
                 request.getBenefitMode(),
+                approvalStatus,
                 CouponMapper.scaleMoney(request.getValue()),
                 CouponMapper.scaleMoney(request.getMinOrderAmount()),
                 request.getMaxDiscountAmount() == null
                         ? null
                         : CouponMapper.scaleMoney(request.getMaxDiscountAmount()),
-                request.getExpiryDate().atTime(23, 59, 59).toInstant(java.time.ZoneOffset.UTC),
+                expiry,
                 request.getUsageLimitTotal(),
                 request.getUsageLimitPerUser(),
                 request.getRestaurantId());
@@ -214,6 +232,24 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         return true;
     }
 
+    @Override
+    @Transactional
+    public CouponResponseDto approve(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.setApprovalStatus(Coupon.ApprovalStatus.APPROVED);
+        return CouponMapper.toResponse(couponRepository.save(coupon));
+    }
+
+    @Override
+    @Transactional
+    public CouponResponseDto reject(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.setApprovalStatus(Coupon.ApprovalStatus.REJECTED);
+        return CouponMapper.toResponse(couponRepository.save(coupon));
+    }
+
     private void assertEligible(
             Coupon coupon,
             UUID customerId,
@@ -223,6 +259,10 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         if (!coupon.isActive()) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_INVALID, "Coupon is not active.");
+        }
+        if (coupon.getApprovalStatus() != Coupon.ApprovalStatus.APPROVED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.COUPON_INVALID, "Coupon is not approved.");
         }
         if (coupon.isExpired(now)) {
             throw new UnprocessableEntityException(

@@ -212,6 +212,36 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public CouponResponseDto approveCoupon(UUID actorCredentialId, UUID couponId) {
+        AdminUser admin = requirePermission(actorCredentialId, "COUPON", "CREATE");
+        CouponResponseDto after = couponAdminService.approve(couponId);
+        adminService.recordAudit(
+                admin.getId(),
+                "APPROVE_COUPON",
+                "COUPON",
+                couponId,
+                Map.of("approvalStatus", "PENDING"),
+                Map.of("approvalStatus", "APPROVED"));
+        return after;
+    }
+
+    @Override
+    @Transactional
+    public CouponResponseDto rejectCoupon(UUID actorCredentialId, UUID couponId) {
+        AdminUser admin = requirePermission(actorCredentialId, "COUPON", "CREATE");
+        CouponResponseDto after = couponAdminService.reject(couponId);
+        adminService.recordAudit(
+                admin.getId(),
+                "REJECT_COUPON",
+                "COUPON",
+                couponId,
+                Map.of("approvalStatus", "PENDING"),
+                Map.of("approvalStatus", "REJECTED"));
+        return after;
+    }
+
+    @Override
+    @Transactional
     public boolean deleteCoupon(UUID actorCredentialId, UUID couponId) {
         AdminUser admin = requirePermission(actorCredentialId, "COUPON", "DELETE");
         boolean success = couponAdminService.delete(couponId);

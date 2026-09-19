@@ -11,19 +11,19 @@ import org.springframework.data.repository.query.Param;
 
 public interface CouponRepository extends JpaRepository<Coupon, UUID> {
 
-    Optional<Coupon> findByCode(String code);
+        Optional<Coupon> findByCode(String code);
 
-    boolean existsByCode(String code);
+        boolean existsByCode(String code);
 
-    @Query("""
-            SELECT c FROM Coupon c
-            WHERE c.active = true
-              AND c.expiryDate > :now
-              AND (c.restaurantId IS NULL OR c.restaurantId = :restaurantId)
-            ORDER BY c.code ASC
-            """)
-    List<Coupon> findEligibleCandidates(
-            @Param("restaurantId") UUID restaurantId,
-            @Param("now") Instant now
-    );
+        @Query("""
+                        SELECT c FROM Coupon c
+                        WHERE c.active = true
+                          AND c.approvalStatus = 'APPROVED'
+                          AND c.expiryDate > :now
+                          AND (c.restaurantId IS NULL OR c.restaurantId = :restaurantId)
+                        ORDER BY c.code ASC
+                        """)
+        List<Coupon> findEligibleCandidates(
+                        @Param("restaurantId") UUID restaurantId,
+                        @Param("now") Instant now);
 }

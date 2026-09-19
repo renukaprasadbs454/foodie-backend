@@ -36,9 +36,17 @@ public class Coupon extends BaseEntity {
         FLAT, PERCENTAGE, FREE_ITEM, COMBO, CONDITIONAL
     }
 
+    public enum ApprovalStatus {
+        PENDING, APPROVED, REJECTED
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(name = "funder_type", length = 30)
     private FunderType funderType = FunderType.FOODIE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", length = 30)
+    private ApprovalStatus approvalStatus = ApprovalStatus.APPROVED;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "coupon_type", length = 30)
@@ -91,6 +99,7 @@ public class Coupon extends BaseEntity {
             String funderTypeStr,
             String couponTypeStr,
             String benefitModeStr,
+            Coupon.ApprovalStatus approvalStatus,
             BigDecimal value,
             BigDecimal minOrderAmount,
             BigDecimal maxDiscountAmount,
@@ -103,22 +112,16 @@ public class Coupon extends BaseEntity {
         coupon.discountType = discountType;
 
         if (funderTypeStr != null && !funderTypeStr.isBlank()) {
-            try {
-                coupon.funderType = FunderType.valueOf(funderTypeStr);
-            } catch (Exception e) {
-            }
+            try { coupon.funderType = FunderType.valueOf(funderTypeStr); } catch (Exception e) {}
         }
         if (couponTypeStr != null && !couponTypeStr.isBlank()) {
-            try {
-                coupon.couponType = CouponType.valueOf(couponTypeStr);
-            } catch (Exception e) {
-            }
+            try { coupon.couponType = CouponType.valueOf(couponTypeStr); } catch (Exception e) {}
         }
         if (benefitModeStr != null && !benefitModeStr.isBlank()) {
-            try {
-                coupon.benefitMode = BenefitMode.valueOf(benefitModeStr);
-            } catch (Exception e) {
-            }
+            try { coupon.benefitMode = BenefitMode.valueOf(benefitModeStr); } catch (Exception e) {}
+        }
+        if (approvalStatus != null) {
+            coupon.approvalStatus = approvalStatus;
         }
 
         coupon.value = value;
@@ -173,13 +176,11 @@ public class Coupon extends BaseEntity {
         this.couponType = type;
     }
 
-    public BenefitMode getBenefitMode() {
-        return benefitMode;
-    }
+    public BenefitMode getBenefitMode() { return benefitMode; }
+    public void setBenefitMode(BenefitMode benefitMode) { this.benefitMode = benefitMode; }
 
-    public void setBenefitMode(BenefitMode benefitMode) {
-        this.benefitMode = benefitMode;
-    }
+    public ApprovalStatus getApprovalStatus() { return approvalStatus; }
+    public void setApprovalStatus(ApprovalStatus approvalStatus) { this.approvalStatus = approvalStatus; }
 
     public BigDecimal getValue() {
         return value;

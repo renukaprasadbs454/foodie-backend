@@ -19,6 +19,7 @@ class CouponDiscountMathTest {
                                 null,
                                 null,
                                 null,
+                                null,
                                 new BigDecimal("100.00"),
                                 BigDecimal.ZERO,
                                 null,
@@ -37,6 +38,7 @@ class CouponDiscountMathTest {
                 Coupon coupon = Coupon.create(
                                 "P10",
                                 DiscountType.PERCENT,
+                                null,
                                 null,
                                 null,
                                 null,
