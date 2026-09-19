@@ -26,7 +26,10 @@ public class PayoutEventListener {
         log.info("Handling PayoutRequestedEvent payoutId={} partnerId={} amount={}",
                 event.payoutId(), event.deliveryPartnerId(), event.amount());
         try {
-            payoutProcessingService.processPayout(event.payoutId(), null);
+            // payoutProcessingService.processPayout(event.payoutId(), null);
+            // Auto-processing removed. Payouts now stay in REQUESTED state
+            // and must be manually approved via the Admin Panel.
+            log.info("Payout {} registered and awaiting admin approval.", event.payoutId());
         } catch (Exception ex) {
             log.error("Failed to process payout {} asynchronously", event.payoutId(), ex);
         }
