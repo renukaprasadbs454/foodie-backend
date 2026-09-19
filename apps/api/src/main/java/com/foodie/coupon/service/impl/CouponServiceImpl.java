@@ -156,7 +156,7 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         UUID restId = restaurantSummaryProvider.findByOwnerUserCredentialId(restaurantCredentialId)
                 .map(com.foodie.shared.contract.RestaurantSummaryProvider.RestaurantSummary::restaurantId)
                 .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException(
-                        com.foodie.common.exception.ErrorCode.RESTAURANT_NOT_FOUND, "Restaurant null"));
+                        com.foodie.common.exception.ErrorCode.RESOURCE_NOT_FOUND, "Restaurant null"));
 
         request.setRestaurantId(restId);
         return createCouponWithStatus(request, Coupon.ApprovalStatus.PENDING);
