@@ -7,11 +7,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record LedgerEntryResponseDto(
-        UUID ledgerEntryId,
-        LedgerEntryType entryType,
-        BigDecimal amount,
-        LedgerReferenceType referenceType,
-        UUID referenceId,
-        Instant createdAt
-) {
+                UUID ledgerEntryId,
+                LedgerEntryType entryType,
+                BigDecimal amount,
+                LedgerReferenceType referenceType,
+                UUID referenceId,
+                String status,
+                Instant createdAt) {
 }

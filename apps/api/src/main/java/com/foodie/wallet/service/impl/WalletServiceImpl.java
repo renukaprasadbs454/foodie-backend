@@ -145,7 +145,7 @@ public class WalletServiceImpl implements WalletService {
         }
 
         List<LedgerEntryResponseDto> items = result.getContent().stream()
-                .map(WalletMapper::toLedger)
+                .map(e -> WalletMapper.toLedger(e, null))
                 .toList();
         PaginationMeta meta = new PaginationMeta(
                 result.getNumber(),
@@ -211,7 +211,7 @@ public class WalletServiceImpl implements WalletService {
         var existing = ledgerEntryRepository.findByReferenceTypeAndReferenceId(referenceType, referenceId);
         if (existing.isPresent()) {
             log.info("Idempotent credit skip: {} / {}", referenceType, referenceId);
-            return WalletMapper.toLedger(existing.get());
+            return WalletMapper.toLedger(existing.get(), null);
         }
 
         WalletAccount account = getOrCreateForUpdate(ownerType, ownerId);
@@ -223,7 +223,7 @@ public class WalletServiceImpl implements WalletService {
         } catch (DataIntegrityViolationException ex) {
             return WalletMapper.toLedger(ledgerEntryRepository
                     .findByReferenceTypeAndReferenceId(referenceType, referenceId)
-                    .orElseThrow(() -> ex));
+                    .orElseThrow(() -> ex), null);
         }
         account.applyCredit(scaled);
         walletAccountRepository.save(account);
@@ -236,7 +236,7 @@ public class WalletServiceImpl implements WalletService {
                 referenceType,
                 referenceId,
                 entry.getId()));
-        return WalletMapper.toLedger(entry);
+        return WalletMapper.toLedger(entry, null);
     }
 
     @Override
@@ -253,7 +253,7 @@ public class WalletServiceImpl implements WalletService {
         var existing = ledgerEntryRepository.findByReferenceTypeAndReferenceId(referenceType, referenceId);
         if (existing.isPresent()) {
             log.info("Idempotent debit skip: {} / {}", referenceType, referenceId);
-            return WalletMapper.toLedger(existing.get());
+            return WalletMapper.toLedger(existing.get(), null);
         }
 
         WalletAccount account = getOrCreateForUpdate(ownerType, ownerId);
@@ -277,7 +277,7 @@ public class WalletServiceImpl implements WalletService {
                 referenceType,
                 referenceId,
                 entry.getId()));
-        return WalletMapper.toLedger(entry);
+        return WalletMapper.toLedger(entry, null);
     }
 
     @Override
@@ -307,7 +307,15 @@ public class WalletServiceImpl implements WalletService {
         Page<LedgerEntry> result = ledgerEntryRepository.findHistory(
                 account.getId(), createdAtFrom, createdAtTo, pageable);
         List<LedgerEntryResponseDto> items = result.getContent().stream()
-                .map(WalletMapper::toLedger)
+                .map(e -> {
+                    String status = null;
+                    if (e.getReferenceType() == com.foodie.common.enums.LedgerReferenceType.PAYOUT) {
+                        status = payoutRepository.findById(e.getReferenceId())
+                                .map(p -> p.getStatus().name())
+                                .orElse(null);
+                    }
+                    return WalletMapper.toLedger(e, status);
+                })
                 .toList();
         PaginationMeta meta = new PaginationMeta(
                 result.getNumber(),
@@ -358,9 +366,10 @@ public class WalletServiceImpl implements WalletService {
                     "Requested payout exceeds available wallet balance.");
         }
 
-        Payout payout = payoutRepository.saveAndFlush(Payout.request(account.getId(), amount, request.accountHolderName(),
-                request.accountNumber(), request.ifscCode(), request.bankName()));
-        
+        Payout payout = payoutRepository
+                .saveAndFlush(Payout.request(account.getId(), amount, request.accountHolderName(),
+                        request.accountNumber(), request.ifscCode(), request.bankName()));
+
         ledgerEntryRepository.save(com.foodie.wallet.entity.LedgerEntry.debit(
                 account.getId(), amount, com.foodie.common.enums.LedgerReferenceType.PAYOUT, payout.getId()));
 
