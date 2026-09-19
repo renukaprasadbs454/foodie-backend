@@ -6,7 +6,10 @@ import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
 import com.foodie.admin.service.AdminPaymentService;
 import com.foodie.wallet.repository.PayoutRepository;
 import com.foodie.wallet.entity.Payout;
+import com.foodie.admin.dto.request.BulkApprovePayoutsRequestDto;
 import com.foodie.common.dto.ApiResponse;
+import com.foodie.common.enums.OwnerType;
+import com.foodie.payout.service.PayoutProcessingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -29,14 +32,17 @@ public class AdminPaymentController {
     private final AdminPaymentService adminPaymentService;
     private final com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService;
     private final PayoutRepository payoutRepository;
+    private final PayoutProcessingService payoutProcessingService;
 
     public AdminPaymentController(
             AdminPaymentService adminPaymentService,
             com.foodie.restaurant.service.RestaurantSettlementService restaurantSettlementService,
-            PayoutRepository payoutRepository) {
+            PayoutRepository payoutRepository,
+            PayoutProcessingService payoutProcessingService) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
         this.payoutRepository = payoutRepository;
+        this.payoutProcessingService = payoutProcessingService;
     }
 
     @GetMapping("/settlements")
@@ -67,9 +73,25 @@ public class AdminPaymentController {
 
     @GetMapping("/payouts")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
-    @Operation(summary = "List all payouts for vendors and delivery partners")
-    public ResponseEntity<ApiResponse<List<Payout>>> listPayouts() {
+    @Operation(summary = "List payouts optionally filtered by partner type")
+    public ResponseEntity<ApiResponse<List<Payout>>> listPayouts(
+            @RequestParam(required = false) OwnerType ownerType) {
+        if (ownerType != null) {
+            return ResponseEntity.ok(ApiResponse.success(payoutRepository.findByOwnerType(ownerType)));
+        }
         return ResponseEntity.ok(ApiResponse.success(payoutRepository.findAll()));
+    }
+
+    @PostMapping("/payouts/approve")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Bulk approve payouts and automatically disburse using active provider")
+    public ResponseEntity<ApiResponse<String>> approvePayouts(
+            @Valid @RequestBody BulkApprovePayoutsRequestDto request) {
+        for (java.util.UUID payoutId : request.payoutIds()) {
+            payoutProcessingService.processPayout(payoutId, java.util.UUID.randomUUID().toString());
+        }
+        return ResponseEntity
+                .ok(ApiResponse.success("Approved and processing " + request.payoutIds().size() + " payouts."));
     }
 
     @GetMapping("/commission-rules")
