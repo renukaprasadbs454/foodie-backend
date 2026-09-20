@@ -16,13 +16,14 @@ public final class WalletMapper {
         return new WalletBalanceResponseDto(account.getId(), account.getBalance());
     }
 
-    public static LedgerEntryResponseDto toLedger(LedgerEntry entry) {
+    public static LedgerEntryResponseDto toLedger(LedgerEntry entry, String status) {
         return new LedgerEntryResponseDto(
                 entry.getId(),
                 entry.getEntryType(),
                 entry.getAmount(),
                 entry.getReferenceType(),
                 entry.getReferenceId(),
+                status,
                 entry.getCreatedAt());
     }
 

@@ -36,61 +36,82 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Admin — Coupon")
 public class AdminCouponController {
 
-    private final AdminOperationsService adminOperationsService;
-    private final CouponRepository couponRepository;
+        private final AdminOperationsService adminOperationsService;
+        private final CouponRepository couponRepository;
 
-    public AdminCouponController(AdminOperationsService adminOperationsService, CouponRepository couponRepository) {
-        this.adminOperationsService = adminOperationsService;
-        this.couponRepository = couponRepository;
-    }
+        public AdminCouponController(AdminOperationsService adminOperationsService, CouponRepository couponRepository) {
+                this.adminOperationsService = adminOperationsService;
+                this.couponRepository = couponRepository;
+        }
 
-    @GetMapping
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Get all coupons")
-    public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons() {
-        return ResponseEntity.ok(ApiResponse.success(
-                couponRepository.findAll().stream()
-                        .map(CouponMapper::toResponse)
-                        .collect(Collectors.toList())));
-    }
+        @GetMapping
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Get all coupons")
+        public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons() {
+                return ResponseEntity.ok(ApiResponse.success(
+                                couponRepository.findAll().stream()
+                                                .map(CouponMapper::toResponse)
+                                                .collect(Collectors.toList())));
+        }
 
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Create a coupon")
-    public ResponseEntity<ApiResponse<CouponResponseDto>> create(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @Valid @RequestBody CreateCouponRequestDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(adminOperationsService.createCoupon(principal.userId(), request)));
-    }
+        @PostMapping
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Create a coupon")
+        public ResponseEntity<ApiResponse<CouponResponseDto>> create(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @Valid @RequestBody CreateCouponRequestDto request) {
+                return ResponseEntity.status(HttpStatus.CREATED)
+                                .body(ApiResponse.success(
+                                                adminOperationsService.createCoupon(principal.userId(), request)));
+        }
 
-    @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Deactivate a coupon")
-    public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> deactivate(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable("id") UUID couponId) {
-        return ResponseEntity.ok(ApiResponse.success(
-                adminOperationsService.deactivateCoupon(principal.userId(), couponId)));
-    }
+        @PatchMapping("/{id}/deactivate")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Deactivate a coupon")
+        public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> deactivate(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable("id") UUID couponId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                adminOperationsService.deactivateCoupon(principal.userId(), couponId)));
+        }
 
-    @PatchMapping("/{id}/activate")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Activate a coupon")
-    public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> activate(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable("id") UUID couponId) {
-        return ResponseEntity.ok(ApiResponse.success(
-                adminOperationsService.activateCoupon(principal.userId(), couponId)));
-    }
+        @PatchMapping("/{id}/activate")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Activate a coupon")
+        public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> activate(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable("id") UUID couponId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                adminOperationsService.activateCoupon(principal.userId(), couponId)));
+        }
 
-    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN', 'OPS', 'FINANCE')")
-    @Operation(summary = "Delete a coupon permanently")
-    public ResponseEntity<ApiResponse<Boolean>> deleteCoupon(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable("id") UUID couponId) {
-        return ResponseEntity.ok(ApiResponse.success(
-                adminOperationsService.deleteCoupon(principal.userId(), couponId)));
-    }
+        @PatchMapping("/{id}/approve")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Approve a pending restaurant campaign")
+        public ResponseEntity<ApiResponse<CouponResponseDto>> approve(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable("id") UUID couponId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                adminOperationsService.approveCoupon(principal.userId(), couponId)));
+        }
+
+        @PatchMapping("/{id}/reject")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+        @Operation(summary = "Reject a pending restaurant campaign")
+        public ResponseEntity<ApiResponse<CouponResponseDto>> reject(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable("id") UUID couponId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                adminOperationsService.rejectCoupon(principal.userId(), couponId)));
+        }
+
+        @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+        @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN', 'OPS', 'FINANCE')")
+        @Operation(summary = "Delete a coupon permanently")
+        public ResponseEntity<ApiResponse<Boolean>> deleteCoupon(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable("id") UUID couponId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                adminOperationsService.deleteCoupon(principal.userId(), couponId)));
+        }
 }

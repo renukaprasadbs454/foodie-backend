@@ -39,8 +39,6 @@ public class CashfreePayoutProvider implements PayoutProvider {
         this.objectMapper = objectMapper;
         this.restClient = RestClient.builder()
                 .baseUrl(properties.getCashfree().getApiBaseUrl())
-                .defaultHeader("X-Client-Id", properties.getCashfree().getClientId())
-                .defaultHeader("X-Client-Secret", properties.getCashfree().getClientSecret())
                 .build();
     }
 
@@ -105,8 +103,7 @@ public class CashfreePayoutProvider implements PayoutProvider {
             String expected = sb.toString();
             return MessageDigest.isEqual(
                     expected.getBytes(StandardCharsets.UTF_8),
-                    signature.trim().getBytes(StandardCharsets.UTF_8)
-            );
+                    signature.trim().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
             log.error("Error computing Cashfree webhook HMAC signature", ex);
             return false;
@@ -114,7 +111,8 @@ public class CashfreePayoutProvider implements PayoutProvider {
     }
 
     private PayoutExecutionResult executeLivePayout(Payout payout, String idempotencyKey) {
-        String idStr = payout.getId() != null ? payout.getId().toString().replace("-", "") : UUID.randomUUID().toString().replace("-", "");
+        String idStr = payout.getId() != null ? payout.getId().toString().replace("-", "")
+                : UUID.randomUUID().toString().replace("-", "");
         String transferId = "CF_" + (idStr.length() >= 16 ? idStr.substring(0, 16) : idStr);
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -124,14 +122,38 @@ public class CashfreePayoutProvider implements PayoutProvider {
         body.put("remarks", "Delivery partner payout " + (payout.getId() != null ? payout.getId() : ""));
 
         Map<String, Object> beneDetails = new LinkedHashMap<>();
-        beneDetails.put("name", payout.getAccountHolderName() != null ? payout.getAccountHolderName() : "Delivery Partner");
+        beneDetails.put("beneId", "BENE_" + idStr.substring(0, 8));
+        beneDetails.put("name",
+                payout.getAccountHolderName() != null && !payout.getAccountHolderName().isBlank()
+                        ? payout.getAccountHolderName()
+                        : "Partner");
+        beneDetails.put("email", "partner@foodie.com");
+        beneDetails.put("phone", "9999999999");
         beneDetails.put("bankAccount", payout.getAccountNumber() != null ? payout.getAccountNumber() : "");
         beneDetails.put("ifsc", payout.getIfscCode() != null ? payout.getIfscCode() : "");
+        beneDetails.put("address1", "NA");
         body.put("beneDetails", beneDetails);
 
         try {
+            // 1. Get Auth Token
+            String authResponse = restClient.post()
+                    .uri("/authorize")
+                    .header("X-Client-Id", properties.getCashfree().getClientId())
+                    .header("X-Client-Secret", properties.getCashfree().getClientSecret())
+                    .retrieve()
+                    .body(String.class);
+
+            JsonNode authRoot = objectMapper.readTree(authResponse == null ? "{}" : authResponse);
+            if (!"SUCCESS".equalsIgnoreCase(authRoot.path("status").asText())) {
+                return PayoutExecutionResult.failed(null, "AUTH_ERROR",
+                        authRoot.path("message").asText("Failed to authorize with Cashfree"));
+            }
+            String token = authRoot.path("data").path("token").asText();
+
+            // 2. Request Transfer
             String json = restClient.post()
-                    .uri("/directTransfer")
+                    .uri("/requestAsyncTransfer")
+                    .header("Authorization", "Bearer " + token)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -148,12 +170,14 @@ public class CashfreePayoutProvider implements PayoutProvider {
             String message = root.path("message").asText("");
 
             if ("ERROR".equalsIgnoreCase(apiStatus) || !"200".equals(subCode)) {
-                return PayoutExecutionResult.failed(providerPayoutId, rawStatus, message.isBlank() ? "Cashfree payout rejected" : message);
+                return PayoutExecutionResult.failed(providerPayoutId, rawStatus,
+                        message.isBlank() ? "Cashfree payout rejected" : message);
             }
 
             PayoutStatus mappedStatus = mapCashfreeStatus(rawStatus);
             if (mappedStatus == PayoutStatus.FAILED) {
-                return PayoutExecutionResult.failed(providerPayoutId, rawStatus, message.isBlank() ? "Cashfree transfer failed" : message);
+                return PayoutExecutionResult.failed(providerPayoutId, rawStatus,
+                        message.isBlank() ? "Cashfree transfer failed" : message);
             }
             if (mappedStatus == PayoutStatus.COMPLETED) {
                 return PayoutExecutionResult.completed(providerPayoutId, providerReference, rawStatus);
@@ -161,7 +185,7 @@ public class CashfreePayoutProvider implements PayoutProvider {
             return PayoutExecutionResult.processing(providerPayoutId, providerReference, rawStatus);
         } catch (RestClientResponseException ex) {
             int statusCode = ex.getStatusCode().value();
-            log.error("Cashfree HTTP {} on /directTransfer: {}", statusCode, ex.getResponseBodyAsString());
+            log.error("Cashfree HTTP {} on payout transfer: {}", statusCode, ex.getResponseBodyAsString());
             if (statusCode >= 500 || statusCode == 408 || statusCode == 429) {
                 throw new ExternalServiceException("Cashfree payout service unavailable (" + statusCode + ")");
             }
@@ -181,7 +205,8 @@ public class CashfreePayoutProvider implements PayoutProvider {
     }
 
     private PayoutExecutionResult executeStubPayout(Payout payout, String idempotencyKey) {
-        String idStr = payout.getId() != null ? payout.getId().toString().replace("-", "") : UUID.randomUUID().toString().replace("-", "");
+        String idStr = payout.getId() != null ? payout.getId().toString().replace("-", "")
+                : UUID.randomUUID().toString().replace("-", "");
         String providerPayoutId = "CF_stub_" + (idStr.length() >= 16 ? idStr.substring(0, 16) : idStr);
         log.info("Stub Cashfree payout processed id={} amount={}", providerPayoutId, payout.getAmount());
         return PayoutExecutionResult.processing(providerPayoutId, "CF_REF_" + System.currentTimeMillis(), "PENDING");

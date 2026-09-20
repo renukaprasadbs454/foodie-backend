@@ -55,8 +55,7 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             CustomerSummaryProvider customerSummaryProvider,
             RestaurantSummaryProvider restaurantSummaryProvider,
             CouponEligibilityCache eligibilityCache,
-            com.foodie.order.repository.OrderRepository orderRepository
-    ) {
+            com.foodie.order.repository.OrderRepository orderRepository) {
         this.couponRepository = couponRepository;
         this.redemptionRepository = redemptionRepository;
         this.customerSummaryProvider = customerSummaryProvider;
@@ -104,16 +103,17 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         Coupon coupon = couponRepository.findById(couponId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         ErrorCode.COUPON_CODE_NOT_FOUND, "Coupon not found."));
-        // Order placement already re-validated eligibility; redemption only enforces usage caps
+        // Order placement already re-validated eligibility; redemption only enforces
+        // usage caps
         // so a slow payment cannot strand a legitimately placed discounted order.
         if (!isWithinUsageLimits(coupon, customerId)) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_USAGE_LIMIT_REACHED,
-                    "Coupon usage limit has been reached."
-            );
+                    "Coupon usage limit has been reached.");
         }
         redemptionRepository.save(CouponRedemption.record(couponId, customerId, orderId));
-        // Touch version for optimistic concurrency under concurrent redemptions (Phase3 §19.9).
+        // Touch version for optimistic concurrency under concurrent redemptions (Phase3
+        // §19.9).
         couponRepository.save(coupon);
         eligibilityCache.invalidate(couponId, customerId);
         log.info("Recorded coupon {} redemption for customer {} on order {}", couponId, customerId, orderId);
@@ -148,21 +148,41 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     @Override
     @Transactional
     public CouponResponseDto create(CreateCouponRequestDto request) {
-        validateCreateRules(request);
-        if (request.getRestaurantId() != null) {
-            requireRestaurant(request.getRestaurantId());
+        return createCouponWithStatus(request, Coupon.ApprovalStatus.APPROVED);
+    }
+
+    public CouponResponseDto createForRestaurant(CreateCouponRequestDto request, UUID restaurantCredentialId) {
+        // Enforce the restaurant's own UUID based on their credential
+        UUID restId = restaurantSummaryProvider.findByOwnerUserCredentialId(restaurantCredentialId)
+                .map(com.foodie.shared.contract.RestaurantSummaryProvider.RestaurantSummary::restaurantId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException(
+                        com.foodie.common.exception.ErrorCode.RESOURCE_NOT_FOUND, "Restaurant null"));
+
+        request.setRestaurantId(restId);
+        return createCouponWithStatus(request, Coupon.ApprovalStatus.PENDING);
+    }
+
+    private CouponResponseDto createCouponWithStatus(CreateCouponRequestDto request,
+            Coupon.ApprovalStatus approvalStatus) {
+        if (request.getDiscountType() == DiscountType.PERCENT && request.getMaxDiscountAmount() == null) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.MAX_DISCOUNT_REQUIRED_FOR_PERCENT,
+                    "maxDiscountAmount is required when discountType is PERCENT");
         }
-        String code = request.getCode().trim().toUpperCase(Locale.ROOT);
-        if (couponRepository.existsByCode(code)) {
-            throw new ConflictException(
-                    ErrorCode.COUPON_CODE_ALREADY_EXISTS,
-                    "Coupon code already exists."
-            );
+        if (couponRepository.existsByCode(request.getCode().toUpperCase())) {
+            throw new ConflictException(ErrorCode.COUPON_CODE_ALREADY_EXISTS, "Coupon code already exists");
         }
-        Instant expiry = endOfDayUtc(request.getExpiryDate());
+
+        String code = request.getCode().toUpperCase();
+        Instant expiry = request.getExpiryDate().atTime(23, 59, 59).toInstant(java.time.ZoneOffset.UTC);
+
         Coupon coupon = Coupon.create(
                 code,
                 request.getDiscountType(),
+                request.getFunderType(),
+                request.getCouponType(),
+                request.getBenefitMode(),
+                approvalStatus,
                 CouponMapper.scaleMoney(request.getValue()),
                 CouponMapper.scaleMoney(request.getMinOrderAmount()),
                 request.getMaxDiscountAmount() == null
@@ -171,15 +191,13 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                 expiry,
                 request.getUsageLimitTotal(),
                 request.getUsageLimitPerUser(),
-                request.getRestaurantId()
-        );
+                request.getRestaurantId());
         try {
             coupon = couponRepository.save(coupon);
         } catch (DataIntegrityViolationException ex) {
             throw new ConflictException(
                     ErrorCode.COUPON_CODE_ALREADY_EXISTS,
-                    "Coupon code already exists."
-            );
+                    "Coupon code already exists.");
         }
         return CouponMapper.toResponse(coupon);
     }
@@ -214,16 +232,37 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         return true;
     }
 
+    @Override
+    @Transactional
+    public CouponResponseDto approve(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.setApprovalStatus(Coupon.ApprovalStatus.APPROVED);
+        return CouponMapper.toResponse(couponRepository.save(coupon));
+    }
+
+    @Override
+    @Transactional
+    public CouponResponseDto reject(UUID couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found."));
+        coupon.setApprovalStatus(Coupon.ApprovalStatus.REJECTED);
+        return CouponMapper.toResponse(couponRepository.save(coupon));
+    }
+
     private void assertEligible(
             Coupon coupon,
             UUID customerId,
             UUID restaurantId,
             BigDecimal cartTotal,
-            Instant now
-    ) {
+            Instant now) {
         if (!coupon.isActive()) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_INVALID, "Coupon is not active.");
+        }
+        if (coupon.getApprovalStatus() != Coupon.ApprovalStatus.APPROVED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.COUPON_INVALID, "Coupon is not approved.");
         }
         if (coupon.isExpired(now)) {
             throw new UnprocessableEntityException(
@@ -234,14 +273,12 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                 && !coupon.getRestaurantId().equals(restaurantId)) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
-                    "Coupon is not applicable to this restaurant."
-            );
+                    "Coupon is not applicable to this restaurant.");
         }
         if (cartTotal != null && cartTotal.compareTo(coupon.getMinOrderAmount()) < 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_MIN_ORDER_NOT_MET,
-                    "Cart total does not meet the coupon minimum order amount."
-            );
+                    "Cart total does not meet the coupon minimum order amount.");
         }
         if (coupon.isFirstOrderOnly() && customerId != null) {
             long priorOrders = orderRepository.countByCustomerIdAndStatusIn(
@@ -249,15 +286,13 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             if (priorOrders > 0) {
                 throw new UnprocessableEntityException(
                         ErrorCode.FIRST_ORDER_ONLY_COUPON,
-                        "This coupon is valid for your first order only."
-                );
+                        "This coupon is valid for your first order only.");
             }
         }
         if (!isWithinUsageLimits(coupon, customerId)) {
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_USAGE_LIMIT_REACHED,
-                    "Coupon usage limit has been reached."
-            );
+                    "Coupon usage limit has been reached.");
         }
     }
 
@@ -268,12 +303,17 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             if (priorOrders > 0) {
                 return false;
             }
+            long perUser = redemptionRepository.countByCouponIdAndCustomerId(coupon.getId(), customerId);
+            if (perUser >= coupon.getUsageLimitPerUser()) {
+                return false;
+            }
         }
-        // Eligibility cache is write-through hint only; usage counts always come from PostgreSQL.
-        long perUser = redemptionRepository.countByCouponIdAndCustomerId(coupon.getId(), customerId);
-        if (perUser >= coupon.getUsageLimitPerUser()) {
-            return false;
-        }
+
+        // Eligibility cache is write-through hint only; usage counts always come from
+        // PostgreSQL.
+        // For non-first order coupons, infinite usage per user allows them to be reused
+        // until deactivated.
+
         if (coupon.getUsageLimitTotal() != null) {
             long total = redemptionRepository.countByCouponId(coupon.getId());
             if (total >= coupon.getUsageLimitTotal()) {
@@ -314,22 +354,19 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             if (request.getValue().compareTo(BigDecimal.valueOf(100)) > 0) {
                 throw new UnprocessableEntityException(
                         ErrorCode.INVALID_PERCENT_VALUE,
-                        "Percent discount value must be <= 100."
-                );
+                        "Percent discount value must be <= 100.");
             }
             if (request.getMaxDiscountAmount() == null
                     || request.getMaxDiscountAmount().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new UnprocessableEntityException(
                         ErrorCode.MAX_DISCOUNT_REQUIRED_FOR_PERCENT,
-                        "maxDiscountAmount is required and must be > 0 for PERCENT coupons."
-                );
+                        "maxDiscountAmount is required and must be > 0 for PERCENT coupons.");
             }
         }
         if (request.getUsageLimitTotal() != null && request.getUsageLimitTotal() <= 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.VALIDATION_FAILED,
-                    "usageLimitTotal must be > 0 when provided."
-            );
+                    "usageLimitTotal must be > 0 when provided.");
         }
     }
 

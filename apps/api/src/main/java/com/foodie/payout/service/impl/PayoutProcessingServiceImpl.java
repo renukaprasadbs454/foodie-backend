@@ -51,8 +51,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
             PayoutProviderRouter providerRouter,
             WebhookDedupService webhookDedupService,
             ObjectMapper objectMapper,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher) {
         this.payoutRepository = payoutRepository;
         this.walletAccountRepository = walletAccountRepository;
         this.walletService = walletService;
@@ -68,7 +67,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
         Payout payout = payoutRepository.findById(payoutId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
 
-        if (payout.getStatus() == PayoutStatus.COMPLETED || payout.getStatus() == PayoutStatus.FAILED) {
+        if (payout.getStatus() == PayoutStatus.COMPLETED) {
             log.info("Payout {} already in terminal status {}", payoutId, payout.getStatus());
             return new PayoutExecutionResult(
                     payout.getProviderPayoutId(),
@@ -76,12 +75,12 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                     payout.getProviderStatus(),
                     payout.getStatus(),
                     payout.getFailureReason(),
-                    payout.getStatus() == PayoutStatus.FAILED
-            );
+                    false);
         }
 
         PayoutProvider provider = providerRouter.getActiveProvider();
-        log.info("Sending payout {} amount {} to provider {}", payoutId, payout.getAmount(), provider.getProviderType());
+        log.info("Sending payout {} amount {} to provider {}", payoutId, payout.getAmount(),
+                provider.getProviderType());
 
         PayoutExecutionResult result = provider.executePayout(payout, idempotencyKey);
 
@@ -89,8 +88,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                 provider.getProviderType().name(),
                 result.providerPayoutId(),
                 result.providerReferenceId(),
-                result.providerStatus()
-        );
+                result.providerStatus());
 
         if (result.mappedStatus() == PayoutStatus.COMPLETED) {
             settleCompleted(payout, result.providerReferenceId(), result.providerStatus());
@@ -176,13 +174,15 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
         if (payout == null) {
             log.warn("Payout not found for Razorpay webhook: providerPayoutId={} notesPayoutId={}",
                     providerPayoutId, notesPayoutId);
-            if (eventId != null) webhookDedupService.markProcessed(eventId);
+            if (eventId != null)
+                webhookDedupService.markProcessed(eventId);
             return;
         }
 
         if (payout.getStatus() == PayoutStatus.COMPLETED || payout.getStatus() == PayoutStatus.FAILED) {
             log.info("Payout {} already in terminal state {}, ignoring webhook", payout.getId(), payout.getStatus());
-            if (eventId != null) webhookDedupService.markProcessed(eventId);
+            if (eventId != null)
+                webhookDedupService.markProcessed(eventId);
             return;
         }
 
@@ -190,7 +190,8 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
         if (mapped == PayoutStatus.COMPLETED) {
             settleCompleted(payout, utr, rawStatus);
         } else if (mapped == PayoutStatus.FAILED) {
-            settleFailed(payout, failureReason != null ? failureReason : "Razorpay payout failed (" + rawStatus + ")", rawStatus);
+            settleFailed(payout, failureReason != null ? failureReason : "Razorpay payout failed (" + rawStatus + ")",
+                    rawStatus);
         }
 
         if (eventId != null) {
@@ -216,13 +217,15 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
         Payout payout = findPayout(transferId, null);
         if (payout == null) {
             log.warn("Payout not found for Cashfree webhook: transferId={}", transferId);
-            if (eventId != null) webhookDedupService.markProcessed(eventId);
+            if (eventId != null)
+                webhookDedupService.markProcessed(eventId);
             return;
         }
 
         if (payout.getStatus() == PayoutStatus.COMPLETED || payout.getStatus() == PayoutStatus.FAILED) {
             log.info("Payout {} already in terminal state {}, ignoring webhook", payout.getId(), payout.getStatus());
-            if (eventId != null) webhookDedupService.markProcessed(eventId);
+            if (eventId != null)
+                webhookDedupService.markProcessed(eventId);
             return;
         }
 
@@ -230,7 +233,8 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
         if (mapped == PayoutStatus.COMPLETED) {
             settleCompleted(payout, referenceId, rawStatus);
         } else if (mapped == PayoutStatus.FAILED) {
-            settleFailed(payout, failureReason != null ? failureReason : "Cashfree payout failed (" + rawStatus + ")", rawStatus);
+            settleFailed(payout, failureReason != null ? failureReason : "Cashfree payout failed (" + rawStatus + ")",
+                    rawStatus);
         }
 
         if (eventId != null) {
@@ -268,8 +272,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                     account.getOwnerId(),
                     payout.getAmount(),
                     LedgerReferenceType.PAYOUT,
-                    payout.getId()
-            );
+                    payout.getId());
 
             eventPublisher.publishEvent(PayoutCompletedEvent.of(
                     payout.getId(),
@@ -278,8 +281,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                     payout.getAmount(),
                     payout.getProvider(),
                     payout.getProviderPayoutId(),
-                    referenceId
-            ));
+                    referenceId));
         }
     }
 
@@ -298,8 +300,7 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                     account.getOwnerId(),
                     payout.getAmount(),
                     payout.getProvider(),
-                    failureReason
-            ));
+                    failureReason));
         }
     }
 }

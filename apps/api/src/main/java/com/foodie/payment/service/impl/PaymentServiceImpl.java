@@ -282,11 +282,13 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         if (payment.getStatus() == PaymentStatus.PENDING || payment.getStatus() == PaymentStatus.FAILED) {
-            payment.markCaptured(cfOrderId != null ? cfOrderId : request.cashfreeOrderId());
-            paymentRepository.save(payment);
-            eventPublisher.publishEvent(PaymentCapturedEvent.of(
-                    payment.getOrderId(),
-                    payment.getId()));
+            int updated = paymentRepository.atomicMarkCaptured(payment.getId(),
+                    cfOrderId != null ? cfOrderId : request.cashfreeOrderId());
+            if (updated > 0) {
+                eventPublisher.publishEvent(PaymentCapturedEvent.of(
+                        payment.getOrderId(),
+                        payment.getId()));
+            }
         }
         return true;
     }
@@ -295,16 +297,17 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public void handleWebhook(String rawBody, String signatureHeader, String timestamp) {
         log.info("Received cashfree webhook payload");
-        
+
         if (cfSecretKey != null && !cfSecretKey.isBlank() && signatureHeader != null && timestamp != null) {
             try {
                 Mac mac = Mac.getInstance("HmacSHA256");
-                SecretKeySpec secretKeySpec = new SecretKeySpec(cfSecretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+                SecretKeySpec secretKeySpec = new SecretKeySpec(cfSecretKey.getBytes(StandardCharsets.UTF_8),
+                        "HmacSHA256");
                 mac.init(secretKeySpec);
                 String payload = timestamp + rawBody;
                 byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
                 String computedSignature = Base64.getEncoder().encodeToString(hash);
-                
+
                 if (!computedSignature.equals(signatureHeader)) {
                     log.error("Webhook signature mismatch. Expected: {}, Got: {}", computedSignature, signatureHeader);
                     return;
@@ -323,12 +326,14 @@ public class PaymentServiceImpl implements PaymentService {
                     || "PAYMENT_CAPTURED".equals(type) || "SUCCESS".equalsIgnoreCase(type)) {
                 onPaymentCaptured(root);
             } else if ("PAYMENT_FAILED_WEBHOOK".equalsIgnoreCase(type) || "payment.failed".equals(type)
-                    || "PAYMENT_FAILED".equals(type) || "PAYMENT_FAILED_DURING_AUTHORIZE".equalsIgnoreCase(type) || "FAILED".equalsIgnoreCase(type)) {
+                    || "PAYMENT_FAILED".equals(type) || "PAYMENT_FAILED_DURING_AUTHORIZE".equalsIgnoreCase(type)
+                    || "FAILED".equalsIgnoreCase(type)) {
                 onPaymentFailed(root);
             } else if ("REFUND_PROCESSED_WEBHOOK".equalsIgnoreCase(type) || "refund.processed".equals(type)
                     || "REFUND_PROCESSED".equals(type) || "REFUND".equalsIgnoreCase(type)) {
                 onRefundProcessed(root);
-            } else if ("PAYMENT_PENDING_WEBHOOK".equalsIgnoreCase(type) || "payment.pending".equals(type) || "PENDING".equalsIgnoreCase(type)) {
+            } else if ("PAYMENT_PENDING_WEBHOOK".equalsIgnoreCase(type) || "payment.pending".equals(type)
+                    || "PENDING".equalsIgnoreCase(type)) {
                 log.info("Payment pending webhook received: {}", type);
             } else {
                 log.info("Unhandled webhook type: {}", type);
@@ -377,15 +382,18 @@ public class PaymentServiceImpl implements PaymentService {
         if (Boolean.TRUE.equals(request.refundToWallet())) {
             OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(payment.getOrderId()).orElse(null);
             if (order != null) {
-                walletService.credit(OwnerType.CUSTOMER, order.customerId(), amount, LedgerReferenceType.REFUND, payment.getId());
-                RefundRequest refundRequest = RefundRequest.initiate(paymentId, amount, request.reason(), initiator, "WALLET_REFUND_" + UUID.randomUUID());
+                walletService.credit(OwnerType.CUSTOMER, order.customerId(), amount, LedgerReferenceType.REFUND,
+                        payment.getId());
+                RefundRequest refundRequest = RefundRequest.initiate(paymentId, amount, request.reason(), initiator,
+                        "WALLET_REFUND_" + UUID.randomUUID());
                 refundRequest.markProcessed();
                 refundRequestRepository.save(refundRequest);
                 payment.markRefunded();
                 paymentRepository.save(payment);
 
                 eventPublisher.publishEvent(RefundProcessedEvent.of(payment.getId(), refundRequest.getId(), amount));
-                log.info("Refund to WALLET PROCESSED refundRequestId={} paymentId={} customerId={}", refundRequest.getId(), payment.getId(), order.customerId());
+                log.info("Refund to WALLET PROCESSED refundRequestId={} paymentId={} customerId={}",
+                        refundRequest.getId(), payment.getId(), order.customerId());
                 return new RefundInitiationResponseDto(refundRequest.getId(), refundRequest.getStatus());
             }
         }
@@ -426,9 +434,11 @@ public class PaymentServiceImpl implements PaymentService {
             log.warn("payment.captured ignored for status={}", payment.getStatus());
             return;
         }
-        payment.markCaptured(cfOrderId);
-        eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
-        log.info("Payment CAPTURED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
+        int updated = paymentRepository.atomicMarkCaptured(payment.getId(), cfOrderId);
+        if (updated > 0) {
+            eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
+            log.info("Payment CAPTURED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
+        }
     }
 
     private void onPaymentFailed(JsonNode root) {
@@ -448,8 +458,10 @@ public class PaymentServiceImpl implements PaymentService {
         if (payment.getStatus() != PaymentStatus.PENDING) {
             return;
         }
-        payment.markFailed(cfOrderId);
-        paymentRepository.save(payment);
+        int updated = paymentRepository.atomicMarkFailed(payment.getId(), cfOrderId);
+        if (updated == 0) {
+            return;
+        }
 
         if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
             OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(payment.getOrderId()).orElse(null);
@@ -530,7 +542,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PaymentInitiationResponseDto initiateWalletTopup(UUID userCredentialId, BigDecimal amount, String idempotencyKey) {
+    public PaymentInitiationResponseDto initiateWalletTopup(UUID userCredentialId, BigDecimal amount,
+            String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "Idempotency-Key header is required.");
         }
@@ -546,7 +559,8 @@ public class PaymentServiceImpl implements PaymentService {
 
         UUID pseudoOrderId = UUID.randomUUID();
         String customerPhone = "9999999999";
-        var created = cashfreeClient.createOrder(topupAmount, customerId.toString(), customerPhone, pseudoOrderId.toString());
+        var created = cashfreeClient.createOrder(topupAmount, customerId.toString(), customerPhone,
+                pseudoOrderId.toString());
 
         Payment payment = paymentRepository.save(Payment.initiate(
                 pseudoOrderId, created.paymentSessionId(), topupAmount, BigDecimal.ZERO, idempotencyKey));
@@ -560,7 +574,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public boolean verifyWalletTopup(UUID userCredentialId, com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
+    public boolean verifyWalletTopup(UUID userCredentialId,
+            com.foodie.payment.dto.request.VerifyPaymentRequestDto request) {
         String cfOrderId = request.cashfreeOrderId();
         if (cfOrderId == null || cfOrderId.isBlank()) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "cashfreeOrderId is required.");
@@ -570,15 +585,17 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for top-up."));
 
         if (payment.getStatus() == PaymentStatus.PENDING) {
-            payment.markCaptured("CF_TOPUP_" + cfOrderId);
-            paymentRepository.save(payment);
+            int updated = paymentRepository.atomicMarkCaptured(payment.getId(), "CF_TOPUP_" + cfOrderId);
+            if (updated > 0) {
+                UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                        .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
 
-            UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
-                    .map(CustomerSummaryProvider.CustomerSummary::customerId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Customer profile not found."));
-
-            walletService.credit(OwnerType.CUSTOMER, customerId, payment.getAmount(), LedgerReferenceType.WALLET_TOPUP, payment.getId());
-            log.info("Wallet top-up CAPTURED paymentId={} amount={} customerId={}", payment.getId(), payment.getAmount(), customerId);
+                walletService.credit(OwnerType.CUSTOMER, customerId, payment.getAmount(),
+                        LedgerReferenceType.WALLET_TOPUP, payment.getId());
+                log.info("Wallet top-up CAPTURED paymentId={} amount={} customerId={}", payment.getId(),
+                        payment.getAmount(), customerId);
+            }
         }
         return true;
     }

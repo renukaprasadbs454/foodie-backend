@@ -293,6 +293,7 @@ class CouponServiceImplTest {
                 Coupon coupon = Coupon.create(
                                 code,
                                 DiscountType.FLAT,
+                                null, null, null, null,
                                 new BigDecimal(value),
                                 new BigDecimal(minOrder),
                                 null,
@@ -308,6 +309,10 @@ class CouponServiceImplTest {
                 Coupon coupon = Coupon.create(
                                 code,
                                 DiscountType.PERCENT,
+                                null,
+                                null,
+                                null,
+                                null,
                                 new BigDecimal(value),
                                 new BigDecimal(minOrder),
                                 new BigDecimal(maxDiscount),
