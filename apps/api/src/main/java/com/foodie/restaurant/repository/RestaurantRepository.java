@@ -18,6 +18,8 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
 
      java.util.List<Restaurant> findAllByStatus(com.foodie.common.enums.RestaurantStatus status);
 
+     java.util.List<Restaurant> findByTopPositionIsNotNull();
+
      @org.springframework.data.jpa.repository.Modifying
      @Query("UPDATE Restaurant r SET r.status = com.foodie.common.enums.RestaurantStatus.REJECTED WHERE LOWER(r.name) NOT LIKE '%royal%hotel%' AND LOWER(r.name) NOT LIKE '%ganesha%'")
      int rejectAllDummyRestaurants();
@@ -38,11 +40,13 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                + "      OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%'))"
                + "      OR EXISTS (SELECT 1 FROM MenuItem m WHERE m.restaurantId = r.id AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%'))))"
                + " AND (:minRating IS NULL OR r.avgRating >= :minRating)"
-               + " AND (:cuisineType IS NULL OR :cuisineType IS NOT NULL)")
+               + " AND (:cuisineType IS NULL OR :cuisineType IS NOT NULL)"
+               + " AND (:onlyTop = false OR r.topPosition IS NOT NULL)")
      Page<Restaurant> searchApproved(
                @Param("search") String search,
                @Param("cuisineType") String cuisineType,
                @Param("minRating") BigDecimal minRating,
+               @Param("onlyTop") boolean onlyTop,
                Pageable pageable);
 
      /**
@@ -58,12 +62,14 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                + "      OR EXISTS (SELECT 1 FROM MenuItem m WHERE m.restaurantId = r.id AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%'))))"
                + " AND (:minRating IS NULL OR r.avgRating >= :minRating)"
                + " AND (:cuisineType IS NULL OR :cuisineType IS NOT NULL)"
+               + " AND (:onlyTop = false OR r.topPosition IS NOT NULL)"
                + " AND (:lat IS NULL OR :lat IS NOT NULL)"
                + " AND (:lng IS NULL OR :lng IS NOT NULL)")
      Page<Restaurant> searchApprovedGeo(
                @Param("search") String search,
                @Param("cuisineType") String cuisineType,
                @Param("minRating") BigDecimal minRating,
+               @Param("onlyTop") boolean onlyTop,
                @Param("lat") Double lat,
                @Param("lng") Double lng,
                Pageable pageable);

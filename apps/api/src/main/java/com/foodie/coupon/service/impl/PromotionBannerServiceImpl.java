@@ -27,7 +27,7 @@ public class PromotionBannerServiceImpl implements PromotionBannerService {
     @Override
     @Transactional(readOnly = true)
     public List<PromotionBannerResponse> getActiveBanners() {
-        return bannerRepository.findActiveAndValidBanners()
+        return bannerRepository.findActiveAndValidBanners(java.time.Instant.now())
                 .stream()
                 .map(bannerMapper::toResponse)
                 .toList();

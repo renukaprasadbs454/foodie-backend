@@ -157,14 +157,16 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         Pageable pageable;
         Page<Restaurant> result;
+        boolean onlyTop = "topPosition".equalsIgnoreCase(sort);
+
         if (lat != null && lng != null) {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
             result = restaurantRepository.searchApprovedGeo(
-                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, lat, lng, pageable);
+                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, onlyTop, lat, lng, pageable);
         } else {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
             result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType),
-                    minRatingDecimal, pageable);
+                    minRatingDecimal, onlyTop, pageable);
         }
 
         List<RestaurantSummaryResponseDto> items = result.getContent().stream()
@@ -669,7 +671,12 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
-    public void updateTopPositions(List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions, UUID adminId) {
+    public void updateTopPositions(List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions,
+            UUID adminId) {
+        restaurantRepository.findByTopPositionIsNotNull().forEach(restaurant -> {
+            restaurant.setTopPosition(null);
+            restaurantRepository.save(restaurant);
+        });
         for (var pos : positions) {
             restaurantRepository.findById(pos.restaurantId()).ifPresent(restaurant -> {
                 restaurant.setTopPosition(pos.position());

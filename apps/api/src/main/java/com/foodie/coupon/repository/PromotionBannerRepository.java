@@ -11,8 +11,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface PromotionBannerRepository extends JpaRepository<PromotionBanner, UUID> {
 
-    @Query("SELECT b FROM PromotionBanner b WHERE b.status = 'ACTIVE' AND (b.startsAt IS NULL OR b.startsAt <= CURRENT_TIMESTAMP) AND (b.endsAt IS NULL OR b.endsAt >= CURRENT_TIMESTAMP) ORDER BY b.displayOrder ASC")
-    List<PromotionBanner> findActiveAndValidBanners();
+    @Query("SELECT b FROM PromotionBanner b WHERE b.status = 'ACTIVE' AND (b.startsAt IS NULL OR b.startsAt <= :now) AND (b.endsAt IS NULL OR b.endsAt >= :now) ORDER BY b.displayOrder ASC")
+    List<PromotionBanner> findActiveAndValidBanners(
+            @org.springframework.data.repository.query.Param("now") java.time.Instant now);
 
     @Query("SELECT b FROM PromotionBanner b ORDER BY b.displayOrder ASC, b.createdAt DESC")
     List<PromotionBanner> findAllOrdered();
