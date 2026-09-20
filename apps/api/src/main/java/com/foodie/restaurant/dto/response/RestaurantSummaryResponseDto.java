@@ -5,13 +5,13 @@ import java.util.List;
 import java.util.UUID;
 
 public record RestaurantSummaryResponseDto(
-        UUID restaurantId,
-        String name,
-        List<String> cuisineTypes,
-        BigDecimal avgRating,
-        BigDecimal latitude,
-        BigDecimal longitude,
-        String imageUrl,
-        Boolean isOpen
-) {
+                UUID restaurantId,
+                String name,
+                List<String> cuisineTypes,
+                BigDecimal avgRating,
+                BigDecimal latitude,
+                BigDecimal longitude,
+                String imageUrl,
+                Boolean isOpen,
+                Integer topPosition) {
 }

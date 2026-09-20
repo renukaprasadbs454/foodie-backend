@@ -31,7 +31,8 @@ public class RestaurantMapper {
                                 restaurant.getLatitude(),
                                 restaurant.getLongitude(),
                                 imageUrl,
-                                restaurant.getIsOpen());
+                                restaurant.getIsOpen(),
+                                restaurant.getTopPosition());
         }
 
         public RestaurantDetailResponseDto toDetail(
@@ -70,7 +71,8 @@ public class RestaurantMapper {
                                 privileged ? restaurant.getOwnerUserCredentialId() : null,
                                 legalDetails,
                                 documents,
-                                restaurant.getIsOpen());
+                                restaurant.getIsOpen(),
+                                restaurant.getTopPosition());
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {

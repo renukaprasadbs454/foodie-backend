@@ -80,6 +80,9 @@ public class Restaurant extends BaseEntity {
     @Column(name = "upi_verified_at")
     private java.time.Instant upiVerifiedAt;
 
+    @Column(name = "top_position")
+    private Integer topPosition;
+
     protected Restaurant() {
     }
 
@@ -262,5 +265,13 @@ public class Restaurant extends BaseEntity {
 
     public java.time.Instant getUpiVerifiedAt() {
         return upiVerifiedAt;
+    }
+
+    public Integer getTopPosition() {
+        return topPosition;
+    }
+
+    public void setTopPosition(Integer topPosition) {
+        this.topPosition = topPosition;
     }
 }

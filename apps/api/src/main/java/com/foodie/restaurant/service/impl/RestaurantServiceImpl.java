@@ -669,6 +669,19 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public void updateTopPositions(List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions, UUID adminId) {
+        for (var pos : positions) {
+            restaurantRepository.findById(pos.restaurantId()).ifPresent(restaurant -> {
+                restaurant.setTopPosition(pos.position());
+                restaurantRepository.save(restaurant);
+            });
+        }
+        restaurantCacheService.evictAllListCaches();
+        log.info("Restaurant top positions updated by admin {}", adminId);
+    }
+
+    @Override
+    @Transactional
     public RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId) {
         RestaurantDocument document = restaurantDocumentRepository.findByIdAndRestaurantId(documentId, restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
@@ -720,8 +733,9 @@ public class RestaurantServiceImpl implements RestaurantService {
             case "name" -> Sort.by(Sort.Direction.ASC, "name");
             case "avgRating" -> Sort.by(Sort.Direction.DESC, "avgRating");
             case "createdAt" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case "topPosition" -> Sort.by(Sort.Order.asc("topPosition").nullsLast());
             default -> throw new BadRequestException(
-                    ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: name, avgRating, createdAt.");
+                    ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: name, avgRating, createdAt, topPosition.");
         };
     }
 
