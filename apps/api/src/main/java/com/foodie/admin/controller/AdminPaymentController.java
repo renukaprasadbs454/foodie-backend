@@ -136,9 +136,8 @@ public class AdminPaymentController {
                             .map(RestaurantSummaryProvider.RestaurantSummary::name)
                             .orElse(ownerName);
                 } else if (acc.getOwnerType() == OwnerType.DELIVERY_PARTNER) {
-                    ownerName = deliveryPartnerLookup.findUserCredentialIdByPartnerId(acc.getOwnerId())
-                            .map(Object::toString) // or a specific lookup for partner name if available
-                            .orElse(ownerName);
+                    ownerName = deliveryPartnerLookup.findPartnerNameById(acc.getOwnerId())
+                            .orElse(ownerName != null && !ownerName.isBlank() ? ownerName : "Delivery Partner");
                 }
             }
             return new AdminPayoutResponseDto(
@@ -176,6 +175,25 @@ public class AdminPaymentController {
         }
         return ResponseEntity
                 .ok(ApiResponse.success("Approved and processing " + request.payoutIds().size() + " payouts."));
+    }
+
+    @PostMapping("/payouts/reject")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Reject a pending payout request")
+    public ResponseEntity<ApiResponse<String>> rejectPayout(
+            @RequestBody java.util.Map<String, Object> request) {
+        String payoutIdStr = (String) request.get("payoutId");
+        String reason = (String) request.getOrDefault("reason", "Rejected by Admin");
+        if (payoutIdStr == null || payoutIdStr.isBlank()) {
+            throw new com.foodie.common.exception.BadRequestException(
+                    com.foodie.common.exception.ErrorCode.VALIDATION_FAILED, "payoutId is required.");
+        }
+        java.util.UUID payoutId = java.util.UUID.fromString(payoutIdStr);
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Payout not found: " + payoutId));
+        payout.markFailed(reason, "REJECTED_BY_ADMIN");
+        payoutRepository.save(payout);
+        return ResponseEntity.ok(ApiResponse.success("Payout " + payoutId + " has been rejected."));
     }
 
     @GetMapping("/commission-rules")

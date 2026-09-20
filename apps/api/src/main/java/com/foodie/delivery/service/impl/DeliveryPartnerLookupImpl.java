@@ -35,4 +35,11 @@ public class DeliveryPartnerLookupImpl implements DeliveryPartnerLookup {
         return deliveryPartnerRepository.findById(deliveryPartnerId)
                 .map(partner -> partner.getUserCredentialId());
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findPartnerNameById(UUID deliveryPartnerId) {
+        return deliveryPartnerRepository.findById(deliveryPartnerId)
+                .map(partner -> partner.getFullName());
+    }
 }

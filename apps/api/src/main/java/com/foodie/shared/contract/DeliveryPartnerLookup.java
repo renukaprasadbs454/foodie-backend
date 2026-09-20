@@ -12,4 +12,7 @@ public interface DeliveryPartnerLookup {
 
     /** Used by Notification to resolve partner push recipient. */
     Optional<UUID> findUserCredentialIdByPartnerId(UUID deliveryPartnerId);
+
+    /** Used by Admin Payouts to display partner full name. */
+    Optional<String> findPartnerNameById(UUID deliveryPartnerId);
 }
