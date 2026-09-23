@@ -73,6 +73,21 @@ public class AdminDeliveryController {
         this.deliveryMapper = deliveryMapper;
     }
 
+    private void syncMissingDeliveryPartners() {
+        List<UserCredential> deliveryCredentials = userCredentialRepository.findByUserType(com.foodie.common.enums.UserType.DELIVERY_PARTNER);
+        for (UserCredential cred : deliveryCredentials) {
+            if (deliveryPartnerRepository.findByUserCredentialId(cred.getId()).isEmpty()) {
+                DeliveryPartner newPartner = DeliveryPartner.create(
+                        cred.getId(),
+                        "Delivery Partner",
+                        VehicleType.BIKE,
+                        null
+                );
+                deliveryPartnerRepository.save(newPartner);
+            }
+        }
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "List paginated delivery partners with status & search filtering")
@@ -82,6 +97,8 @@ public class AdminDeliveryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
+
+        syncMissingDeliveryPartners();
 
         KycStatus kycFilter = null;
         if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
@@ -116,6 +133,8 @@ public class AdminDeliveryController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get delivery partner fleet statistics")
     public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats() {
+        syncMissingDeliveryPartners();
+
         List<DeliveryPartner> all = deliveryPartnerRepository.findAll();
         long totalFleet = all.size();
         long onlineCount = all.stream().filter(DeliveryPartner::isOnline).count();
@@ -200,16 +219,56 @@ public class AdminDeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.rejectCashDeposit(id, principal.userId(), reason)));
     }
 
+    @GetMapping("/{id}/bank-details")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get delivery partner bank details for Admin Documents view")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto>> getPartnerBankDetails(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getBankDetailsByPartnerId(id)));
+    }
+
+    @RequestMapping(
+            value = {"/{id}/bank-details/approve", "/{id}/approve-bank-details"},
+            method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST, org.springframework.web.bind.annotation.RequestMethod.PUT}
+    )
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Approve delivery partner bank details verification")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto>> approveBankDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.approveBankDetails(id, principal.userId())));
+    }
+
+    @RequestMapping(
+            value = {"/{id}/bank-details/reject", "/{id}/reject-bank-details"},
+            method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST, org.springframework.web.bind.annotation.RequestMethod.PUT}
+    )
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Reject delivery partner bank details verification")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto>> rejectBankDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @RequestBody(required = false) Map<String, String> body) {
+        String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Bank account verification failed.";
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.rejectBankDetails(id, principal.userId(), reason)));
+    }
+
     private AdminDeliveryPartnerResponseDto toAdminDto(DeliveryPartner partner) {
         UserCredential cred = userCredentialRepository.findById(partner.getUserCredentialId()).orElse(null);
         String phone = (cred != null && cred.getPhoneNumber() != null) ? cred.getPhoneNumber() : "+91 98765 43210";
-        String email = (cred != null && cred.getEmail() != null) ? cred.getEmail() : partner.getFullName().toLowerCase().replace(" ", ".") + "@foodie.local";
+        String name = partner.getFullName();
+        if ((name == null || name.isBlank() || name.equalsIgnoreCase("Delivery Partner")) && cred != null && cred.getPhoneNumber() != null) {
+            name = "Partner (" + cred.getPhoneNumber() + ")";
+        }
+        String email = (cred != null && cred.getEmail() != null) ? cred.getEmail() : name.toLowerCase().replace(" ", ".") + "@foodie.local";
 
         List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
                 .findByDeliveryPartnerId(partner.getId())
                 .stream()
                 .map(deliveryMapper::toDocument)
                 .collect(Collectors.toList());
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto bankDetails = deliveryService.getBankDetailsByPartnerId(partner.getId());
 
         long completedDeliveries = deliveryAssignmentRepository
                 .countByDeliveryPartnerIdAndStatus(partner.getId(), DeliveryAssignmentStatus.DELIVERED);
@@ -219,7 +278,7 @@ public class AdminDeliveryController {
         return new AdminDeliveryPartnerResponseDto(
                 partner.getId(),
                 partner.getUserCredentialId(),
-                partner.getFullName(),
+                name,
                 phone,
                 email,
                 partner.getVehicleType(),
@@ -228,11 +287,13 @@ public class AdminDeliveryController {
                 partner.getKycStatus(),
                 partner.getKycRejectionReason(),
                 partner.isOnline(),
+                partner.getLastSeenAt() != null ? partner.getLastSeenAt() : partner.getCreatedAt(),
                 partner.getCashInHand() != null ? partner.getCashInHand() : BigDecimal.ZERO,
                 partner.getMaxCashInHandLimit() != null ? partner.getMaxCashInHandLimit() : new BigDecimal("2000.00"),
                 completedDeliveries,
                 zone,
                 docs,
+                bankDetails,
                 partner.getCreatedAt()
         );
     }

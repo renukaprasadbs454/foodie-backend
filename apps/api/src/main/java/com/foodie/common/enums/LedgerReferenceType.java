@@ -8,5 +8,6 @@ public enum LedgerReferenceType {
     ORDER_PAYMENT,
     WALLET_TOPUP,
     LOYALTY_CONVERSION,
-    ORDER_EARNING
+    ORDER_EARNING,
+    INITIAL_BALANCE
 }

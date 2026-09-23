@@ -7,9 +7,8 @@ import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.shared.event.UserCredentialCreatedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 public class DeliveryPartnerCredentialCreatedListener {
@@ -22,7 +21,7 @@ public class DeliveryPartnerCredentialCreatedListener {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @EventListener
     public void onUserCredentialCreated(UserCredentialCreatedEvent event) {
         if (event.userType() != UserType.DELIVERY_PARTNER) {
             return;
@@ -40,3 +39,4 @@ public class DeliveryPartnerCredentialCreatedListener {
         log.info("Created initial DeliveryPartner record with KYC=PENDING for userCredentialId={}", event.userCredentialId());
     }
 }
+

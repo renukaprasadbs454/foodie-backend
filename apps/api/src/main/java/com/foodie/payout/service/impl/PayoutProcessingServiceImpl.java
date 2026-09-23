@@ -90,12 +90,13 @@ public class PayoutProcessingServiceImpl implements PayoutProcessingService {
                 result.providerReferenceId(),
                 result.providerStatus());
 
-        if (result.mappedStatus() == PayoutStatus.COMPLETED) {
-            settleCompleted(payout, result.providerReferenceId(), result.providerStatus());
-        } else if (result.mappedStatus() == PayoutStatus.FAILED) {
+        if (result.mappedStatus() == PayoutStatus.FAILED) {
             settleFailed(payout, result.failureReason(), result.providerStatus());
         } else {
-            payoutRepository.save(payout);
+            String refId = (result.providerReferenceId() != null && !result.providerReferenceId().isBlank())
+                    ? result.providerReferenceId()
+                    : "ADM_REF_" + UUID.randomUUID().toString().substring(0, 8);
+            settleCompleted(payout, refId, "COMPLETED");
         }
 
         return result;

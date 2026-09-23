@@ -37,6 +37,9 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "is_online", nullable = false)
     private boolean online;
 
+    @Column(name = "last_seen_at")
+    private java.time.Instant lastSeenAt;
+
     @Column(name = "kyc_rejection_reason", length = 500)
     private String kycRejectionReason;
 
@@ -61,6 +64,7 @@ public class DeliveryPartner extends BaseEntity {
         partner.vehicleNumber = vehicleNumber;
         partner.kycStatus = KycStatus.PENDING;
         partner.online = false;
+        partner.lastSeenAt = java.time.Instant.now();
         partner.cashInHand = java.math.BigDecimal.ZERO;
         partner.maxCashInHandLimit = new java.math.BigDecimal("2000.00");
         return partner;
@@ -78,6 +82,19 @@ public class DeliveryPartner extends BaseEntity {
 
     public void setOnline(boolean online) {
         this.online = online;
+        this.lastSeenAt = java.time.Instant.now();
+    }
+
+    public void touchLastSeen() {
+        this.lastSeenAt = java.time.Instant.now();
+    }
+
+    public java.time.Instant getLastSeenAt() {
+        return lastSeenAt;
+    }
+
+    public void setLastSeenAt(java.time.Instant lastSeenAt) {
+        this.lastSeenAt = lastSeenAt;
     }
 
     public void verifyKyc() {

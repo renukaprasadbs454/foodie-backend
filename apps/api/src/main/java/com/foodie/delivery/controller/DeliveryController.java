@@ -36,6 +36,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.foodie.delivery.dto.request.UpsertDeliveryBankDetailsRequestDto;
+import com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto;
+
 @RestController
 @RequestMapping("/api/v1/delivery")
 @Tag(name = "Delivery")
@@ -63,6 +66,26 @@ public class DeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.upsertProfile(principal.userId(), request)));
     }
 
+    @GetMapping({"/me/bank-details", "/bank-details"})
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Get my bank account details")
+    public ResponseEntity<ApiResponse<DeliveryBankDetailsResponseDto>> getBankDetails(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getBankDetails(principal.userId())));
+    }
+
+    @org.springframework.web.bind.annotation.RequestMapping(
+            value = {"/me/bank-details", "/bank-details"},
+            method = {org.springframework.web.bind.annotation.RequestMethod.PUT, org.springframework.web.bind.annotation.RequestMethod.POST}
+    )
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Create or update my bank account details")
+    public ResponseEntity<ApiResponse<DeliveryBankDetailsResponseDto>> upsertBankDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody UpsertDeliveryBankDetailsRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.upsertBankDetails(principal.userId(), request)));
+    }
+
     @PostMapping(value = "/me/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     @Operation(summary = "Upload delivery partner KYC document (never self-verifies)")
@@ -83,7 +106,7 @@ public class DeliveryController {
     }
 
     @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Upload delivery partner profile image")
     public ResponseEntity<ApiResponse<DeliveryProfileImageResponseDto>> uploadProfileImage(
             @AuthenticationPrincipal AuthPrincipal principal,

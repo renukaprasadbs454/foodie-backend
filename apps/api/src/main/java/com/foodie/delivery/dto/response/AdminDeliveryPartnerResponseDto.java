@@ -19,10 +19,12 @@ public record AdminDeliveryPartnerResponseDto(
         KycStatus kycStatus,
         String kycRejectionReason,
         boolean isOnline,
+        Instant lastSeenAt,
         BigDecimal cashInHand,
         BigDecimal maxCashInHandLimit,
         long totalDeliveries,
         String zone,
         List<DeliveryDocumentResponseDto> documents,
+        DeliveryBankDetailsResponseDto bankDetails,
         Instant createdAt
 ) {}

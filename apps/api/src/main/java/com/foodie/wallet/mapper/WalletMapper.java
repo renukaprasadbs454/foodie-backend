@@ -35,6 +35,12 @@ public final class WalletMapper {
                 payout.getAccountHolderName(),
                 payout.getAccountNumber(),
                 payout.getIfscCode(),
-                payout.getBankName());
+                payout.getBankName(),
+                payout.getCreatedAt(),
+                payout.getProcessedAt(),
+                payout.getProvider(),
+                payout.getProviderPayoutId(),
+                payout.getProviderReferenceId(),
+                payout.getFailureReason());
     }
 }

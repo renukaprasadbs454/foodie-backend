@@ -29,6 +29,10 @@ public interface WalletService {
 
         PayoutResponseDto requestPayout(UUID userCredentialId, PayoutRequestDto request, String idempotencyKey);
 
+        List<PayoutResponseDto> getPayouts(UUID userCredentialId, UserType userType);
+
+        PayoutResponseDto getPayoutById(UUID userCredentialId, UserType userType, UUID payoutId);
+
         WalletBalanceResponseDto getRestaurantBalance(UUID ownerCredentialId);
 
         PageResult<LedgerEntryResponseDto> getRestaurantLedger(

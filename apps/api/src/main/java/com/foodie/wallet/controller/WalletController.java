@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -73,6 +74,25 @@ public class WalletController {
                                 .body(ApiResponse.success(
                                                 walletService.requestPayout(principal.userId(), request,
                                                                 idempotencyKey)));
+        }
+
+        @GetMapping("/payouts")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'RESTAURANT', 'CUSTOMER')")
+        @Operation(summary = "Get my payout history")
+        public ResponseEntity<ApiResponse<List<PayoutResponseDto>>> getPayouts(
+                        @AuthenticationPrincipal AuthPrincipal principal) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                walletService.getPayouts(principal.userId(), principal.userType())));
+        }
+
+        @GetMapping("/payouts/{payoutId}")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'RESTAURANT', 'CUSTOMER')")
+        @Operation(summary = "Get payout details by ID")
+        public ResponseEntity<ApiResponse<PayoutResponseDto>> getPayoutById(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @PathVariable java.util.UUID payoutId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                walletService.getPayoutById(principal.userId(), principal.userType(), payoutId)));
         }
 
         @PostMapping("/topup/initiate")

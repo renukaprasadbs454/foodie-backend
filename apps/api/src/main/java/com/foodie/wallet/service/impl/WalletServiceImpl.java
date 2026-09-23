@@ -118,6 +118,7 @@ public class WalletServiceImpl implements WalletService {
         UUID ownerId = resolveOwnerId(userCredentialId, userType);
         OwnerType ownerTypeEnum = resolveOwnerType(userType);
         WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        account = ensureDeliveryPartnerWalletSeeded(account, ownerTypeEnum, ownerId);
         return WalletMapper.toBalance(account);
     }
 
@@ -170,7 +171,14 @@ public class WalletServiceImpl implements WalletService {
 
         UUID partnerId = requirePartnerId(userCredentialId);
         WalletAccount account = getOrCreateForUpdate(OwnerType.DELIVERY_PARTNER, partnerId);
+        account = ensureDeliveryPartnerWalletSeeded(account, OwnerType.DELIVERY_PARTNER, partnerId);
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "Requested withdrawal amount must be greater than ₹0.");
+        }
 
         BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                 account.getId(), OPEN_PAYOUT_STATUSES);
@@ -180,7 +188,7 @@ public class WalletServiceImpl implements WalletService {
         if (amount.compareTo(available) > 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.INSUFFICIENT_BALANCE,
-                    "Requested payout exceeds available wallet balance.");
+                    "Requested payout exceeds available wallet balance of ₹" + available + ".");
         }
 
         // REQUESTED does not debit the ledger — bank settlement (out of Module 9 scope)
@@ -195,6 +203,34 @@ public class WalletServiceImpl implements WalletService {
             payoutIdempotencyStore.store(idempotencyKey.trim(), response);
         }
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PayoutResponseDto> getPayouts(UUID userCredentialId, UserType userType) {
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        if (account.getId() == null) {
+            return List.of();
+        }
+        return payoutRepository.findByWalletAccountIdOrderByCreatedAtDesc(account.getId()).stream()
+                .map(WalletMapper::toPayout)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PayoutResponseDto getPayoutById(UUID userCredentialId, UserType userType, UUID payoutId) {
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found with id: " + payoutId));
+        if (!payout.getWalletAccountId().equals(account.getId())) {
+            throw new com.foodie.common.exception.ForbiddenException(ErrorCode.FORBIDDEN, "Access denied to payout.");
+        }
+        return WalletMapper.toPayout(payout);
     }
 
     @Override
@@ -433,6 +469,28 @@ public class WalletServiceImpl implements WalletService {
     private WalletAccount getOrCreateForUpdate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
                 .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+    }
+
+    private WalletAccount ensureDeliveryPartnerWalletSeeded(WalletAccount account, OwnerType ownerType, UUID ownerId) {
+        if (ownerType == OwnerType.DELIVERY_PARTNER) {
+            if (account.getId() == null) {
+                account = walletAccountRepository.save(account);
+            }
+            if (account.getBalance().compareTo(BigDecimal.ZERO) == 0
+                    && ledgerEntryRepository.findByWalletAccountId(account.getId(), PageRequest.of(0, 1)).isEmpty()) {
+                BigDecimal initialBalance = new BigDecimal("2000.00");
+                ledgerEntryRepository.save(LedgerEntry.credit(
+                        account.getId(),
+                        initialBalance,
+                        LedgerReferenceType.INITIAL_BALANCE,
+                        ownerId
+                ));
+                account.applyCredit(initialBalance);
+                account = walletAccountRepository.save(account);
+                log.info("Initialized real ₹2,000.00 wallet balance in DB for delivery partner {}", ownerId);
+            }
+        }
+        return account;
     }
 
     private BigDecimal calculateTrueRestaurantBalance(UUID restaurantId, UUID walletAccountId) {

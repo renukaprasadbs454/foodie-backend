@@ -63,4 +63,23 @@ public class DeliveryMapper {
                                 assignment.getPickupVerifiedAt(),
                                 assignment.getDeliveredVerifiedAt());
         }
+
+        public com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto toBankDetails(com.foodie.delivery.entity.DeliveryPartnerBankDetails bankDetails) {
+                if (bankDetails == null) return null;
+                return new com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto(
+                                bankDetails.getId(),
+                                bankDetails.getDeliveryPartner().getId(),
+                                bankDetails.getAccountHolderName(),
+                                bankDetails.getAccountNumber(),
+                                com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto.maskAccountNumber(bankDetails.getAccountNumber()),
+                                bankDetails.getIfscCode(),
+                                bankDetails.getBankName(),
+                                bankDetails.getBranchName(),
+                                bankDetails.getAccountType(),
+                                bankDetails.getVerificationStatus(),
+                                bankDetails.getVerifiedAt(),
+                                bankDetails.getRejectionReason(),
+                                bankDetails.getCreatedAt(),
+                                bankDetails.getUpdatedAt());
+        }
 }

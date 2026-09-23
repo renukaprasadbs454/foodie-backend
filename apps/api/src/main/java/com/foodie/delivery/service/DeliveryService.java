@@ -64,4 +64,15 @@ public interface DeliveryService {
         com.foodie.delivery.dto.response.CashDepositResponseDto approveCashDeposit(UUID depositId, UUID adminId);
 
         com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId, String reason);
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto getBankDetails(UUID userCredentialId);
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto upsertBankDetails(
+                        UUID userCredentialId, com.foodie.delivery.dto.request.UpsertDeliveryBankDetailsRequestDto request);
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto getBankDetailsByPartnerId(UUID partnerId);
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto approveBankDetails(UUID partnerId, UUID adminUserId);
+
+        com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto rejectBankDetails(UUID partnerId, UUID adminUserId, String reason);
 }

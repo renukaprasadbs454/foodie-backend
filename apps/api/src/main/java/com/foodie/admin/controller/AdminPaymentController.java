@@ -27,6 +27,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -115,7 +116,7 @@ public class AdminPaymentController {
                 restaurantSettlementService.disburseSettlement(request.settlementId(), request.paymentReference())));
     }
 
-    @GetMapping("/payouts")
+    @GetMapping({"/payouts", "/delivery-payouts"})
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List payouts optionally filtered by partner type")
     public ResponseEntity<ApiResponse<List<AdminPayoutResponseDto>>> listPayouts(
@@ -165,7 +166,7 @@ public class AdminPaymentController {
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 
-    @PostMapping("/payouts/approve")
+    @PostMapping({"/payouts/approve", "/delivery-payouts/approve"})
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
     @Operation(summary = "Bulk approve payouts and automatically disburse using active provider")
     public ResponseEntity<ApiResponse<String>> approvePayouts(
@@ -177,7 +178,16 @@ public class AdminPaymentController {
                 .ok(ApiResponse.success("Approved and processing " + request.payoutIds().size() + " payouts."));
     }
 
-    @PostMapping("/payouts/reject")
+    @PostMapping({"/payouts/{id}/approve", "/delivery-payouts/{id}/approve"})
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Approve single payout request")
+    public ResponseEntity<ApiResponse<String>> approveSinglePayout(
+            @PathVariable("id") java.util.UUID payoutId) {
+        payoutProcessingService.processPayout(payoutId, java.util.UUID.randomUUID().toString());
+        return ResponseEntity.ok(ApiResponse.success("Payout " + payoutId + " approved successfully."));
+    }
+
+    @PostMapping({"/payouts/reject", "/delivery-payouts/reject"})
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
     @Operation(summary = "Reject a pending payout request")
     public ResponseEntity<ApiResponse<String>> rejectPayout(
@@ -189,6 +199,22 @@ public class AdminPaymentController {
                     com.foodie.common.exception.ErrorCode.VALIDATION_FAILED, "payoutId is required.");
         }
         java.util.UUID payoutId = java.util.UUID.fromString(payoutIdStr);
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Payout not found: " + payoutId));
+        payout.markFailed(reason, "REJECTED_BY_ADMIN");
+        payoutRepository.save(payout);
+        return ResponseEntity.ok(ApiResponse.success("Payout " + payoutId + " has been rejected."));
+    }
+
+    @PostMapping({"/payouts/{id}/reject", "/delivery-payouts/{id}/reject"})
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Reject single payout request by ID path param")
+    public ResponseEntity<ApiResponse<String>> rejectSinglePayout(
+            @PathVariable("id") java.util.UUID payoutId,
+            @RequestBody(required = false) java.util.Map<String, Object> request) {
+        String reason = (request != null && request.containsKey("reason"))
+                ? (String) request.get("reason")
+                : "Rejected by Admin";
         Payout payout = payoutRepository.findById(payoutId)
                 .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Payout not found: " + payoutId));
         payout.markFailed(reason, "REJECTED_BY_ADMIN");
