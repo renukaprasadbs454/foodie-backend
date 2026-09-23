@@ -283,7 +283,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (payment.getStatus() == PaymentStatus.PENDING || payment.getStatus() == PaymentStatus.FAILED) {
             int updated = paymentRepository.atomicMarkCaptured(payment.getId(),
-                    cfOrderId != null ? cfOrderId : request.cashfreeOrderId());
+                    cfOrderId != null ? cfOrderId : request.cashfreeOrderId(), java.time.Instant.now());
             if (updated > 0) {
                 eventPublisher.publishEvent(PaymentCapturedEvent.of(
                         payment.getOrderId(),
@@ -434,7 +434,7 @@ public class PaymentServiceImpl implements PaymentService {
             log.warn("payment.captured ignored for status={}", payment.getStatus());
             return;
         }
-        int updated = paymentRepository.atomicMarkCaptured(payment.getId(), cfOrderId);
+        int updated = paymentRepository.atomicMarkCaptured(payment.getId(), cfOrderId, java.time.Instant.now());
         if (updated > 0) {
             eventPublisher.publishEvent(PaymentCapturedEvent.of(payment.getOrderId(), payment.getId()));
             log.info("Payment CAPTURED paymentId={} orderId={}", payment.getId(), payment.getOrderId());
@@ -585,7 +585,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for top-up."));
 
         if (payment.getStatus() == PaymentStatus.PENDING) {
-            int updated = paymentRepository.atomicMarkCaptured(payment.getId(), "CF_TOPUP_" + cfOrderId);
+            int updated = paymentRepository.atomicMarkCaptured(payment.getId(), "CF_TOPUP_" + cfOrderId,
+                    java.time.Instant.now());
             if (updated > 0) {
                 UUID customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
                         .map(CustomerSummaryProvider.CustomerSummary::customerId)

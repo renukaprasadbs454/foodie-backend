@@ -296,7 +296,8 @@ class RestaurantServiceImplTest {
                 .isInstanceOf(com.foodie.common.exception.BadRequestException.class)
                 .extracting(ex -> ((com.foodie.common.exception.BadRequestException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_SORT_FIELD);
-        verify(restaurantRepository, never()).searchApproved(any(), any(), any(), any());
+        verify(restaurantRepository, never()).searchApproved(any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyBoolean(), any());
     }
 
     @Test

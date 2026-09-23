@@ -134,6 +134,20 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public void updateTopPositions(UUID actorCredentialId, List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");
+        restaurantService.updateTopPositions(positions, admin.getId());
+        adminService.recordAudit(
+                admin.getId(),
+                "UPDATE_TOP_POSITIONS",
+                "RESTAURANT",
+                admin.getId(), // Using admin id as resource id since it spans multiple restaurants
+                null,
+                Map.of("updatedCount", positions.size()));
+    }
+
+    @Override
+    @Transactional
     public RestaurantDetailResponseDto rejectRestaurant(
             UUID actorCredentialId, UUID restaurantId, String reason) {
         AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");

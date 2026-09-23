@@ -23,8 +23,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     public FavoriteServiceImpl(
             FavoriteRestaurantRepository favoriteRestaurantRepository,
             CustomerSummaryProvider customerSummaryProvider,
-            RestaurantService restaurantService
-    ) {
+            RestaurantService restaurantService) {
         this.favoriteRestaurantRepository = favoriteRestaurantRepository;
         this.customerSummaryProvider = customerSummaryProvider;
         this.restaurantService = restaurantService;
@@ -50,7 +49,8 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Transactional(readOnly = true)
     public List<RestaurantSummaryResponseDto> getFavoriteRestaurants(UUID userCredentialId) {
         UUID customerId = resolveCustomerId(userCredentialId);
-        List<FavoriteRestaurant> favorites = favoriteRestaurantRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        List<FavoriteRestaurant> favorites = favoriteRestaurantRepository
+                .findByCustomerIdOrderByCreatedAtDesc(customerId);
 
         return favorites.stream()
                 .map(fav -> {
@@ -69,8 +69,8 @@ public class FavoriteServiceImpl implements FavoriteService {
                         detail.latitude(),
                         detail.longitude(),
                         detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl(),
-                        detail.isOpen()
-                ))
+                        detail.isOpen(),
+                        null))
                 .toList();
     }
 

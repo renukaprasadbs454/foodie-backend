@@ -113,6 +113,8 @@ public interface RestaurantService {
 
         RestaurantDetailResponseDto resubmit(UUID ownerCredentialId);
 
+        void updateTopPositions(List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions, UUID adminId);
+
         /** Document verification for Admin Ops — sets verified_at. */
         RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
 

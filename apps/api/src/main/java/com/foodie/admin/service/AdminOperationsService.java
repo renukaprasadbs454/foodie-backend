@@ -31,6 +31,8 @@ public interface AdminOperationsService {
         RestaurantDetailResponseDto rejectRestaurant(
                         UUID actorCredentialId, UUID restaurantId, String reason);
 
+        void updateTopPositions(UUID actorCredentialId, List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions);
+
         DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId);
 
         CouponResponseDto createCoupon(UUID actorCredentialId, CreateCouponRequestDto request);

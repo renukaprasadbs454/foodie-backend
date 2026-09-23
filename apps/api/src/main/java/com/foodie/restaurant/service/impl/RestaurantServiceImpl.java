@@ -157,14 +157,16 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         Pageable pageable;
         Page<Restaurant> result;
+        boolean onlyTop = "topPosition".equalsIgnoreCase(sort);
+
         if (lat != null && lng != null) {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
             result = restaurantRepository.searchApprovedGeo(
-                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, lat, lng, pageable);
+                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, onlyTop, lat, lng, pageable);
         } else {
             pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
             result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType),
-                    minRatingDecimal, pageable);
+                    minRatingDecimal, onlyTop, pageable);
         }
 
         List<RestaurantSummaryResponseDto> items = result.getContent().stream()
@@ -669,6 +671,24 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public void updateTopPositions(List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions,
+            UUID adminId) {
+        restaurantRepository.findByTopPositionIsNotNull().forEach(restaurant -> {
+            restaurant.setTopPosition(null);
+            restaurantRepository.save(restaurant);
+        });
+        for (var pos : positions) {
+            restaurantRepository.findById(pos.restaurantId()).ifPresent(restaurant -> {
+                restaurant.setTopPosition(pos.position());
+                restaurantRepository.save(restaurant);
+            });
+        }
+        restaurantCacheService.evictAllListCaches();
+        log.info("Restaurant top positions updated by admin {}", adminId);
+    }
+
+    @Override
+    @Transactional
     public RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId) {
         RestaurantDocument document = restaurantDocumentRepository.findByIdAndRestaurantId(documentId, restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
@@ -720,8 +740,9 @@ public class RestaurantServiceImpl implements RestaurantService {
             case "name" -> Sort.by(Sort.Direction.ASC, "name");
             case "avgRating" -> Sort.by(Sort.Direction.DESC, "avgRating");
             case "createdAt" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case "topPosition" -> Sort.by(Sort.Order.asc("topPosition").nullsLast());
             default -> throw new BadRequestException(
-                    ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: name, avgRating, createdAt.");
+                    ErrorCode.INVALID_SORT_FIELD, "Allowed sort fields: name, avgRating, createdAt, topPosition.");
         };
     }
 

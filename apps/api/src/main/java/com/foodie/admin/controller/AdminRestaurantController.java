@@ -63,6 +63,16 @@ public class AdminRestaurantController {
                 adminOperationsService.suspendRestaurant(principal.userId(), restaurantId, request)));
     }
 
+    @PatchMapping("/positions")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Update top positions of restaurants")
+    public ResponseEntity<ApiResponse<Void>> updatePositions(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody java.util.List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions) {
+        adminOperationsService.updateTopPositions(principal.userId(), positions);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @PatchMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Reject a PENDING restaurant onboarding submission")
