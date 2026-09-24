@@ -32,9 +32,15 @@ public final class WalletMapper {
                 payout.getId(),
                 payout.getStatus(),
                 payout.getAmount(),
+                payout.getCreatedAt(),
+                payout.getProcessedAt() != null ? payout.getProcessedAt() : payout.getCompletedAt(),
                 payout.getAccountHolderName(),
                 payout.getAccountNumber(),
                 payout.getIfscCode(),
-                payout.getBankName());
+                payout.getBankName(),
+                payout.getProvider() != null ? payout.getProvider() : "CASHFREE",
+                payout.getProviderPayoutId(),
+                payout.getProviderReferenceId() != null ? payout.getProviderReferenceId() : payout.getBankRef(),
+                payout.getFailureReason());
     }
 }

@@ -12,4 +12,13 @@ public interface DeliveryPartnerLookup {
 
     /** Used by Notification to resolve partner push recipient. */
     Optional<UUID> findUserCredentialIdByPartnerId(UUID deliveryPartnerId);
+
+    Optional<String> findPartnerNameById(UUID deliveryPartnerId);
+
+    record PartnerSummary(UUID partnerId, UUID userCredentialId, String fullName, String phoneNumber) {}
+
+    default Optional<PartnerSummary> findPartnerSummaryById(UUID deliveryPartnerId) {
+        return Optional.empty();
+    }
 }
+

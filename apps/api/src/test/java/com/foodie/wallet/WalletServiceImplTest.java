@@ -297,4 +297,151 @@ class WalletServiceImplTest {
                 assertThat(pageableCaptor.getValue().getSort().getOrderFor("createdAt").getDirection())
                                 .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
+
+        @Test
+        void getBalance_initializesWith2000ForNewPartner() {
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.empty());
+                when(walletAccountRepository.save(any(WalletAccount.class)))
+                                .thenAnswer(inv -> inv.getArgument(0));
+
+                WalletBalanceResponseDto balance = service.getBalance(credentialId, UserType.DELIVERY_PARTNER);
+
+                assertThat(balance.balance()).isEqualByComparingTo("2000.00");
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+        }
+
+        @Test
+        void approvePayout_completesAndDebitsWalletBalance() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("2000.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+                when(walletAccountRepository.findByIdForUpdate(accountId)).thenReturn(Optional.of(account));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                PayoutResponseDto result = service.approvePayout(payoutId);
+
+                assertThat(result.status()).isEqualTo(PayoutStatus.COMPLETED);
+                assertThat(account.getBalance()).isEqualByComparingTo("1500.00");
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+        }
+
+        @Test
+        void completeApprovedPayout_success() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("2000.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+                payout.markApproved();
+
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                PayoutResponseDto result = service.completeApprovedPayout(credentialId, payoutId);
+
+                assertThat(result.status()).isEqualTo(PayoutStatus.COMPLETED);
+                assertThat(account.getBalance()).isEqualByComparingTo("1500.00");
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+        }
+
+        @Test
+        void rejectPayout_marksRejected() {
+                UUID payoutId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                Payout payout = Payout.request(account.getId(), new BigDecimal("500.00"));
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                PayoutResponseDto result = service.rejectPayout(payoutId, "Fraudulent activity detected");
+
+                assertThat(result.status()).isEqualTo(PayoutStatus.REJECTED);
+                assertThat(payout.getFailureReason()).isEqualTo("Fraudulent activity detected");
+        }
+
+        @Test
+        void completeApprovedPayout_alreadyCompletedThrowsException() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("2000.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+                payout.markCompletedDirect("ref-123");
+
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.completeApprovedPayout(credentialId, payoutId))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("already completed");
+        }
+
+        @Test
+        void completeApprovedPayout_mismatchedWalletThrowsException() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                UUID differentAccountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("2000.00"));
+                Payout payout = Payout.request(differentAccountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+                payout.markApproved();
+
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.completeApprovedPayout(credentialId, payoutId))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("does not belong to the current partner");
+        }
+
+        @Test
+        void completeApprovedPayout_insufficientBalanceThrowsException() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("200.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+                payout.markApproved();
+
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.completeApprovedPayout(credentialId, payoutId))
+                                .isInstanceOf(UnprocessableEntityException.class)
+                                .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.INSUFFICIENT_BALANCE);
+        }
 }

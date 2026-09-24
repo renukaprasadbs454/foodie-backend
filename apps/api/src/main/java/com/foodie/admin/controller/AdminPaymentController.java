@@ -15,11 +15,13 @@ import com.foodie.wallet.entity.Payout;
 import com.foodie.wallet.entity.WalletAccount;
 import com.foodie.wallet.repository.PayoutRepository;
 import com.foodie.wallet.repository.WalletAccountRepository;
+import com.foodie.wallet.service.WalletService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +43,7 @@ public class AdminPaymentController {
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
     private final PayoutProcessingService payoutProcessingService;
+    private final WalletService walletService;
 
     public AdminPaymentController(
             AdminPaymentService adminPaymentService,
@@ -49,7 +52,8 @@ public class AdminPaymentController {
             WalletAccountRepository walletAccountRepository,
             RestaurantSummaryProvider restaurantSummaryProvider,
             DeliveryPartnerLookup deliveryPartnerLookup,
-            PayoutProcessingService payoutProcessingService) {
+            PayoutProcessingService payoutProcessingService,
+            WalletService walletService) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
         this.payoutRepository = payoutRepository;
@@ -57,6 +61,7 @@ public class AdminPaymentController {
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
         this.payoutProcessingService = payoutProcessingService;
+        this.walletService = walletService;
     }
 
     @GetMapping("/settlements")
@@ -94,33 +99,41 @@ public class AdminPaymentController {
         if (ownerType != null) {
             payouts = payoutRepository.findByOwnerType(ownerType);
         } else {
-            payouts = payoutRepository.findAll();
+            payouts = payoutRepository.findAllByOrderByCreatedAtDesc();
         }
 
         List<AdminPayoutResponseDto> dtos = payouts.stream().map(p -> {
             String ownerName = p.getAccountHolderName();
+            String partnerPhone = "";
+            UUID partnerId = null;
             WalletAccount acc = walletAccountRepository.findById(p.getWalletAccountId()).orElse(null);
             if (acc != null) {
+                partnerId = acc.getOwnerId();
                 if (acc.getOwnerType() == OwnerType.RESTAURANT) {
                     ownerName = restaurantSummaryProvider.findByRestaurantId(acc.getOwnerId())
                             .map(RestaurantSummaryProvider.RestaurantSummary::name)
                             .orElse(ownerName);
                 } else if (acc.getOwnerType() == OwnerType.DELIVERY_PARTNER) {
-                    ownerName = deliveryPartnerLookup.findUserCredentialIdByPartnerId(acc.getOwnerId())
-                            .map(Object::toString) // or a specific lookup for partner name if available
-                            .orElse(ownerName);
+                    var summary = deliveryPartnerLookup.findPartnerSummaryById(acc.getOwnerId());
+                    if (summary.isPresent()) {
+                        ownerName = summary.get().fullName();
+                        partnerPhone = summary.get().phoneNumber() != null ? summary.get().phoneNumber() : "";
+                    } else {
+                        ownerName = deliveryPartnerLookup.findPartnerNameById(acc.getOwnerId()).orElse(ownerName);
+                    }
                 }
             }
             return new AdminPayoutResponseDto(
                     p.getId(),
                     p.getWalletAccountId(),
+                    partnerId,
                     p.getAmount(),
                     p.getStatus().name(),
                     p.getAccountHolderName(),
                     p.getAccountNumber(),
                     p.getIfscCode(),
                     p.getBankName(),
-                    p.getProvider(),
+                    p.getProvider() != null ? p.getProvider() : "CASHFREE",
                     p.getProviderPayoutId(),
                     p.getProviderReferenceId(),
                     p.getProviderStatus(),
@@ -130,22 +143,92 @@ public class AdminPaymentController {
                     p.getCompletedAt(),
                     p.getCreatedAt(),
                     p.getUpdatedAt(),
-                    ownerName);
+                    ownerName,
+                    partnerPhone);
         }).toList();
 
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 
+    @GetMapping("/payouts/{payoutId}")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Get payout details")
+    public ResponseEntity<ApiResponse<AdminPayoutResponseDto>> getPayoutDetails(
+            @org.springframework.web.bind.annotation.PathVariable UUID payoutId) {
+        Payout p = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Payout not found: " + payoutId));
+        String ownerName = p.getAccountHolderName();
+        String partnerPhone = "";
+        UUID partnerId = null;
+        WalletAccount acc = walletAccountRepository.findById(p.getWalletAccountId()).orElse(null);
+        if (acc != null) {
+            partnerId = acc.getOwnerId();
+            if (acc.getOwnerType() == OwnerType.RESTAURANT) {
+                ownerName = restaurantSummaryProvider.findByRestaurantId(acc.getOwnerId())
+                        .map(RestaurantSummaryProvider.RestaurantSummary::name)
+                        .orElse(ownerName);
+            } else if (acc.getOwnerType() == OwnerType.DELIVERY_PARTNER) {
+                var summary = deliveryPartnerLookup.findPartnerSummaryById(acc.getOwnerId());
+                if (summary.isPresent()) {
+                    ownerName = summary.get().fullName();
+                    partnerPhone = summary.get().phoneNumber() != null ? summary.get().phoneNumber() : "";
+                } else {
+                    ownerName = deliveryPartnerLookup.findPartnerNameById(acc.getOwnerId()).orElse(ownerName);
+                }
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(new AdminPayoutResponseDto(
+                p.getId(),
+                p.getWalletAccountId(),
+                partnerId,
+                p.getAmount(),
+                p.getStatus().name(),
+                p.getAccountHolderName(),
+                p.getAccountNumber(),
+                p.getIfscCode(),
+                p.getBankName(),
+                p.getProvider() != null ? p.getProvider() : "CASHFREE",
+                p.getProviderPayoutId(),
+                p.getProviderReferenceId(),
+                p.getProviderStatus(),
+                p.getBankRef(),
+                p.getFailureReason(),
+                p.getProcessedAt(),
+                p.getCompletedAt(),
+                p.getCreatedAt(),
+                p.getUpdatedAt(),
+                ownerName,
+                partnerPhone)));
+    }
+
+    @PostMapping("/payouts/{payoutId}/approve")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Approve delivery partner payout request")
+    public ResponseEntity<ApiResponse<com.foodie.wallet.dto.response.PayoutResponseDto>> approveSinglePayout(
+            @org.springframework.web.bind.annotation.PathVariable UUID payoutId) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.approvePayout(payoutId)));
+    }
+
+    @PostMapping("/payouts/{payoutId}/reject")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Reject delivery partner payout request")
+    public ResponseEntity<ApiResponse<com.foodie.wallet.dto.response.PayoutResponseDto>> rejectSinglePayout(
+            @org.springframework.web.bind.annotation.PathVariable UUID payoutId,
+            @RequestBody(required = false) com.foodie.admin.dto.request.RejectPayoutRequestDto request) {
+        String reason = request != null ? request.reason() : "Rejected by Admin";
+        return ResponseEntity.ok(ApiResponse.success(walletService.rejectPayout(payoutId, reason)));
+    }
+
     @PostMapping("/payouts/approve")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "Bulk approve payouts and automatically disburse using active provider")
+    @Operation(summary = "Bulk approve payouts")
     public ResponseEntity<ApiResponse<String>> approvePayouts(
             @Valid @RequestBody BulkApprovePayoutsRequestDto request) {
         for (java.util.UUID payoutId : request.payoutIds()) {
-            payoutProcessingService.processPayout(payoutId, java.util.UUID.randomUUID().toString());
+            walletService.approvePayout(payoutId);
         }
         return ResponseEntity
-                .ok(ApiResponse.success("Approved and processing " + request.payoutIds().size() + " payouts."));
+                .ok(ApiResponse.success("Approved " + request.payoutIds().size() + " payouts."));
     }
 
     @GetMapping("/commission-rules")

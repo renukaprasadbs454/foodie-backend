@@ -64,7 +64,7 @@ public class WalletController {
 
         @PostMapping("/payout-requests")
         @PreAuthorize("hasRole('DELIVERY_PARTNER')")
-        @Operation(summary = "Request a payout (REQUESTED only — bank settlement out of Module 9 scope)")
+        @Operation(summary = "Request a payout (REQUESTED only — pending admin approval)")
         public ResponseEntity<ApiResponse<PayoutResponseDto>> requestPayout(
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @Valid @RequestBody PayoutRequestDto request,
@@ -73,6 +73,35 @@ public class WalletController {
                                 .body(ApiResponse.success(
                                                 walletService.requestPayout(principal.userId(), request,
                                                                 idempotencyKey)));
+        }
+
+        @GetMapping("/payouts")
+        @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+        @Operation(summary = "Get my payout withdrawal history")
+        public ResponseEntity<ApiResponse<List<PayoutResponseDto>>> getPayouts(
+                        @AuthenticationPrincipal AuthPrincipal principal) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                walletService.getPayouts(principal.userId(), principal.userType())));
+        }
+
+        @GetMapping("/payouts/{payoutId}")
+        @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+        @Operation(summary = "Get specific payout details")
+        public ResponseEntity<ApiResponse<PayoutResponseDto>> getPayoutDetail(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @org.springframework.web.bind.annotation.PathVariable java.util.UUID payoutId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                walletService.getPayoutDetail(principal.userId(), principal.userType(), payoutId)));
+        }
+
+        @PostMapping("/payouts/{payoutId}/complete")
+        @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+        @Operation(summary = "Complete an approved payout withdrawal")
+        public ResponseEntity<ApiResponse<PayoutResponseDto>> completePayout(
+                        @AuthenticationPrincipal AuthPrincipal principal,
+                        @org.springframework.web.bind.annotation.PathVariable java.util.UUID payoutId) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                walletService.completeApprovedPayout(principal.userId(), payoutId)));
         }
 
         @PostMapping("/topup/initiate")

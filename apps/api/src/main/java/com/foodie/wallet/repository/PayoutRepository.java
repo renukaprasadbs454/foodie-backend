@@ -28,6 +28,12 @@ public interface PayoutRepository extends JpaRepository<Payout, UUID> {
                         """)
         java.util.List<Payout> findByOwnerType(@Param("ownerType") com.foodie.common.enums.OwnerType ownerType);
 
+        java.util.List<Payout> findByWalletAccountIdOrderByCreatedAtDesc(UUID walletAccountId);
+
+        java.util.Optional<Payout> findByIdAndWalletAccountId(UUID id, UUID walletAccountId);
+
+        java.util.List<Payout> findAllByOrderByCreatedAtDesc();
+
         java.util.Optional<Payout> findByProviderPayoutId(String providerPayoutId);
 
         java.util.Optional<Payout> findByProviderAndProviderPayoutId(String provider, String providerPayoutId);

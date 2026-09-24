@@ -7,6 +7,7 @@ import java.util.UUID;
 public record AdminPayoutResponseDto(
         UUID id,
         UUID walletAccountId,
+        UUID partnerId,
         BigDecimal amount,
         String status,
         String accountHolderName,
@@ -23,6 +24,7 @@ public record AdminPayoutResponseDto(
         Instant completedAt,
         Instant createdAt,
         Instant updatedAt,
-        String ownerName // Dynamically assigned restaurant or delivery partner name
+        String ownerName,
+        String partnerPhone
 ) {
 }

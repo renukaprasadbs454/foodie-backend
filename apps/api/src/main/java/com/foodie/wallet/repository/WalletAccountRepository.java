@@ -20,4 +20,8 @@ public interface WalletAccountRepository extends JpaRepository<WalletAccount, UU
             @Param("ownerType") OwnerType ownerType,
             @Param("ownerId") UUID ownerId
     );
+
+    @Lock(LockModeType.OPTIMISTIC)
+    @Query("select w from WalletAccount w where w.id = :id")
+    Optional<WalletAccount> findByIdForUpdate(@Param("id") UUID id);
 }

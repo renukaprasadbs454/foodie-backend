@@ -14,6 +14,7 @@ import com.foodie.common.enums.UserType;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
+import com.foodie.shared.event.PayoutCompletedEvent;
 import com.foodie.shared.event.PayoutRequestedEvent;
 import com.foodie.shared.event.WalletCreditedEvent;
 import com.foodie.shared.event.WalletDebitedEvent;
@@ -52,8 +53,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class WalletServiceImpl implements WalletService {
 
     private static final Logger log = LoggerFactory.getLogger(WalletServiceImpl.class);
-    private static final EnumSet<PayoutStatus> OPEN_PAYOUT_STATUSES = EnumSet.of(PayoutStatus.REQUESTED,
-            PayoutStatus.PROCESSING);
+    private static final EnumSet<PayoutStatus> OPEN_PAYOUT_STATUSES = EnumSet.of(
+            PayoutStatus.REQUESTED,
+            PayoutStatus.PROCESSING,
+            PayoutStatus.APPROVED);
 
     private final WalletAccountRepository walletAccountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
@@ -117,8 +120,168 @@ public class WalletServiceImpl implements WalletService {
     public WalletBalanceResponseDto getBalance(UUID userCredentialId, UserType userType) {
         UUID ownerId = resolveOwnerId(userCredentialId, userType);
         OwnerType ownerTypeEnum = resolveOwnerType(userType);
-        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
+        if (ownerTypeEnum == OwnerType.DELIVERY_PARTNER && account.getBalance().compareTo(BigDecimal.ZERO) == 0
+                && ledgerEntryRepository.findByWalletAccountId(account.getId(), PageRequest.of(0, 1)).isEmpty()) {
+            account.setBalance(new BigDecimal("2000.00"));
+            account = walletAccountRepository.save(account);
+            ledgerEntryRepository.save(LedgerEntry.credit(
+                    account.getId(),
+                    new BigDecimal("2000.00"),
+                    LedgerReferenceType.INCENTIVE,
+                    account.getId()));
+        }
         return WalletMapper.toBalance(account);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PayoutResponseDto> getPayouts(UUID userCredentialId, UserType userType) {
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        if (account.getId() == null) {
+            return List.of();
+        }
+        List<Payout> payouts = payoutRepository.findByWalletAccountIdOrderByCreatedAtDesc(account.getId());
+        return payouts.stream().map(WalletMapper::toPayout).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PayoutResponseDto getPayoutDetail(UUID userCredentialId, UserType userType, UUID payoutId) {
+        UUID ownerId = resolveOwnerId(userCredentialId, userType);
+        OwnerType ownerTypeEnum = resolveOwnerType(userType);
+        WalletAccount account = findOrDefault(ownerTypeEnum, ownerId);
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
+        if (!payout.getWalletAccountId().equals(account.getId())) {
+            throw new ResourceNotFoundException("Payout not found: " + payoutId);
+        }
+        return WalletMapper.toPayout(payout);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto completeApprovedPayout(UUID userCredentialId, UUID payoutId) {
+        UUID partnerId = requirePartnerId(userCredentialId);
+        WalletAccount account = getOrCreateForUpdate(OwnerType.DELIVERY_PARTNER, partnerId);
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
+
+        if (!payout.getWalletAccountId().equals(account.getId())) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Payout does not belong to the current partner.");
+        }
+
+        if (payout.getStatus() == PayoutStatus.COMPLETED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout is already completed.");
+        }
+
+        if (payout.getStatus() == PayoutStatus.REJECTED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Cannot complete a rejected payout.");
+        }
+
+        if (payout.getStatus() != PayoutStatus.APPROVED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout must be approved by admin before completing withdrawal. Current status: " + payout.getStatus());
+        }
+
+        if (account.getBalance().compareTo(payout.getAmount()) < 0) {
+            throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+        }
+
+        payout.markCompletedDirect("WTH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        payoutRepository.save(payout);
+
+        account.applyDebit(payout.getAmount());
+        walletAccountRepository.save(account);
+
+        LedgerEntry ledgerEntry = ledgerEntryRepository.save(
+                LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
+
+        eventPublisher.publishEvent(WalletDebitedEvent.of(
+                account.getId(),
+                OwnerType.DELIVERY_PARTNER,
+                partnerId,
+                payout.getAmount(),
+                LedgerReferenceType.PAYOUT,
+                payout.getId(),
+                ledgerEntry.getId()));
+
+        eventPublisher.publishEvent(PayoutCompletedEvent.of(
+                payout.getId(),
+                account.getId(),
+                partnerId,
+                payout.getAmount(),
+                payout.getProvider(),
+                payout.getProviderPayoutId(),
+                payout.getBankRef()));
+
+        return WalletMapper.toPayout(payout);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto approvePayout(UUID payoutId) {
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
+        if (payout.getStatus() == PayoutStatus.COMPLETED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout is already completed.");
+        }
+        if (payout.getStatus() == PayoutStatus.REJECTED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Cannot approve a rejected payout.");
+        }
+        if (payout.getStatus() != PayoutStatus.REQUESTED && payout.getStatus() != PayoutStatus.PROCESSING && payout.getStatus() != PayoutStatus.APPROVED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Only pending payouts can be approved. Current status: " + payout.getStatus());
+        }
+
+        WalletAccount account = walletAccountRepository.findByIdForUpdate(payout.getWalletAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("Wallet account not found: " + payout.getWalletAccountId()));
+
+        if (account.getBalance().compareTo(payout.getAmount()) < 0) {
+            throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+        }
+
+        payout.markCompletedDirect("PAY-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        payoutRepository.save(payout);
+
+        account.applyDebit(payout.getAmount());
+        walletAccountRepository.save(account);
+
+        LedgerEntry ledgerEntry = ledgerEntryRepository.save(
+                LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
+
+        eventPublisher.publishEvent(WalletDebitedEvent.of(
+                account.getId(),
+                account.getOwnerType(),
+                account.getOwnerId(),
+                payout.getAmount(),
+                LedgerReferenceType.PAYOUT,
+                payout.getId(),
+                ledgerEntry.getId()));
+
+        eventPublisher.publishEvent(PayoutCompletedEvent.of(
+                payout.getId(),
+                account.getId(),
+                account.getOwnerId(),
+                payout.getAmount(),
+                payout.getProvider(),
+                payout.getProviderPayoutId(),
+                payout.getBankRef()));
+
+        return WalletMapper.toPayout(payout);
+    }
+
+    @Override
+    @Transactional
+    public PayoutResponseDto rejectPayout(UUID payoutId, String reason) {
+        Payout payout = payoutRepository.findById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
+        if (payout.getStatus() != PayoutStatus.REQUESTED && payout.getStatus() != PayoutStatus.PROCESSING) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Only pending payouts can be rejected. Current status: " + payout.getStatus());
+        }
+        payout.markRejected(reason != null && !reason.isBlank() ? reason : "Rejected by Admin");
+        payoutRepository.save(payout);
+        return WalletMapper.toPayout(payout);
     }
 
     @Override
@@ -415,24 +578,73 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletAccount findOrDefault(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+                .orElseGet(() -> {
+                    WalletAccount account = WalletAccount.open(ownerType, ownerId);
+                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                        account.setBalance(new BigDecimal("2000.00"));
+                    }
+                    return account;
+                });
     }
 
     private WalletAccount getOrCreate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElseGet(() -> {
                     try {
-                        return walletAccountRepository.save(WalletAccount.open(ownerType, ownerId));
+                        WalletAccount account = WalletAccount.open(ownerType, ownerId);
+                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                            account.setBalance(new BigDecimal("2000.00"));
+                        }
+                        account = walletAccountRepository.save(account);
+                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                            ledgerEntryRepository.save(LedgerEntry.credit(
+                                    account.getId(),
+                                    new BigDecimal("2000.00"),
+                                    LedgerReferenceType.INCENTIVE,
+                                    account.getId()));
+                        }
+                        return account;
                     } catch (Exception ex) {
                         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+                                .orElseGet(() -> {
+                                    WalletAccount fallback = WalletAccount.open(ownerType, ownerId);
+                                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                                        fallback.setBalance(new BigDecimal("2000.00"));
+                                    }
+                                    return fallback;
+                                });
                     }
                 });
     }
 
     private WalletAccount getOrCreateForUpdate(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
+                .orElseGet(() -> {
+                    try {
+                        WalletAccount account = WalletAccount.open(ownerType, ownerId);
+                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                            account.setBalance(new BigDecimal("2000.00"));
+                        }
+                        account = walletAccountRepository.save(account);
+                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                            ledgerEntryRepository.save(LedgerEntry.credit(
+                                    account.getId(),
+                                    new BigDecimal("2000.00"),
+                                    LedgerReferenceType.INCENTIVE,
+                                    account.getId()));
+                        }
+                        return account;
+                    } catch (Exception ex) {
+                        return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                                .orElseGet(() -> {
+                                    WalletAccount fallback = WalletAccount.open(ownerType, ownerId);
+                                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
+                                        fallback.setBalance(new BigDecimal("2000.00"));
+                                    }
+                                    return fallback;
+                                });
+                    }
+                });
     }
 
     private BigDecimal calculateTrueRestaurantBalance(UUID restaurantId, UUID walletAccountId) {

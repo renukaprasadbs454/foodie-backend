@@ -108,6 +108,27 @@ public class Payout extends BaseEntity {
         this.completedAt = Instant.now();
     }
 
+    public void markApproved() {
+        this.status = PayoutStatus.APPROVED;
+    }
+
+    public void markRejected(String reason) {
+        this.status = PayoutStatus.REJECTED;
+        this.failureReason = reason;
+    }
+
+    public void markCompletedDirect(String ref) {
+        this.status = PayoutStatus.COMPLETED;
+        this.completedAt = Instant.now();
+        this.processedAt = Instant.now();
+        if (ref != null && !ref.isBlank()) {
+            this.bankRef = ref;
+            this.providerReferenceId = ref;
+        } else if (this.bankRef == null) {
+            this.bankRef = "WTH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+    }
+
     public void markFailed(String failureReason, String providerStatus) {
         this.status = PayoutStatus.FAILED;
         this.failureReason = failureReason;
