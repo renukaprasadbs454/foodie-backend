@@ -174,6 +174,13 @@ public class AuthServiceImpl implements AuthService {
                     credential.getEmail()));
         } else {
             credential = existing.get();
+            if (credential.getUserType() == UserType.DELIVERY_PARTNER) {
+                eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
+                        credential.getId(),
+                        credential.getUserType(),
+                        credential.getPhoneNumber(),
+                        credential.getEmail()));
+            }
         }
 
         assertActive(credential);

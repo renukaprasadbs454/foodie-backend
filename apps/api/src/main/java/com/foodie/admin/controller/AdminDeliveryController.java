@@ -154,6 +154,7 @@ public class AdminDeliveryController {
     @Operation(summary = "Get single delivery partner details")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> getPartner(@PathVariable UUID id) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(id)
+                .or(() -> deliveryPartnerRepository.findByUserCredentialId(id))
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
