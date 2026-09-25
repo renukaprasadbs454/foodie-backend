@@ -18,7 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.foodie.security.principal.AuthPrincipal;
 
 @RestController
-@RequestMapping("/v1/orders/{orderId}/messages")
+@RequestMapping("/api/v1/orders/{orderId}/messages")
 public class OrderMessageController {
 
     private final OrderMessageRepository orderMessageRepository;
