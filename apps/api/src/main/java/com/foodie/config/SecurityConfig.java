@@ -63,7 +63,8 @@ public class SecurityConfig {
                                                                 "/api/v1/restaurants/cleanup-dummy")
                                                 .permitAll()
                                                 .requestMatchers(
-                                                                "/api/v1/admin/support-tickets")
+                                                                "/api/v1/admin/support-tickets",
+                                                                "/api/v1/admin/support-tickets/**")
                                                 .permitAll()
                                                 .requestMatchers(
                                                                 HttpMethod.GET,
