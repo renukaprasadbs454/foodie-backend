@@ -59,6 +59,68 @@ public class AdminSupportTicketController {
         return ResponseEntity.ok(ApiResponse.success(msg));
     }
 
+    @Autowired
+    private com.foodie.support.repository.SupportConversationRepository conversationRepository;
+
+    @Autowired
+    private com.foodie.support.repository.SupportMessageRepository messageRepository;
+
+    @PostMapping
+    @Operation(summary = "Sync support ticket from customer app")
+    public ResponseEntity<ApiResponse<SupportConversation>> syncTicket(@RequestBody Map<String, Object> req) {
+        String id = (String) req.get("id");
+        if (id == null) return ResponseEntity.badRequest().build();
+
+        String action = (String) req.get("action");
+        String category = (String) req.getOrDefault("category", "CUSTOMER");
+        String subject = (String) req.getOrDefault("subject", "Live Agent Request");
+        String orderId = (String) req.get("orderId");
+        String senderName = (String) req.getOrDefault("senderName", "Customer User");
+        String senderEmail = (String) req.getOrDefault("senderEmail", "customer@foodie.com");
+        
+        SupportConversation conv = conversationRepository.findById(id).orElse(null);
+        if (conv == null) {
+            conv = new SupportConversation();
+            conv.setId(id);
+            conv.setCustomerId(senderEmail);
+            conv.setCategory(category);
+            conv.setSubject(subject);
+            conv.setOrderId(orderId);
+            conv.setStatus("WAITING_FOR_AGENT");
+            conv.setUpdatedAt(java.time.Instant.now());
+            conv = conversationRepository.save(conv);
+        }
+
+        if ("reply".equals(action)) {
+            String message = (String) req.get("message");
+            if (message != null && !message.isEmpty()) {
+                supportService.addMessage(conv.getId(), "CUSTOMER", senderEmail, senderName, message);
+            }
+        } else if ("connect_agent".equals(action)) {
+            conv.setStatus("WAITING_FOR_AGENT");
+            conversationRepository.save(conv);
+            
+            if (req.containsKey("messages")) {
+                List<Map<String, String>> messages = (List<Map<String, String>>) req.get("messages");
+                for (Map<String, String> msgData : messages) {
+                    String content = msgData.get("message");
+                    String msgSenderName = msgData.getOrDefault("senderName", senderName);
+                    String sender = msgData.getOrDefault("sender", "customer");
+                    String sType = "customer".equalsIgnoreCase(sender) ? "CUSTOMER" : "AGENT";
+                    
+                    // Basic duplicate check by content (since ID is generated server side)
+                    List<SupportMessage> existingMsg = supportService.getMessages(id);
+                    boolean exists = existingMsg.stream().anyMatch(m -> m.getContent() != null && m.getContent().equals(content));
+                    if (content != null && !content.trim().isEmpty() && !exists) {
+                        supportService.addMessage(conv.getId(), sType, senderEmail, msgSenderName, content);
+                    }
+                }
+            }
+        }
+        
+        return ResponseEntity.ok(ApiResponse.success(conv));
+    }
+
     @PatchMapping("/{id}/status")
     @Operation(summary = "Update support ticket status, e.g. Resolve")
     public ResponseEntity<ApiResponse<SupportConversation>> updateTicketStatus(
@@ -71,7 +133,6 @@ public class AdminSupportTicketController {
             return ResponseEntity.ok(ApiResponse.success(supportService.resolveConversation(ticketId)));
         }
 
-        // Ideally handle other statuses
         return ResponseEntity.notFound().build();
     }
 }
