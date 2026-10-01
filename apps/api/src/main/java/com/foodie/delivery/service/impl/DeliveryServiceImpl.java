@@ -5,6 +5,7 @@ import com.foodie.common.enums.DeliveryAssignmentStatus;
 import com.foodie.common.enums.DeliveryDocType;
 import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.OrderStatus;
+import com.foodie.common.enums.PaymentStatus;
 import com.foodie.common.enums.UserType;
 import com.foodie.common.enums.VehicleType;
 import com.foodie.common.exception.BadRequestException;
@@ -316,9 +317,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         assignment.markDelivered();
         deliveryAssignmentRepository.save(assignment);
 
-        // Update Cash in Hand if COD payment
+        // Update Cash in Hand if COD payment (not captured online)
         paymentRepository.findByOrderId(assignment.getOrderId()).ifPresent(payment -> {
-            if (payment.getWalletAmount() == null || payment.getWalletAmount().compareTo(BigDecimal.ZERO) == 0) {
+            if (payment.getStatus() != PaymentStatus.CAPTURED && payment.getAmount() != null) {
                 DeliveryPartner partner = assignment.getDeliveryPartner();
                 partner.addCash(payment.getAmount());
                 deliveryPartnerRepository.save(partner);

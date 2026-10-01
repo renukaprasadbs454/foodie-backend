@@ -99,6 +99,7 @@ public final class OrderStateMachine {
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.OUT_FOR_DELIVERY)
+                || (from == OrderStatus.PICKED_UP && to == OrderStatus.DELIVERED)
                 || (from == OrderStatus.OUT_FOR_DELIVERY && to == OrderStatus.DELIVERED);
     }
 }

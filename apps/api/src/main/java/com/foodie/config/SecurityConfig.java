@@ -55,6 +55,8 @@ public class SecurityConfig {
                                                                 "/v3/api-docs/**",
                                                                 "/swagger-ui/**",
                                                                 "/swagger-ui.html",
+                                                                "/ws",
+                                                                "/ws/**",
                                                                 "/api/v1/auth/**",
                                                                 "/api/v1/payments/webhook/razorpay",
                                                                 "/api/v1/payouts/webhook/**",

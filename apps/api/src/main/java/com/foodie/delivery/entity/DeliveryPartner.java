@@ -112,18 +112,30 @@ public class DeliveryPartner extends BaseEntity {
     }
 
     public void addCash(java.math.BigDecimal amount) {
+        if (this.cashInHand == null) {
+            this.cashInHand = java.math.BigDecimal.ZERO;
+        }
         if (amount != null && amount.compareTo(java.math.BigDecimal.ZERO) > 0) {
             this.cashInHand = this.cashInHand.add(amount);
         }
     }
 
     public void deductCash(java.math.BigDecimal amount) {
+        if (this.cashInHand == null) {
+            this.cashInHand = java.math.BigDecimal.ZERO;
+        }
         if (amount != null && amount.compareTo(java.math.BigDecimal.ZERO) > 0) {
             this.cashInHand = this.cashInHand.subtract(amount).max(java.math.BigDecimal.ZERO);
         }
     }
 
     public boolean isCashLimitExceeded() {
+        if (this.cashInHand == null) {
+            this.cashInHand = java.math.BigDecimal.ZERO;
+        }
+        if (this.maxCashInHandLimit == null) {
+            this.maxCashInHandLimit = new java.math.BigDecimal("2000.00");
+        }
         return this.cashInHand.compareTo(this.maxCashInHandLimit) >= 0;
     }
 

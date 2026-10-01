@@ -28,11 +28,16 @@ public class DeliveryMapper {
         }
 
         public DeliveryDocumentResponseDto toDocument(DeliveryPartnerDocument document) {
+                String key = document.getS3Key();
+                String fileUrl = (key != null && !key.isBlank())
+                                ? (key.startsWith("http://") || key.startsWith("https://") || key.startsWith("/") ? key : "/api/v1/storage/" + key)
+                                : null;
                 return new DeliveryDocumentResponseDto(
                                 document.getId(),
                                 document.getDocType().name(),
                                 document.getVerificationStatus().name(),
-                                document.getS3Key(),
+                                key,
+                                fileUrl,
                                 document.getCreatedAt());
         }
 
