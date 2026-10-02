@@ -531,11 +531,15 @@ public class DeliveryServiceImpl implements DeliveryService {
                             com.foodie.common.enums.VehicleType.BIKE,
                             null);
                     p.verifyKyc();
-                    return deliveryPartnerRepository.save(p);
+                    DeliveryPartner saved = deliveryPartnerRepository.save(p);
+                    return saved != null ? saved : p;
                 });
-        if (partner.getKycStatus() != KycStatus.VERIFIED) {
+        if (partner != null && partner.getKycStatus() != KycStatus.VERIFIED) {
             partner.verifyKyc();
-            partner = deliveryPartnerRepository.save(partner);
+            DeliveryPartner saved = deliveryPartnerRepository.save(partner);
+            if (saved != null) {
+                partner = saved;
+            }
         }
         return partner;
     }

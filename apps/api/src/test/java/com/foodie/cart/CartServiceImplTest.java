@@ -120,6 +120,8 @@ class CartServiceImplTest {
         Cart cart = Cart.createEmpty(customerId);
         setId(cart, UUID.randomUUID());
         cart.setRestaurantId(restaurantA);
+        CartItem existingItem = CartItem.create(cart, UUID.randomUUID(), null, 1, null);
+        when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId())).thenReturn(List.of(existingItem));
         when(cartRepository.findByCustomerId(customerId)).thenReturn(Optional.of(cart));
 
         UUID menuItemId = UUID.randomUUID();

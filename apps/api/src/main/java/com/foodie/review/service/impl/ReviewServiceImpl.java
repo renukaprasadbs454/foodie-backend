@@ -65,11 +65,10 @@ public class ReviewServiceImpl implements ReviewService {
             // Hide existence of others' orders
             throw new ResourceNotFoundException("Order not found.");
         }
-        if (order.status() != OrderStatus.DELIVERED && order.status() != OrderStatus.PICKED_UP
-                && order.status() != OrderStatus.OUT_FOR_DELIVERY) {
+        if (order.status() != OrderStatus.DELIVERED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ORDER_NOT_DELIVERED,
-                    "Reviews are allowed only for collected or delivered orders.");
+                    "Reviews are allowed only for delivered orders.");
         }
         if (reviewRepository.existsByOrderId(orderId)) {
             throw new ConflictException(

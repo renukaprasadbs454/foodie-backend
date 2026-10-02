@@ -91,14 +91,10 @@ public class MenuServiceImpl implements MenuService {
     @Override
     @Transactional(readOnly = true)
     public FullMenuResponseDto getFullMenu(UUID restaurantId) {
-        UUID targetId = restaurantId;
-        if (restaurantSummaryProvider.findByRestaurantId(targetId).isEmpty()) {
-            List<Category> firstCats = categoryRepository.findAll();
-            if (!firstCats.isEmpty()) {
-                targetId = firstCats.get(0).getRestaurantId();
-            }
+        if (restaurantSummaryProvider.findByRestaurantId(restaurantId).isEmpty()) {
+            throw new ResourceNotFoundException("Restaurant not found.");
         }
-        final UUID activeRestaurantId = targetId;
+        final UUID activeRestaurantId = restaurantId;
 
         var cached = menuCacheService.get(activeRestaurantId);
         if (cached.isPresent()) {
@@ -229,15 +225,20 @@ public class MenuServiceImpl implements MenuService {
     @Transactional
     public MenuItemResponseDto createItem(UUID ownerCredentialId, CreateMenuItemRequestDto request) {
         UUID restaurantId = requireOwnedRestaurantId(ownerCredentialId);
-        Category category = categoryRepository.findByIdAndRestaurantId(request.categoryId(), restaurantId)
-                .orElseGet(() -> {
-                    java.util.List<Category> all = categoryRepository
-                            .findByRestaurantIdOrderByDisplayOrderAsc(restaurantId);
-                    if (all.isEmpty()) {
-                        return categoryRepository.save(Category.create(restaurantId, "Popular Items", 1));
-                    }
-                    return all.get(0);
-                });
+        Category category;
+        if (request.categoryId() != null) {
+            category = categoryRepository.findByIdAndRestaurantId(request.categoryId(), restaurantId)
+                    .orElseThrow(() -> new UnprocessableEntityException(
+                            ErrorCode.CATEGORY_NOT_OWNED, "Category does not belong to your restaurant."));
+        } else {
+            java.util.List<Category> all = categoryRepository
+                    .findByRestaurantIdOrderByDisplayOrderAsc(restaurantId);
+            if (all.isEmpty()) {
+                category = categoryRepository.save(Category.create(restaurantId, "Popular Items", 1));
+            } else {
+                category = all.get(0);
+            }
+        }
 
         MenuItem item = menuItemRepository.save(MenuItem.create(
                 restaurantId,

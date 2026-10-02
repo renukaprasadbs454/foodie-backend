@@ -7,12 +7,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 /**
  * Development SMS adapter — logs dispatch. Swap without touching Auth module.
  * Plaintext OTP is logged only on {@code local}/{@code dev} profiles (local browser demo).
  * Staging/prod must never log OTP values (Phase3 §15).
  */
 @Component
+@ConditionalOnProperty(name = "foodie.sms.provider", havingValue = "logging")
 public class LoggingSmsSender implements SmsSender {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingSmsSender.class);

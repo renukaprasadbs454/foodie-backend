@@ -11,7 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-@Primary
+import org.springframework.context.annotation.Profile;
+
 @Component
 public class WhatsAppSmsSender implements SmsSender {
 

@@ -303,16 +303,14 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             if (priorOrders > 0) {
                 return false;
             }
+        }
+
+        if (customerId != null) {
             long perUser = redemptionRepository.countByCouponIdAndCustomerId(coupon.getId(), customerId);
             if (perUser >= coupon.getUsageLimitPerUser()) {
                 return false;
             }
         }
-
-        // Eligibility cache is write-through hint only; usage counts always come from
-        // PostgreSQL.
-        // For non-first order coupons, infinite usage per user allows them to be reused
-        // until deactivated.
 
         if (coupon.getUsageLimitTotal() != null) {
             long total = redemptionRepository.countByCouponId(coupon.getId());
@@ -342,6 +340,9 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             discount = cartTotal
                     .multiply(coupon.getValue())
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            if (coupon.getMaxDiscountAmount() != null) {
+                discount = discount.min(coupon.getMaxDiscountAmount());
+            }
         }
         return discount.min(cartTotal).setScale(2, RoundingMode.HALF_UP);
     }

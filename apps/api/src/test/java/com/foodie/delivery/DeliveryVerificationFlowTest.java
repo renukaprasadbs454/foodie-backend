@@ -79,6 +79,7 @@ class DeliveryVerificationFlowTest {
         assignmentId = UUID.randomUUID();
 
         partner = DeliveryPartner.create(userCredentialId, "Ravi Kumar", VehicleType.BIKE, "KA01AB1234");
+        partner.verifyKyc();
         assignment = DeliveryAssignment.createOffered(
                 orderId,
                 partner,
@@ -95,14 +96,14 @@ class DeliveryVerificationFlowTest {
                 .thenReturn(Optional.of(partner));
         when(deliveryAssignmentRepository.findByIdAndDeliveryPartnerId(assignmentId, partner.getId()))
                 .thenReturn(Optional.of(assignment));
-        when(passwordEncoder.matches("123456", "deliveryHash")).thenReturn(true);
+        when(passwordEncoder.matches("654321", "deliveryHash")).thenReturn(true);
 
         Payment onlinePayment = Payment.initiate(
                 orderId, "session_123", new BigDecimal("350.00"), BigDecimal.ZERO, "idemp_123");
         onlinePayment.markCaptured("cf_order_123");
         when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.of(onlinePayment));
 
-        VerifyOtpRequestDto request = new VerifyOtpRequestDto("123456");
+        VerifyOtpRequestDto request = new VerifyOtpRequestDto("654321");
 
         DeliveryAssignmentResponseDto response = deliveryService.verifyDelivery(userCredentialId, assignmentId, request);
 
@@ -124,14 +125,14 @@ class DeliveryVerificationFlowTest {
                 .thenReturn(Optional.of(partner));
         when(deliveryAssignmentRepository.findByIdAndDeliveryPartnerId(assignmentId, partner.getId()))
                 .thenReturn(Optional.of(assignment));
-        when(passwordEncoder.matches("123456", "deliveryHash")).thenReturn(true);
+        when(passwordEncoder.matches("654321", "deliveryHash")).thenReturn(true);
 
         Payment codPayment = Payment.initiate(
                 orderId, null, new BigDecimal("450.00"), BigDecimal.ZERO, "idemp_cod");
         // Status remains PENDING for COD before handover
         when(paymentRepository.findByOrderId(orderId)).thenReturn(Optional.of(codPayment));
 
-        VerifyOtpRequestDto request = new VerifyOtpRequestDto("123456");
+        VerifyOtpRequestDto request = new VerifyOtpRequestDto("654321");
 
         DeliveryAssignmentResponseDto response = deliveryService.verifyDelivery(userCredentialId, assignmentId, request);
 
