@@ -1,8 +1,14 @@
 package com.foodie.admin.controller;
 
 import com.foodie.admin.dto.LocationZoneDto;
+import com.foodie.admin.dto.CityDto;
 import com.foodie.admin.dto.UnserviceableRequestDto;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.entity.City;
+import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.admin.repository.CityRepository;
 import com.foodie.common.dto.ApiResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,121 +18,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/admin/location")
 public class LocationZoneController {
 
-    private final ConcurrentHashMap<String, LocationZoneDto> zones = new ConcurrentHashMap<>();
+    @Autowired
+    private LocationZoneRepository zoneRepository;
+
+    @Autowired
+    private CityRepository cityRepository;
+
     private final ConcurrentHashMap<String, UnserviceableRequestDto> unserviceableRequests = new ConcurrentHashMap<>();
-
-    public LocationZoneController() {
-        // Seed default multi-zones with coordinates & 3-way toggle flags
-        LocationZoneDto z1 = new LocationZoneDto(
-                "dz-301",
-                "Indiranagar Tech Hub Zone",
-                "Bangalore",
-                12.9716,
-                77.6412,
-                5.0,
-                "12.9716,77.6412 | 12.9800,77.6500 | 12.9600,77.6600",
-                42,
-                new BigDecimal("1.00"),
-                "ACTIVE",
-                true,
-                true,
-                true
-        );
-
-        LocationZoneDto z2 = new LocationZoneDto(
-                "dz-302",
-                "Koramangala Food Strip Zone",
-                "Bangalore",
-                12.9352,
-                77.6245,
-                4.5,
-                "12.9352,77.6245 | 12.9450,77.6300 | 12.9200,77.6150",
-                58,
-                new BigDecimal("1.25"),
-                "HIGH_DEMAND",
-                true,
-                true,
-                true
-        );
-
-        LocationZoneDto z3 = new LocationZoneDto(
-                "dz-303",
-                "Bandra Coastal Eats Zone",
-                "Mumbai",
-                19.0596,
-                72.8295,
-                6.0,
-                "19.0596,72.8295 | 19.0700,72.8400 | 19.0450,72.8200",
-                65,
-                new BigDecimal("1.10"),
-                "ACTIVE",
-                true,
-                true,
-                false // Customer ordering paused temporarily
-        );
-
-        LocationZoneDto z4 = new LocationZoneDto(
-                "dz-304",
-                "HSR Sector 1 Express Zone",
-                "Bangalore",
-                12.9121,
-                77.6446,
-                4.0,
-                "12.9121,77.6446 | 12.9200,77.6500 | 12.9000,77.6350",
-                28,
-                new BigDecimal("1.00"),
-                "ACTIVE",
-                true,
-                false, // Delivery partners paused temporarily
-                true
-        );
-
-        zones.put(z1.getId(), z1);
-        zones.put(z2.getId(), z2);
-        zones.put(z3.getId(), z3);
-        zones.put(z4.getId(), z4);
-
-        // Seed unserviceable location requests from restaurants
-        UnserviceableRequestDto r1 = new UnserviceableRequestDto(
-                "req-501",
-                "Truffles Bistro",
-                "Rohan Sharma",
-                "rohan@truffles.com",
-                "+91 9876543210",
-                "100 Feet Road, Whitefield",
-                "Bangalore",
-                12.9698,
-                77.7499,
-                "PENDING",
-                Instant.now().minusSeconds(86400 * 2)
-        );
-
-        UnserviceableRequestDto r2 = new UnserviceableRequestDto(
-                "req-502",
-                "Coastal Spice House",
-                "Ananya Rao",
-                "ananya@coastalspice.com",
-                "+91 9812345678",
-                "Linking Road, Juhu",
-                "Mumbai",
-                19.1075,
-                72.8263,
-                "PENDING",
-                Instant.now().minusSeconds(86400 * 4)
-        );
-
-        unserviceableRequests.put(r1.getId(), r1);
-        unserviceableRequests.put(r2.getId(), r2);
-    }
 
     @GetMapping("/zones")
     public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
-        return ResponseEntity.ok(ApiResponse.success(new ArrayList<>(zones.values())));
+        List<LocationZoneDto> dtos = zoneRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 
     @PostMapping("/zones")
@@ -138,10 +47,10 @@ public class LocationZoneController {
             dto.setStatus("ACTIVE");
         }
         if (dto.getSurgeMultiplier() == null) {
-            dto.getSurgeMultiplier();
             dto.setSurgeMultiplier(new BigDecimal("1.00"));
         }
-        zones.put(dto.getId(), dto);
+        LocationZone entity = mapToEntity(dto);
+        zoneRepository.save(entity);
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
@@ -152,7 +61,7 @@ public class LocationZoneController {
             @RequestParam(required = false) Boolean deliveryPartnerEnabled,
             @RequestParam(required = false) Boolean customerOrderingEnabled) {
 
-        LocationZoneDto zone = zones.get(zoneId);
+        LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
         if (zone == null) {
             return ResponseEntity.notFound().build();
         }
@@ -167,8 +76,27 @@ public class LocationZoneController {
             zone.setCustomerOrderingEnabled(customerOrderingEnabled);
         }
 
-        zones.put(zoneId, zone);
-        return ResponseEntity.ok(ApiResponse.success(zone));
+        zoneRepository.save(zone);
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
+    }
+    
+    @GetMapping("/cities")
+    public ResponseEntity<ApiResponse<List<CityDto>>> getAllCities() {
+        List<CityDto> dtos = cityRepository.findAll().stream().map(this::mapCityToDto).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(dtos));
+    }
+    
+    @PostMapping("/cities")
+    public ResponseEntity<ApiResponse<CityDto>> createCity(@RequestBody CityDto dto) {
+        if (dto.getId() == null || dto.getId().isBlank()) {
+            dto.setId("cty-" + UUID.randomUUID().toString().substring(0, 6));
+        }
+        if (dto.getStatus() == null) {
+            dto.setStatus("ACTIVE");
+        }
+        City entity = mapCityToEntity(dto);
+        cityRepository.save(entity);
+        return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
     @GetMapping("/unserviceable-requests")
@@ -199,5 +127,63 @@ public class LocationZoneController {
         req.setStatus(status);
         unserviceableRequests.put(requestId, req);
         return ResponseEntity.ok(ApiResponse.success(req));
+    }
+
+    private LocationZoneDto mapToDto(LocationZone entity) {
+        return new LocationZoneDto(
+                entity.getId(),
+                entity.getZoneName(),
+                entity.getCityName(),
+                entity.getLatitude(),
+                entity.getLongitude(),
+                entity.getRadiusKm(),
+                entity.getPolygonCoordinates(),
+                entity.getActiveDrivers(),
+                entity.getSurgeMultiplier(),
+                entity.getStatus(),
+                entity.isRestaurantEnabled(),
+                entity.isDeliveryPartnerEnabled(),
+                entity.isCustomerOrderingEnabled()
+        );
+    }
+
+    private LocationZone mapToEntity(LocationZoneDto dto) {
+        LocationZone entity = new LocationZone();
+        entity.setId(dto.getId());
+        entity.setZoneName(dto.getZoneName());
+        entity.setCityName(dto.getCityName());
+        entity.setLatitude(dto.getLatitude());
+        entity.setLongitude(dto.getLongitude());
+        entity.setRadiusKm(dto.getRadiusKm());
+        entity.setPolygonCoordinates(dto.getPolygonCoordinates());
+        entity.setActiveDrivers(dto.getActiveDrivers());
+        entity.setSurgeMultiplier(dto.getSurgeMultiplier());
+        entity.setStatus(dto.getStatus());
+        entity.setRestaurantEnabled(dto.isRestaurantEnabled());
+        entity.setDeliveryPartnerEnabled(dto.isDeliveryPartnerEnabled());
+        entity.setCustomerOrderingEnabled(dto.isCustomerOrderingEnabled());
+        return entity;
+    }
+
+    private CityDto mapCityToDto(City entity) {
+        CityDto dto = new CityDto();
+        dto.setId(entity.getId());
+        dto.setCityName(entity.getCityName());
+        dto.setState(entity.getState());
+        dto.setActiveZonesCount(entity.getActiveZonesCount());
+        dto.setActiveMerchantsCount(entity.getActiveMerchantsCount());
+        dto.setStatus(entity.getStatus());
+        return dto;
+    }
+
+    private City mapCityToEntity(CityDto dto) {
+        City entity = new City();
+        entity.setId(dto.getId());
+        entity.setCityName(dto.getCityName());
+        entity.setState(dto.getState());
+        entity.setActiveZonesCount(dto.getActiveZonesCount());
+        entity.setActiveMerchantsCount(dto.getActiveMerchantsCount());
+        entity.setStatus(dto.getStatus());
+        return entity;
     }
 }
