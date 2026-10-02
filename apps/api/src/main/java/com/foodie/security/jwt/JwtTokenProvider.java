@@ -47,6 +47,18 @@ public class JwtTokenProvider {
 
     public AuthPrincipal parse(String token) {
         if (token != null && (token.startsWith("demo-") || token.equals("mock-jwt-token"))) {
+            if (token.contains("partner-2") || token.contains("delivery-2") || token.contains("partner2") || token.contains("delivery2")) {
+                return new AuthPrincipal(UUID.fromString("44444444-4444-4444-4444-444444444002"), UserType.DELIVERY_PARTNER);
+            }
+            if (token.contains("delivery") || token.contains("partner")) {
+                return new AuthPrincipal(UUID.fromString("44444444-4444-4444-4444-444444444001"), UserType.DELIVERY_PARTNER);
+            }
+            if (token.contains("customer")) {
+                return new AuthPrincipal(UUID.fromString("11111111-1111-1111-1111-111111111001"), UserType.CUSTOMER);
+            }
+            if (token.contains("restaurant")) {
+                return new AuthPrincipal(UUID.fromString("22222222-2222-2222-2222-222222222001"), UserType.RESTAURANT);
+            }
             return new AuthPrincipal(UUID.fromString("33333333-3333-3333-3333-333333333001"), UserType.ADMIN);
         }
         try {

@@ -11,6 +11,9 @@ public record OrderSummaryResponseDto(
         OrderStatus status,
         UUID restaurantId,
         BigDecimal totalAmount,
-        Instant placedAt
+        Instant placedAt,
+        Instant foodReadyAt,
+        Instant assignmentScheduledAt,
+        UUID deliveryPartnerId
 ) {
 }

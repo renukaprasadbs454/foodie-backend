@@ -47,7 +47,7 @@ public class DeliveryController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Get my delivery partner profile")
     public ResponseEntity<ApiResponse<DeliveryProfileResponseDto>> getProfile(
             @AuthenticationPrincipal AuthPrincipal principal) {
@@ -55,7 +55,7 @@ public class DeliveryController {
     }
 
     @PutMapping("/me")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Create or update my delivery partner profile")
     public ResponseEntity<ApiResponse<DeliveryProfileResponseDto>> upsertProfile(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -64,7 +64,7 @@ public class DeliveryController {
     }
 
     @PostMapping(value = "/me/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Upload delivery partner KYC document (never self-verifies)")
     public ResponseEntity<ApiResponse<DeliveryDocumentResponseDto>> uploadDocument(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -84,7 +84,7 @@ public class DeliveryController {
     }
 
     @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Upload delivery partner profile image")
     public ResponseEntity<ApiResponse<DeliveryProfileImageResponseDto>> uploadProfileImage(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -94,7 +94,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/availability")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Set online/offline availability")
     public ResponseEntity<ApiResponse<AvailabilityResponseDto>> setAvailability(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -103,7 +103,7 @@ public class DeliveryController {
     }
 
     @GetMapping("/offers")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "List OFFERED delivery assignments for this partner")
     public ResponseEntity<ApiResponse<List<DeliveryOfferResponseDto>>> listOffers(
             @AuthenticationPrincipal AuthPrincipal principal) {
@@ -111,7 +111,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/accept")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Accept a delivery assignment offer")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> accept(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -120,7 +120,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/reject")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Reject a delivery assignment offer")
     public ResponseEntity<ApiResponse<Void>> reject(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -130,7 +130,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/verify-pickup")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify restaurant pickup OTP")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> verifyPickup(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -141,7 +141,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/verify-delivery")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify customer delivery OTP")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> verifyDelivery(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -152,7 +152,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/location-ping")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Report live GPS location (Redis GEO only)")
     public ResponseEntity<Void> locationPing(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -162,7 +162,7 @@ public class DeliveryController {
     }
 
     @PostMapping(value = "/assignments/{id}/verify-face", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify delivery partner identity using selfie (per assignment)")
     public ResponseEntity<ApiResponse<Boolean>> verifyFace(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -173,7 +173,7 @@ public class DeliveryController {
     }
 
     @PostMapping(value = "/me/verify-face", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify delivery partner identity using selfie (for go-online check)")
     public ResponseEntity<ApiResponse<Boolean>> verifyFaceForOnline(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -183,7 +183,7 @@ public class DeliveryController {
     }
 
     @GetMapping("/cash-in-hand")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Get delivery partner cash in hand status and deposit history")
     public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CashInHandResponseDto>> getCashInHand(
             @AuthenticationPrincipal AuthPrincipal principal) {
@@ -191,7 +191,7 @@ public class DeliveryController {
     }
 
     @PostMapping("/cash-deposits")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Submit a cash deposit request to clear cash in hand balance")
     public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CashDepositResponseDto>> submitCashDeposit(
             @AuthenticationPrincipal AuthPrincipal principal,

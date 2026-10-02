@@ -38,8 +38,8 @@ public class CustomerSummaryProviderImpl implements CustomerSummaryProvider {
             return existing;
         }
         return userCredentialRepository.findById(userCredentialId)
-                .map(u -> customerRepository.save(Customer.createInitial(u.getId(), u.getEmail())))
-                .or(() -> Optional.of(customerRepository.save(Customer.createInitial(userCredentialId, null))))
+                .map(u -> customerRepository.saveAndFlush(Customer.createInitial(u.getId(), u.getEmail())))
+                .or(() -> Optional.of(customerRepository.saveAndFlush(Customer.createInitial(userCredentialId, null))))
                 .map(this::toSummary);
     }
 

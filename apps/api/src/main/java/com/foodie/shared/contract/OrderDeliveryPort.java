@@ -21,9 +21,13 @@ public interface OrderDeliveryPort {
 
     record OrderDeliverySnapshot(
             UUID orderId,
+            String orderNumber,
             UUID restaurantId,
             OrderStatus status,
-            UUID deliveryPartnerId
+            UUID deliveryPartnerId,
+            UUID addressId,
+            java.time.Instant foodReadyAt,
+            java.time.Instant assignmentScheduledAt
     ) {
     }
 }

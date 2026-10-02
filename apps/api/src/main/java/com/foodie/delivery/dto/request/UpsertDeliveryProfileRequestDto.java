@@ -14,6 +14,21 @@ public record UpsertDeliveryProfileRequestDto(
         VehicleType vehicleType,
 
         @Size(max = 20)
-        String vehicleNumber
+        String vehicleNumber,
+
+        @Size(max = 500)
+        String addressLine1,
+
+        @Size(max = 500)
+        String addressLine2,
+
+        @Size(max = 100)
+        String city,
+
+        @Size(max = 100)
+        String state,
+
+        @Size(max = 20)
+        String pincode
 ) {
 }

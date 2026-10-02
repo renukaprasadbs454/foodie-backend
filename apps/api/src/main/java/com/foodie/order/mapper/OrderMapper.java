@@ -53,6 +53,9 @@ public class OrderMapper {
                                 order.getTotalAmount(),
                                 order.getPlacedAt(),
                                 order.getPreparationTime(),
+                                order.getFoodReadyAt(),
+                                order.getAssignmentScheduledAt(),
+                                order.getDeliveryPartnerId(),
                                 itemDtos,
                                 eventDtos);
         }
@@ -64,6 +67,9 @@ public class OrderMapper {
                                 order.getStatus(),
                                 order.getRestaurantId(),
                                 order.getTotalAmount(),
-                                order.getPlacedAt());
+                                order.getPlacedAt(),
+                                order.getFoodReadyAt(),
+                                order.getAssignmentScheduledAt(),
+                                order.getDeliveryPartnerId());
         }
 }

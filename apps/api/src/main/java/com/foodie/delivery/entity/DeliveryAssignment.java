@@ -22,7 +22,7 @@ public class DeliveryAssignment extends BaseEntity {
     private UUID orderId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "delivery_partner_id", nullable = false, updatable = false)
+    @JoinColumn(name = "delivery_partner_id", nullable = false)
     private DeliveryPartner deliveryPartner;
 
     @Enumerated(EnumType.STRING)
@@ -65,6 +65,16 @@ public class DeliveryAssignment extends BaseEntity {
         assignment.deliveryOtpHash = deliveryOtpHash;
         assignment.assignedAt = Instant.now();
         return assignment;
+    }
+
+    public void reofferTo(DeliveryPartner newPartner) {
+        this.deliveryPartner = newPartner;
+        this.status = DeliveryAssignmentStatus.OFFERED;
+        this.assignedAt = Instant.now();
+    }
+
+    public void markRejected() {
+        this.status = DeliveryAssignmentStatus.REJECTED;
     }
 
     public void accept() {

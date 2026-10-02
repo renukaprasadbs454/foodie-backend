@@ -90,16 +90,26 @@ public class AuthServiceImpl implements AuthService {
 
     private static final java.util.Map<String, String> otpStore = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private String normalizePhoneNumber(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim().replaceAll("[\\s-]", "");
+        if (trimmed.startsWith("+91")) return trimmed;
+        if (trimmed.startsWith("91") && trimmed.length() == 12) return "+" + trimmed;
+        if (trimmed.matches("^[6-9]\\d{9}$")) return "+91" + trimmed;
+        return trimmed;
+    }
+
     @Override
     public void requestOtp(String phoneNumber) {
-        rateLimiter.check("ratelimit:otp-request:" + phoneNumber, OTP_REQUEST_LIMIT, OTP_REQUEST_WINDOW);
+        String cleanPhone = normalizePhoneNumber(phoneNumber);
+        rateLimiter.check("ratelimit:otp-request:" + cleanPhone, OTP_REQUEST_LIMIT, OTP_REQUEST_WINDOW);
 
         String otp = HashUtils.sixDigitOtp();
-        otpStore.put(phoneNumber, otp);
+        otpStore.put(cleanPhone, otp);
 
         try {
             String otpHash = passwordEncoder.encode(otp);
-            redisTemplate.opsForValue().set(otpKey(phoneNumber), otpHash, OTP_TTL);
+            redisTemplate.opsForValue().set(otpKey(cleanPhone), otpHash, OTP_TTL);
         } catch (Exception ex) {
             log.debug("Redis OTP storage skipped: {}", ex.getMessage());
         }
@@ -108,7 +118,7 @@ public class AuthServiceImpl implements AuthService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                smsSender.sendOtp(phoneNumber, otp);
+                smsSender.sendOtp(cleanPhone, otp);
             } catch (Exception ex) {
                 log.error("SMS dispatch failed for OTP request", ex);
             }
@@ -125,32 +135,47 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "ADMIN accounts cannot self-register via OTP.");
         }
 
-        String realOtp = otpStore.get(request.phoneNumber());
-        boolean isMatch = (realOtp != null && realOtp.equals(request.otp())) || "123456".equals(request.otp());
-        if (!isMatch) {
+        String cleanPhone = normalizePhoneNumber(request.phoneNumber());
+        String realOtp = otpStore.get(cleanPhone);
+        String storedHash = null;
+        if (realOtp == null) {
             try {
-                String storedHash = redisTemplate.opsForValue().get(otpKey(request.phoneNumber()));
-                if (storedHash != null && passwordEncoder.matches(request.otp(), storedHash)) {
-                    isMatch = true;
-                }
+                storedHash = redisTemplate.opsForValue().get(otpKey(cleanPhone));
             } catch (Exception ex) {
-                log.debug("Redis OTP verify check skipped: {}", ex.getMessage());
+                log.debug("Redis OTP verify fetch skipped: {}", ex.getMessage());
+            }
+        }
+
+        boolean isDemoOtp = "123456".equals(request.otp());
+        boolean hasStoredOtp = (realOtp != null || storedHash != null);
+
+        if (!hasStoredOtp && !isDemoOtp) {
+            throw new OtpExpiredException();
+        }
+
+        boolean isMatch = isDemoOtp;
+        if (!isMatch) {
+            if (realOtp != null) {
+                isMatch = realOtp.equals(request.otp());
+            } else if (storedHash != null) {
+                isMatch = passwordEncoder.matches(request.otp(), storedHash);
             }
         }
 
         if (!isMatch) {
             throw new InvalidOtpException();
         }
-        otpStore.remove(request.phoneNumber());
+
+        otpStore.remove(cleanPhone);
         try {
-            redisTemplate.delete(otpKey(request.phoneNumber()));
+            redisTemplate.delete(otpKey(cleanPhone));
         } catch (Exception ignored) {
         }
 
         // Same phone may own CUSTOMER + RESTAURANT + DELIVERY_PARTNER; ADMIN stays
         // exclusive.
         boolean phoneUsedByAdmin = userCredentialRepository
-                .findAllByPhoneNumber(request.phoneNumber())
+                .findAllByPhoneNumber(cleanPhone)
                 .stream()
                 .anyMatch(c -> c.getUserType() == UserType.ADMIN);
         if (phoneUsedByAdmin) {
@@ -160,13 +185,13 @@ public class AuthServiceImpl implements AuthService {
         }
 
         Optional<UserCredential> existing = userCredentialRepository.findByPhoneNumberAndUserType(
-                request.phoneNumber(),
+                cleanPhone,
                 request.userType());
         boolean isNewUser = existing.isEmpty();
         UserCredential credential;
         if (isNewUser) {
             credential = userCredentialRepository.save(
-                    UserCredential.phoneSignup(request.phoneNumber(), request.userType()));
+                    UserCredential.phoneSignup(cleanPhone, request.userType()));
             eventPublisher.publishEvent(UserCredentialCreatedEvent.of(
                     credential.getId(),
                     credential.getUserType(),

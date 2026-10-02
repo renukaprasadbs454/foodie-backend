@@ -38,6 +38,7 @@ public class CustomerDeliveryController {
      */
     @GetMapping("/{orderId}/delivery-partner")
     @PreAuthorize("hasRole('CUSTOMER')")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<ActiveDeliveryPartnerResponseDto>> getDeliveryPartnerForOrder(
             @PathVariable UUID orderId) {
 

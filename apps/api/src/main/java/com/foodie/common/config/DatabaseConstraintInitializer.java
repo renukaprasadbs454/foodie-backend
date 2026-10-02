@@ -34,5 +34,43 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("Could not alter payment check constraint: {}", e.getMessage());
         }
+
+        try {
+            jdbcTemplate.queryForList(
+                "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'DELIVERY_ASSIGNMENT' AND CONSTRAINT_TYPE = 'CHECK'",
+                String.class
+            ).forEach(constraintName -> {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE delivery_assignment DROP CONSTRAINT " + constraintName);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+
+        try {
+            jdbcTemplate.queryForList(
+                "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'ORDER' AND CONSTRAINT_TYPE = 'CHECK'",
+                String.class
+            ).forEach(constraintName -> {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE \"order\" DROP CONSTRAINT " + constraintName);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE delivery_assignment ALTER COLUMN status VARCHAR(50)");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE \"order\" ALTER COLUMN status VARCHAR(50)");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.update("UPDATE delivery_partner SET is_online = FALSE");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.update("UPDATE delivery_assignment SET status = 'EXPIRED' WHERE status IN ('OFFERED', 'ACCEPTED', 'PICKED_UP')");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.update("UPDATE \"order\" SET status = 'CANCELLED' WHERE status IN ('WAITING_FOR_DELIVERY_PARTNER', 'ACCEPTED', 'PREPARING', 'CONFIRMED')");
+        } catch (Exception ignored) {}
     }
 }

@@ -42,9 +42,13 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
         return orderRepository.findById(orderId)
                 .map(order -> new OrderDeliverySnapshot(
                         order.getId(),
+                        order.getOrderNumber(),
                         order.getRestaurantId(),
                         order.getStatus(),
-                        order.getDeliveryPartnerId()
+                        order.getDeliveryPartnerId(),
+                        order.getAddressId(),
+                        order.getFoodReadyAt(),
+                        order.getAssignmentScheduledAt()
                 ));
     }
 
@@ -76,6 +80,9 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     @Transactional
     public void updateStatus(UUID orderId, OrderStatus status) {
         Order order = require(orderId);
+        if (order.getStatus() == status) {
+            return;
+        }
         apply(order, status, null);
     }
 

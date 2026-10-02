@@ -30,6 +30,21 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "profile_image_key", length = 500)
     private String profileImageKey;
 
+    @Column(name = "address_line1", length = 500)
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 500)
+    private String addressLine2;
+
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Column(name = "state", length = 100)
+    private String state;
+
+    @Column(name = "pincode", length = 20)
+    private String pincode;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status", nullable = false, length = 20)
     private KycStatus kycStatus;
@@ -82,6 +97,34 @@ public class DeliveryPartner extends BaseEntity {
         this.fullName = fullName;
         this.vehicleType = vehicleType;
         this.vehicleNumber = vehicleNumber;
+    }
+
+    public void updateAddress(String addressLine1, String addressLine2, String city, String state, String pincode) {
+        this.addressLine1 = addressLine1;
+        this.addressLine2 = addressLine2;
+        this.city = city;
+        this.state = state;
+        this.pincode = pincode;
+    }
+
+    public String getAddressLine1() {
+        return addressLine1;
+    }
+
+    public String getAddressLine2() {
+        return addressLine2;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public String getPincode() {
+        return pincode;
     }
 
     public void setProfileImageKey(String profileImageKey) {

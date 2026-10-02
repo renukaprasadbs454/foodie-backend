@@ -22,4 +22,6 @@ public interface DeliveryAssignmentRepository extends JpaRepository<DeliveryAssi
     );
 
     long countByDeliveryPartnerIdAndStatus(UUID deliveryPartnerId, DeliveryAssignmentStatus status);
+
+    List<DeliveryAssignment> findByStatusAndAssignedAtBefore(DeliveryAssignmentStatus status, java.time.Instant cutoff);
 }

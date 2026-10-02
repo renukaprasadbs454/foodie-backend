@@ -39,7 +39,7 @@ public class WalletController {
         }
 
         @GetMapping("/balance")
-        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER')")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER', 'ADMIN')")
         @Operation(summary = "Get my wallet balance (cached derived value)")
         public ResponseEntity<ApiResponse<WalletBalanceResponseDto>> getBalance(
                         @AuthenticationPrincipal AuthPrincipal principal) {
@@ -48,7 +48,7 @@ public class WalletController {
         }
 
         @GetMapping("/ledger")
-        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER')")
+        @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'CUSTOMER', 'ADMIN')")
         @Operation(summary = "Get my ledger history")
         public ResponseEntity<ApiResponse<List<LedgerEntryResponseDto>>> getLedger(
                         @AuthenticationPrincipal AuthPrincipal principal,

@@ -27,14 +27,18 @@ public final class OrderStateMachine {
         return status == OrderStatus.PENDING_PAYMENT
                 || status == OrderStatus.PLACED
                 || status == OrderStatus.CONFIRMED
-                || status == OrderStatus.ACCEPTED
-                || status == OrderStatus.PREPARING
-                || status == OrderStatus.WAITING_FOR_DELIVERY_PARTNER
-                || status == OrderStatus.READY_FOR_PICKUP;
+                || status == OrderStatus.ACCEPTED;
     }
 
     public static Decision evaluate(OrderStatus from, OrderStatus to, OrderActorType actor) {
-        if (from == null || to == null || from == to || isTerminal(from)) {
+        if (from == null || to == null || isTerminal(from)) {
+            return Decision.ILLEGAL;
+        }
+
+        if (from == to) {
+            if (actor == OrderActorType.RESTAURANT && (to == OrderStatus.ACCEPTED || to == OrderStatus.PREPARING || to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)) {
+                return Decision.ALLOW;
+            }
             return Decision.ILLEGAL;
         }
 
@@ -55,11 +59,11 @@ public final class OrderStateMachine {
         if (actor == OrderActorType.RESTAURANT) {
             return switch (to) {
                 case ACCEPTED ->
-                    (from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
+                    (from == OrderStatus.CONFIRMED || from == OrderStatus.ACCEPTED) ? Decision.ALLOW : Decision.ILLEGAL;
                 case REJECTED ->
                     (from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
                 case PREPARING ->
-                    (from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED)
+                    (from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || from == OrderStatus.PREPARING)
                             ? Decision.ALLOW
                             : Decision.ILLEGAL;
                 case READY_FOR_PICKUP ->
@@ -96,6 +100,7 @@ public final class OrderStateMachine {
                 || (from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ACCEPTED && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.PREPARING && to == OrderStatus.ASSIGNED)
+                || (from == OrderStatus.CONFIRMED && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.OUT_FOR_DELIVERY)

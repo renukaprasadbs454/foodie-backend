@@ -21,6 +21,11 @@ public class DeliveryMapper {
                                 partner.getFullName(),
                                 partner.getVehicleType().name(),
                                 partner.getVehicleNumber(),
+                                partner.getAddressLine1(),
+                                partner.getAddressLine2(),
+                                partner.getCity(),
+                                partner.getState(),
+                                partner.getPincode(),
                                 partner.getKycStatus().name(),
                                 partner.isOnline(),
                                 profileImageUrl,
@@ -43,15 +48,21 @@ public class DeliveryMapper {
 
         public DeliveryOfferResponseDto toOffer(
                         DeliveryAssignment assignment,
+                        String orderNumber,
                         String restaurantName,
                         String pickupAddress,
+                        String deliveryAddress,
+                        java.time.Instant expectedFoodReadyTime,
                         Double estimatedDistance,
                         BigDecimal estimatedFee) {
                 return new DeliveryOfferResponseDto(
                                 assignment.getId(),
                                 assignment.getOrderId(),
+                                orderNumber,
                                 restaurantName,
                                 pickupAddress,
+                                deliveryAddress,
+                                expectedFoodReadyTime,
                                 estimatedDistance,
                                 estimatedFee);
         }

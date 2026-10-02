@@ -20,6 +20,9 @@ public record OrderResponseDto(
                 BigDecimal totalAmount,
                 Instant placedAt,
                 Integer preparationTime,
+                Instant foodReadyAt,
+                Instant assignmentScheduledAt,
+                UUID deliveryPartnerId,
                 List<OrderItemResponseDto> items,
                 List<OrderStatusEventResponseDto> orderStatusEvents) {
 }

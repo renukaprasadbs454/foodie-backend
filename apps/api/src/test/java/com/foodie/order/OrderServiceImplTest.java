@@ -166,7 +166,7 @@ class OrderServiceImplTest {
                 OrderResponseDto created = service.createFromCart(
                                 credentialId, new CreateOrderRequestDto(addressId, null), key);
 
-                assertThat(created.status()).isEqualTo(OrderStatus.PLACED);
+                assertThat(created.status()).isEqualTo(OrderStatus.PENDING_PAYMENT);
                 assertThat(created.orderNumber()).isEqualTo("FD-20260801-000123");
                 assertThat(created.subtotal()).isEqualByComparingTo("440.00");
                 assertThat(created.deliveryFee()).isEqualByComparingTo("30.00");

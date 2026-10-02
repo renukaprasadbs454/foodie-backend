@@ -79,6 +79,10 @@ class AuthServiceImplTest {
 
         @BeforeEach
         void setUp() {
+                var store = (java.util.Map<?, ?>) ReflectionTestUtils.getField(AuthServiceImpl.class, "otpStore");
+                if (store != null) {
+                        store.clear();
+                }
                 lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
                 authService = new AuthServiceImpl(
                                 userCredentialRepository,

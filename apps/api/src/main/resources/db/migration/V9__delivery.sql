@@ -47,7 +47,7 @@ CREATE TABLE delivery_assignment (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL,
     CONSTRAINT chk_delivery_assignment_status
-        CHECK (status IN ('OFFERED', 'ACCEPTED', 'PICKED_UP', 'DELIVERED', 'CANCELLED'))
+        CHECK (status IN ('OFFERED', 'ACCEPTED', 'PICKED_UP', 'DELIVERED', 'CANCELLED', 'REJECTED', 'EXPIRED'))
 );
 
 CREATE INDEX idx_delivery_partner_online ON delivery_partner(is_online) WHERE is_online = TRUE;

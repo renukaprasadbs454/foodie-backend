@@ -20,6 +20,8 @@ public interface DeliveryPartnerRepository extends JpaRepository<DeliveryPartner
 
     long countByOnlineTrue();
 
+    java.util.List<DeliveryPartner> findByOnlineTrueOrderByUpdatedAtDesc();
+
     @Query("SELECT p FROM DeliveryPartner p WHERE " +
            "(:kycStatus IS NULL OR p.kycStatus = :kycStatus) AND " +
            "(:search IS NULL OR LOWER(p.fullName) LIKE :search " +

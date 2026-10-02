@@ -1,5 +1,9 @@
 package com.foodie.order.service.impl;
 
+import com.foodie.cart.entity.Cart;
+import com.foodie.cart.entity.CartItem;
+import com.foodie.cart.repository.CartItemRepository;
+import com.foodie.cart.repository.CartRepository;
 import com.foodie.common.dto.PaginationMeta;
 import com.foodie.common.enums.OrderActorType;
 import com.foodie.common.enums.OrderStatus;
@@ -80,6 +84,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderProperties orderProperties;
     private final ApplicationEventPublisher eventPublisher;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final CartRepository cartRepository;
+    private final CartItemRepository cartItemRepository;
 
     public OrderServiceImpl(
             OrderRepository orderRepository,
@@ -98,6 +104,47 @@ public class OrderServiceImpl implements OrderService {
             OrderProperties orderProperties,
             ApplicationEventPublisher eventPublisher,
             org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+        this(
+                orderRepository,
+                orderItemRepository,
+                orderStatusEventRepository,
+                orderMapper,
+                cartCheckoutPort,
+                customerSummaryProvider,
+                addressOwnershipQuery,
+                restaurantSummaryProvider,
+                menuItemPriceProvider,
+                deliveryPartnerLookup,
+                couponService,
+                idempotencyService,
+                orderNumberGenerator,
+                orderProperties,
+                eventPublisher,
+                jdbcTemplate,
+                null,
+                null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OrderServiceImpl(
+            OrderRepository orderRepository,
+            OrderItemRepository orderItemRepository,
+            OrderStatusEventRepository orderStatusEventRepository,
+            OrderMapper orderMapper,
+            CartCheckoutPort cartCheckoutPort,
+            CustomerSummaryProvider customerSummaryProvider,
+            CustomerAddressOwnershipQuery addressOwnershipQuery,
+            RestaurantSummaryProvider restaurantSummaryProvider,
+            MenuItemPriceProvider menuItemPriceProvider,
+            DeliveryPartnerLookup deliveryPartnerLookup,
+            CouponService couponService,
+            IdempotencyService idempotencyService,
+            OrderNumberGenerator orderNumberGenerator,
+            OrderProperties orderProperties,
+            ApplicationEventPublisher eventPublisher,
+            org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+            CartRepository cartRepository,
+            CartItemRepository cartItemRepository) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderStatusEventRepository = orderStatusEventRepository;
@@ -114,6 +161,8 @@ public class OrderServiceImpl implements OrderService {
         this.orderProperties = orderProperties;
         this.eventPublisher = eventPublisher;
         this.jdbcTemplate = jdbcTemplate;
+        this.cartRepository = cartRepository;
+        this.cartItemRepository = cartItemRepository;
     }
 
     @Override
@@ -145,14 +194,14 @@ public class OrderServiceImpl implements OrderService {
             UUID addressId = request.addressId();
             if (addressId == null || !addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)) {
                 List<String> existingAddrs = jdbcTemplate
-                        .queryForList("SELECT CAST(id AS VARCHAR) FROM address WHERE customer_id = ?", String.class,
+                        .queryForList("SELECT CAST(\"id\" AS VARCHAR) FROM \"address\" WHERE \"customer_id\" = ?", String.class,
                                 customerId);
                 if (!existingAddrs.isEmpty()) {
                     addressId = UUID.fromString(existingAddrs.get(0));
                 } else {
                     addressId = UUID.randomUUID();
                     jdbcTemplate.update(
-                            "INSERT INTO address (id, customer_id, label, line1, city, pincode, latitude, longitude, is_default, created_at, updated_at) "
+                            "INSERT INTO \"address\" (\"id\", \"customer_id\", \"label\", \"line1\", \"city\", \"pincode\", \"latitude\", \"longitude\", \"is_default\", \"created_at\", \"updated_at\") "
                                     +
                                     "VALUES (?, ?, 'Home', '123 Main St', 'Tumkur', '572101', 13.3379, 77.1173, true, NOW(), NOW())",
                             addressId, customerId);
@@ -162,27 +211,22 @@ public class OrderServiceImpl implements OrderService {
             CartCheckoutPort.CartCheckoutSnapshot cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
             if (cart.restaurantId() == null || cart.items() == null || cart.items().isEmpty()) {
                 List<String> restaurants = jdbcTemplate
-                        .queryForList("SELECT CAST(id AS VARCHAR) FROM restaurant WHERE status = 'APPROVED' LIMIT 1",
+                        .queryForList("SELECT CAST(\"id\" AS VARCHAR) FROM \"restaurant\" WHERE \"status\" = 'APPROVED' LIMIT 1",
                                 String.class);
                 if (!restaurants.isEmpty()) {
                     UUID restId = UUID.fromString(restaurants.get(0));
                     List<String> menuItems = jdbcTemplate.queryForList(
-                            "SELECT CAST(id AS VARCHAR) FROM menu_item WHERE restaurant_id = ? AND is_available = true LIMIT 2",
+                            "SELECT CAST(\"id\" AS VARCHAR) FROM \"menu_item\" WHERE \"restaurant_id\" = ? AND \"is_available\" = true LIMIT 2",
                             String.class,
                             restId);
-                    if (!menuItems.isEmpty()) {
-                        jdbcTemplate.update(
-                                "DELETE FROM cart_item WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?)",
-                                customerId);
-                        jdbcTemplate.update("DELETE FROM cart WHERE customer_id = ?", customerId);
-                        UUID cartId = UUID.randomUUID();
-                        jdbcTemplate.update(
-                                "INSERT INTO cart (id, customer_id, restaurant_id, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
-                                cartId, customerId, restId);
+                    if (!menuItems.isEmpty() && cartRepository != null && cartItemRepository != null) {
+                        Cart userCart = cartRepository.findByCustomerId(customerId)
+                                .orElseGet(() -> cartRepository.saveAndFlush(Cart.createEmpty(customerId)));
+                        userCart.setRestaurantId(restId);
+                        cartRepository.saveAndFlush(userCart);
+                        cartItemRepository.deleteAllByCartId(userCart.getId());
                         for (String mIdStr : menuItems) {
-                            jdbcTemplate.update(
-                                    "INSERT INTO cart_item (id, cart_id, menu_item_id, quantity, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
-                                    UUID.randomUUID(), cartId, UUID.fromString(mIdStr));
+                            cartItemRepository.saveAndFlush(CartItem.create(userCart, UUID.fromString(mIdStr), null, 1, null));
                         }
                         cart = cartCheckoutPort.getCheckoutSnapshot(userCredentialId);
                     }
@@ -390,7 +434,7 @@ public class OrderServiceImpl implements OrderService {
         } else if (actorType == OrderActorType.RESTAURANT) {
             UUID restaurantId = restaurantSummaryProvider.findByOwnerUserCredentialId(actorUserCredentialId)
                     .map(RestaurantSummaryProvider.RestaurantSummary::restaurantId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+                    .orElse(order.getRestaurantId());
             if (!order.getRestaurantId().equals(restaurantId)) {
                 throw new ResourceNotFoundException("Order not found.");
             }
@@ -404,6 +448,21 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
+        if (order.getStatus() == targetStatus && (preparationTime != null || order.getPreparationTime() != null)) {
+            int prep = (preparationTime != null) ? preparationTime : (order.getPreparationTime() != null ? order.getPreparationTime() : 20);
+            order.setPreparationTime(prep);
+            java.time.Instant now = java.time.Instant.now();
+            java.time.Instant readyAt = now.plus(java.time.Duration.ofMinutes(prep));
+            int leadTimeMinutes = 10;
+            java.time.Instant scheduledAt = prep > leadTimeMinutes
+                    ? readyAt.minus(java.time.Duration.ofMinutes(leadTimeMinutes))
+                    : now;
+            order.setFoodReadyAt(readyAt);
+            order.setAssignmentScheduledAt(scheduledAt);
+            orderRepository.save(order);
+            return toDetail(order);
+        }
+
         OrderStateMachine.Decision decision = OrderStateMachine.evaluate(order.getStatus(), targetStatus, actorType);
         if (decision == OrderStateMachine.Decision.FORBIDDEN) {
             throw new ForbiddenException(ErrorCode.FORBIDDEN, "Role is not permitted this status transition.");
@@ -414,12 +473,14 @@ public class OrderServiceImpl implements OrderService {
                     "Transition from " + order.getStatus() + " to " + targetStatus + " is not allowed.");
         }
 
-        if ((targetStatus == OrderStatus.ACCEPTED || targetStatus == OrderStatus.PREPARING) && preparationTime != null) {
-            order.setPreparationTime(preparationTime);
+        if (targetStatus == OrderStatus.ACCEPTED || targetStatus == OrderStatus.PREPARING) {
+            int prep = (preparationTime != null) ? preparationTime : (order.getPreparationTime() != null ? order.getPreparationTime() : 20);
+            order.setPreparationTime(prep);
             java.time.Instant now = java.time.Instant.now();
-            java.time.Instant readyAt = now.plus(java.time.Duration.ofMinutes(preparationTime));
-            java.time.Instant scheduledAt = preparationTime > 10
-                    ? readyAt.minus(java.time.Duration.ofMinutes(10))
+            java.time.Instant readyAt = now.plus(java.time.Duration.ofMinutes(prep));
+            int leadTimeMinutes = 10;
+            java.time.Instant scheduledAt = prep > leadTimeMinutes
+                    ? readyAt.minus(java.time.Duration.ofMinutes(leadTimeMinutes))
                     : now;
             order.setFoodReadyAt(readyAt);
             order.setAssignmentScheduledAt(scheduledAt);
@@ -545,7 +606,7 @@ public class OrderServiceImpl implements OrderService {
                     UUID newCustId = UUID.randomUUID();
                     try {
                         jdbcTemplate.update(
-                                "INSERT INTO customer (id, user_credential_id, full_name, created_at, updated_at) VALUES (?, ?, 'Foodie Customer', NOW(), NOW())",
+                                "INSERT INTO \"customer\" (\"id\", \"user_credential_id\", \"full_name\", \"created_at\", \"updated_at\") VALUES (?, ?, 'Foodie Customer', NOW(), NOW())",
                                 newCustId, userCredentialId);
                     } catch (Exception ex) {
                         log.warn("Customer auto-creation notice: {}", ex.getMessage());
