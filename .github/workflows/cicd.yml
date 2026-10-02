@@ -14,9 +14,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+          cache-dependency-path: 'apps/api/pom.xml'
+
       - name: Make Maven Wrapper executable
         working-directory: apps/api
         run: chmod +x mvnw
+
+      - name: Run Unit Tests
+        working-directory: apps/api
+        run: ./mvnw test -B
 
       - name: Build Backend Docker Image
         working-directory: apps/api
@@ -80,7 +92,7 @@ jobs:
             sleep 5
 
             echo "Cleaning any stale/failed Flyway migration history entries..."
-            docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34');" 2>/dev/null || true
+            docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34', '50', '51', '52');" 2>/dev/null || true
 
             echo "Starting Foodie backend stack..."
             $COMPOSE_CMD build --no-cache backend
