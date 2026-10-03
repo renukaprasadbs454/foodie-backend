@@ -815,4 +815,68 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     private record CachedPage(List<RestaurantSummaryResponseDto> items, PaginationMeta pagination) {
     }
+
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        int r = 6371; // Earth radius km
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
+                * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * r * Math.asin(Math.sqrt(a));
+    }
+
+    private boolean isLocationWithinActiveZone(java.math.BigDecimal lat, java.math.BigDecimal lng) {
+        if (lat == null || lng == null)
+            return false;
+
+        double latDouble = lat.doubleValue();
+        double lngDouble = lng.doubleValue();
+
+        List<LocationZone> zones = locationZoneRepository.findAll();
+        for (LocationZone zone : zones) {
+            if (!zone.isRestaurantEnabled())
+                continue;
+
+            boolean isMatch = false;
+            if (zone.getLatitude() != null && zone.getLongitude() != null && zone.getRadiusKm() != null) {
+                double dist = calculateDistance(latDouble, lngDouble, zone.getLatitude(), zone.getLongitude());
+                if (dist <= zone.getRadiusKm()) {
+                    isMatch = true;
+                }
+            }
+            if (!isMatch && zone.getPolygonCoordinates() != null && !zone.getPolygonCoordinates().isBlank()) {
+                if (isPointInPolygon(latDouble, lngDouble, zone.getPolygonCoordinates())) {
+                    isMatch = true;
+                }
+            }
+            if (isMatch)
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isPointInPolygon(double lat, double lng, String polygonStr) {
+        try {
+            String[] boundaries = polygonStr.split("\\|");
+            if (boundaries.length < 3)
+                return false;
+            double[][] poly = new double[boundaries.length][2];
+            for (int i = 0; i < boundaries.length; i++) {
+                String[] cords = boundaries[i].trim().split(",");
+                poly[i][0] = Double.parseDouble(cords[0]); // lat
+                poly[i][1] = Double.parseDouble(cords[1]); // lng
+            }
+            boolean inside = false;
+            for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                double xi = poly[i][1], yi = poly[i][0];
+                double xj = poly[j][1], yj = poly[j][0];
+                boolean intersect = ((yi > lat) != (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+                if (intersect)
+                    inside = !inside;
+            }
+            return inside;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
