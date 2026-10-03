@@ -39,6 +39,7 @@ import com.foodie.restaurant.repository.RestaurantBankDetailsRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
 import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
+import com.foodie.admin.repository.CityRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
 import com.foodie.restaurant.service.impl.RestaurantServiceImpl;
 import com.foodie.shared.event.RestaurantApprovedEvent;
@@ -79,6 +80,8 @@ class RestaurantServiceImplTest {
     private RestaurantCacheService restaurantCacheService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private CityRepository cityRepository;
 
     private RestaurantServiceImpl service;
     private final UUID ownerId = UUID.randomUUID();
@@ -98,6 +101,7 @@ class RestaurantServiceImplTest {
                 restaurantCacheService,
                 eventPublisher,
                 new ObjectMapper().findAndRegisterModules(),
+                cityRepository,
                 new BigDecimal("18.00"));
     }
 
@@ -114,6 +118,7 @@ class RestaurantServiceImplTest {
             setId(r, UUID.randomUUID());
             return r;
         });
+        when(cityRepository.existsByCityNameIgnoreCaseAndStatus(any(), eq("ACTIVE"))).thenReturn(true);
 
         CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(
                 "Spice Route Kitchen",
@@ -147,6 +152,7 @@ class RestaurantServiceImplTest {
     void getLocation_and_updateLocation_succeeds() {
         Restaurant restaurant = pendingRestaurant();
         when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(cityRepository.existsByCityNameIgnoreCaseAndStatus(any(), eq("ACTIVE"))).thenReturn(true);
 
         RestaurantLocationResponseDto location = service.getLocation(ownerId);
         assertThat(location.city()).isEqualTo("Bengaluru");
