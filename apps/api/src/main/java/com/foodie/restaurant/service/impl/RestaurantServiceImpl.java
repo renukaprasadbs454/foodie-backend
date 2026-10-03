@@ -48,7 +48,8 @@ import com.foodie.restaurant.repository.RestaurantBankDetailsRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
 import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
-import com.foodie.admin.repository.CityRepository;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.repository.LocationZoneRepository;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -97,8 +98,8 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final RestaurantCacheService restaurantCacheService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final LocationZoneRepository locationZoneRepository;
     private final BigDecimal defaultCommissionPct;
-    private final CityRepository cityRepository;
 
     public RestaurantServiceImpl(
             RestaurantRepository restaurantRepository,
@@ -113,7 +114,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             RestaurantCacheService restaurantCacheService,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
-            CityRepository cityRepository,
+            LocationZoneRepository locationZoneRepository,
             @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
@@ -127,7 +128,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         this.restaurantCacheService = restaurantCacheService;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
-        this.cityRepository = cityRepository;
+        this.locationZoneRepository = locationZoneRepository;
         this.defaultCommissionPct = defaultCommissionPct;
     }
 
@@ -293,10 +294,12 @@ public class RestaurantServiceImpl implements RestaurantService {
                     "A restaurant profile already exists for this account.");
         }
 
-        if (request.address() == null || request.address().city() == null ||
-                !cityRepository.existsByCityNameIgnoreCaseAndStatus(request.address().city(), "ACTIVE")) {
+        if (request.address() == null || request.address().city() == null) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Address cannot be null.");
+        }
+        if (!isLocationWithinActiveZone(request.address().latitude(), request.address().longitude())) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
-                    "The provided city is not an ACTIVE operating location for Foodie platform.");
+                    "The provided coordinates are outside of our active service operating areas limit boundaries.");
         }
 
         RestaurantAddress address = restaurantAddressRepository.save(toAddress(request.address()));
@@ -350,9 +353,12 @@ public class RestaurantServiceImpl implements RestaurantService {
             UpdateRestaurantLocationRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
 
-        if (request.city() == null || !cityRepository.existsByCityNameIgnoreCaseAndStatus(request.city(), "ACTIVE")) {
+        if (request.city() == null) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Location city cannot be null.");
+        }
+        if (!isLocationWithinActiveZone(request.latitude(), request.longitude())) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
-                    "The provided location city is not an ACTIVE operating location.");
+                    "The provided coordinates are outside of our active service operating areas limit boundaries.");
         }
 
         restaurant.getAddress().replace(
