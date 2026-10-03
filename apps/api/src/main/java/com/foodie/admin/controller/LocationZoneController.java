@@ -125,7 +125,13 @@ public class LocationZoneController {
 
     @GetMapping("/cities")
     public ResponseEntity<ApiResponse<List<CityDto>>> getAllCities() {
-        List<CityDto> dtos = cityRepository.findAll().stream().map(this::mapCityToDto).collect(Collectors.toList());
+        List<CityDto> dtos = cityRepository.findAll().stream().map(city -> {
+            CityDto dto = mapCityToDto(city);
+            if (dto.getCityName() != null) {
+                dto.setActiveZonesCount(zoneRepository.countByCityNameIgnoreCase(dto.getCityName()));
+            }
+            return dto;
+        }).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 

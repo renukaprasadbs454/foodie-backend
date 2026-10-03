@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface LocationZoneRepository extends JpaRepository<LocationZone, String> {
+    int countByCityNameIgnoreCase(String cityName);
 }
