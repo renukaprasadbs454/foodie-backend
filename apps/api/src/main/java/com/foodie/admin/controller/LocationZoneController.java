@@ -52,7 +52,7 @@ public class LocationZoneController {
             dto.setSurgeMultiplier(new BigDecimal("1.00"));
         }
         LocationZone entity = mapToEntity(dto);
-        zoneRepository.save(entity);
+        zoneRepository.saveAndFlush(entity);
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
@@ -79,7 +79,7 @@ public class LocationZoneController {
             zone.setCustomerOrderingEnabled(customerOrderingEnabled);
         }
 
-        zoneRepository.save(zone);
+        zoneRepository.saveAndFlush(zone);
         return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
     }
     
@@ -99,7 +99,7 @@ public class LocationZoneController {
             dto.setStatus("ACTIVE");
         }
         City entity = mapCityToEntity(dto);
-        cityRepository.save(entity);
+        cityRepository.saveAndFlush(entity);
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
