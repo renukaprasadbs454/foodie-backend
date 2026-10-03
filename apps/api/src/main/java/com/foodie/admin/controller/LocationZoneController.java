@@ -82,6 +82,26 @@ public class LocationZoneController {
         zoneRepository.saveAndFlush(zone);
         return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
     }
+
+    @PatchMapping("/zones/{zoneId}/status")
+    @Transactional
+    public ResponseEntity<ApiResponse<LocationZoneDto>> updateZoneStatus(
+            @PathVariable String zoneId,
+            @RequestParam String status) {
+        LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
+        if (zone == null) return ResponseEntity.notFound().build();
+        zone.setStatus(status);
+        zoneRepository.saveAndFlush(zone);
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
+    }
+
+    @DeleteMapping("/zones/{zoneId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Boolean>> deleteZone(@PathVariable String zoneId) {
+        if (!zoneRepository.existsById(zoneId)) return ResponseEntity.notFound().build();
+        zoneRepository.deleteById(zoneId);
+        return ResponseEntity.ok(ApiResponse.success(true));
+    }
     
     @GetMapping("/cities")
     public ResponseEntity<ApiResponse<List<CityDto>>> getAllCities() {
@@ -101,6 +121,26 @@ public class LocationZoneController {
         City entity = mapCityToEntity(dto);
         cityRepository.saveAndFlush(entity);
         return ResponseEntity.ok(ApiResponse.success(dto));
+    }
+
+    @PatchMapping("/cities/{cityId}/status")
+    @Transactional
+    public ResponseEntity<ApiResponse<CityDto>> updateCityStatus(
+            @PathVariable String cityId,
+            @RequestParam String status) {
+        City city = cityRepository.findById(cityId).orElse(null);
+        if (city == null) return ResponseEntity.notFound().build();
+        city.setStatus(status);
+        cityRepository.saveAndFlush(city);
+        return ResponseEntity.ok(ApiResponse.success(mapCityToDto(city)));
+    }
+
+    @DeleteMapping("/cities/{cityId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Boolean>> deleteCity(@PathVariable String cityId) {
+        if (!cityRepository.existsById(cityId)) return ResponseEntity.notFound().build();
+        cityRepository.deleteById(cityId);
+        return ResponseEntity.ok(ApiResponse.success(true));
     }
 
     @GetMapping("/unserviceable-requests")
