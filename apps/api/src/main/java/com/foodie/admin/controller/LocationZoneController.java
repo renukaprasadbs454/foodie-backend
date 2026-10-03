@@ -10,6 +10,7 @@ import com.foodie.admin.repository.CityRepository;
 import com.foodie.common.dto.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -39,6 +40,7 @@ public class LocationZoneController {
     }
 
     @PostMapping("/zones")
+    @Transactional
     public ResponseEntity<ApiResponse<LocationZoneDto>> createZone(@RequestBody LocationZoneDto dto) {
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("dz-" + UUID.randomUUID().toString().substring(0, 6));
@@ -55,6 +57,7 @@ public class LocationZoneController {
     }
 
     @PatchMapping("/zones/{zoneId}/toggles")
+    @Transactional
     public ResponseEntity<ApiResponse<LocationZoneDto>> updateZoneToggles(
             @PathVariable String zoneId,
             @RequestParam(required = false) Boolean restaurantEnabled,
@@ -87,6 +90,7 @@ public class LocationZoneController {
     }
     
     @PostMapping("/cities")
+    @Transactional
     public ResponseEntity<ApiResponse<CityDto>> createCity(@RequestBody CityDto dto) {
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("cty-" + UUID.randomUUID().toString().substring(0, 6));
