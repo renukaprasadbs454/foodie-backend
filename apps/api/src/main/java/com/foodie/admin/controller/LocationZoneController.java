@@ -53,6 +53,14 @@ public class LocationZoneController {
         }
         LocationZone entity = mapToEntity(dto);
         zoneRepository.saveAndFlush(entity);
+
+        if (dto.getCityName() != null) {
+            cityRepository.findByCityNameIgnoreCase(dto.getCityName()).ifPresent(city -> {
+                city.setActiveZonesCount(city.getActiveZonesCount() + 1);
+                cityRepository.saveAndFlush(city);
+            });
+        }
+
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
@@ -89,7 +97,8 @@ public class LocationZoneController {
             @PathVariable String zoneId,
             @RequestParam String status) {
         LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
-        if (zone == null) return ResponseEntity.notFound().build();
+        if (zone == null)
+            return ResponseEntity.notFound().build();
         zone.setStatus(status);
         zoneRepository.saveAndFlush(zone);
         return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
@@ -98,17 +107,28 @@ public class LocationZoneController {
     @DeleteMapping("/zones/{zoneId}")
     @Transactional
     public ResponseEntity<ApiResponse<Boolean>> deleteZone(@PathVariable String zoneId) {
-        if (!zoneRepository.existsById(zoneId)) return ResponseEntity.notFound().build();
+        LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
+        if (zone == null)
+            return ResponseEntity.notFound().build();
+
         zoneRepository.deleteById(zoneId);
+        if (zone.getCityName() != null) {
+            cityRepository.findByCityNameIgnoreCase(zone.getCityName()).ifPresent(city -> {
+                if (city.getActiveZonesCount() > 0) {
+                    city.setActiveZonesCount(city.getActiveZonesCount() - 1);
+                    cityRepository.saveAndFlush(city);
+                }
+            });
+        }
         return ResponseEntity.ok(ApiResponse.success(true));
     }
-    
+
     @GetMapping("/cities")
     public ResponseEntity<ApiResponse<List<CityDto>>> getAllCities() {
         List<CityDto> dtos = cityRepository.findAll().stream().map(this::mapCityToDto).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
-    
+
     @PostMapping("/cities")
     @Transactional
     public ResponseEntity<ApiResponse<CityDto>> createCity(@RequestBody CityDto dto) {
@@ -129,7 +149,8 @@ public class LocationZoneController {
             @PathVariable String cityId,
             @RequestParam String status) {
         City city = cityRepository.findById(cityId).orElse(null);
-        if (city == null) return ResponseEntity.notFound().build();
+        if (city == null)
+            return ResponseEntity.notFound().build();
         city.setStatus(status);
         cityRepository.saveAndFlush(city);
         return ResponseEntity.ok(ApiResponse.success(mapCityToDto(city)));
@@ -138,7 +159,8 @@ public class LocationZoneController {
     @DeleteMapping("/cities/{cityId}")
     @Transactional
     public ResponseEntity<ApiResponse<Boolean>> deleteCity(@PathVariable String cityId) {
-        if (!cityRepository.existsById(cityId)) return ResponseEntity.notFound().build();
+        if (!cityRepository.existsById(cityId))
+            return ResponseEntity.notFound().build();
         cityRepository.deleteById(cityId);
         return ResponseEntity.ok(ApiResponse.success(true));
     }
@@ -149,7 +171,8 @@ public class LocationZoneController {
     }
 
     @PostMapping("/unserviceable-requests")
-    public ResponseEntity<ApiResponse<UnserviceableRequestDto>> createUnserviceableRequest(@RequestBody UnserviceableRequestDto dto) {
+    public ResponseEntity<ApiResponse<UnserviceableRequestDto>> createUnserviceableRequest(
+            @RequestBody UnserviceableRequestDto dto) {
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("req-" + UUID.randomUUID().toString().substring(0, 6));
         }
@@ -187,8 +210,7 @@ public class LocationZoneController {
                 entity.getStatus(),
                 entity.isRestaurantEnabled(),
                 entity.isDeliveryPartnerEnabled(),
-                entity.isCustomerOrderingEnabled()
-        );
+                entity.isCustomerOrderingEnabled());
     }
 
     private LocationZone mapToEntity(LocationZoneDto dto) {

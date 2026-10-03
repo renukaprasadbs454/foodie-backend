@@ -48,6 +48,7 @@ import com.foodie.restaurant.repository.RestaurantBankDetailsRepository;
 import com.foodie.restaurant.repository.RestaurantDocumentRepository;
 import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
+import com.foodie.admin.repository.CityRepository;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -97,6 +98,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final BigDecimal defaultCommissionPct;
+    private final CityRepository cityRepository;
 
     public RestaurantServiceImpl(
             RestaurantRepository restaurantRepository,
@@ -111,6 +113,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             RestaurantCacheService restaurantCacheService,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
+            CityRepository cityRepository,
             @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
@@ -124,6 +127,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         this.restaurantCacheService = restaurantCacheService;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.cityRepository = cityRepository;
         this.defaultCommissionPct = defaultCommissionPct;
     }
 
@@ -288,6 +292,13 @@ public class RestaurantServiceImpl implements RestaurantService {
                     ErrorCode.RESTAURANT_PROFILE_ALREADY_EXISTS,
                     "A restaurant profile already exists for this account.");
         }
+
+        if (request.address() == null || request.address().city() == null ||
+                !cityRepository.existsByCityNameIgnoreCaseAndStatus(request.address().city(), "ACTIVE")) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
+                    "The provided city is not an ACTIVE operating location for Foodie platform.");
+        }
+
         RestaurantAddress address = restaurantAddressRepository.save(toAddress(request.address()));
         // commissionPct from client is ignored — platform default only (API Contracts
         // §3.3).
@@ -338,6 +349,12 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId,
             UpdateRestaurantLocationRequestDto request) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
+
+        if (request.city() == null || !cityRepository.existsByCityNameIgnoreCaseAndStatus(request.city(), "ACTIVE")) {
+            throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
+                    "The provided location city is not an ACTIVE operating location.");
+        }
+
         restaurant.getAddress().replace(
                 request.addressLine1(),
                 request.addressLine2(),
