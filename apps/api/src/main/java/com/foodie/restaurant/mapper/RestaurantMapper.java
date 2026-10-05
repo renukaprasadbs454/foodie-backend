@@ -129,11 +129,17 @@ public class RestaurantMapper {
                                                 details.getUpiVerificationStatus()));
         }
 
-        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document) {
+        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document, String fileUrl) {
                 return new RestaurantDocumentResponseDto(
                                 document.getId(),
                                 document.getDocType().name(),
-                                document.getVerifiedAt());
+                                document.getVerifiedAt(),
+                                fileUrl,
+                                fileUrl);
+        }
+
+        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document) {
+                return toDocument(document, null);
         }
 
         public RestaurantUpiResponseDto toUpiResponse(Restaurant restaurant) {

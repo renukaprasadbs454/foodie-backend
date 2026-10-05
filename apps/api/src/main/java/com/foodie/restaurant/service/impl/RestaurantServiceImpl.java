@@ -450,7 +450,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         objectStorageClient.putObject(key, new ByteArrayInputStream(bytes), bytes.length, detected.contentType());
         RestaurantDocument document = restaurantDocumentRepository.save(
                 RestaurantDocument.create(restaurant, docType, key));
-        return restaurantMapper.toDocument(document);
+        return restaurantMapper.toDocument(document, signedOrNull(key));
     }
 
     @Override
@@ -717,7 +717,7 @@ public class RestaurantServiceImpl implements RestaurantService {
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
         document.markVerified();
         log.info("Restaurant document {} verified by admin {}", documentId, adminId);
-        return restaurantMapper.toDocument(document);
+        return restaurantMapper.toDocument(document, signedOrNull(document.getS3Key()));
     }
 
     private Restaurant requireOwned(UUID ownerCredentialId) {
@@ -732,7 +732,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             legalDetails = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
                     .map(restaurantMapper::toLegalDetailResponse).orElse(null);
             documents = restaurantDocumentRepository.findByRestaurantId(restaurant.getId()).stream()
-                    .map(restaurantMapper::toDocument).toList();
+                    .map(doc -> restaurantMapper.toDocument(doc, signedOrNull(doc.getS3Key()))).toList();
         }
         return restaurantMapper.toDetail(
                 restaurant,

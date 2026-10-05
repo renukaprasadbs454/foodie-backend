@@ -6,6 +6,11 @@ import java.util.UUID;
 public record RestaurantDocumentResponseDto(
         UUID documentId,
         String docType,
-        Instant verifiedAt
+        Instant verifiedAt,
+        String fileUrl,
+        String downloadUrl
 ) {
+    public RestaurantDocumentResponseDto(UUID documentId, String docType, Instant verifiedAt) {
+        this(documentId, docType, verifiedAt, null, null);
+    }
 }
