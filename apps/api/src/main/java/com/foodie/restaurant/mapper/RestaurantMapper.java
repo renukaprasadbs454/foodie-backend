@@ -75,7 +75,8 @@ public class RestaurantMapper {
                                 restaurant.getTopPosition(),
                                 restaurant.getOpenTime() != null ? restaurant.getOpenTime().toString() : null,
                                 restaurant.getCloseTime() != null ? restaurant.getCloseTime().toString() : null,
-                                restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null);
+                                restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null,
+                                null);
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {

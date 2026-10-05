@@ -50,7 +50,7 @@ import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.admin.entity.LocationZone;
 import com.foodie.admin.repository.LocationZoneRepository;
-import com.foodie.security.repository.UserCredentialRepository;
+import com.foodie.auth.repository.UserCredentialRepository;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
