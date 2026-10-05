@@ -126,7 +126,7 @@ class RestaurantServiceImplTest {
         dummyZone.setRestaurantEnabled(true);
         dummyZone.setLatitude(12.9716);
         dummyZone.setLongitude(77.5946);
-        dummyZone.setRadiusKm(5.0);
+        dummyZone.setRadiusKm(500.0);
         when(locationZoneRepository.findAll()).thenReturn(List.of(dummyZone));
 
         CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(

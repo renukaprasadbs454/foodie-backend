@@ -1,10 +1,12 @@
 package com.foodie;
 
 import com.foodie.support.AbstractIntegrationTest;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+@Disabled("Manual developer utility script")
 public class UpdateKycTest extends AbstractIntegrationTest {
 
     @Autowired
