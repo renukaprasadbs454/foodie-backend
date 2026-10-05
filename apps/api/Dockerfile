@@ -17,6 +17,7 @@ WORKDIR /app
 
 RUN apk add --no-cache curl
 RUN addgroup -S foodie && adduser -S foodie -G foodie
+RUN mkdir -p /tmp/foodie-object-storage && chown -R foodie:foodie /tmp/foodie-object-storage && chmod -R 775 /tmp/foodie-object-storage
 USER foodie
 
 COPY --from=build /workspace/app.jar /app/app.jar

@@ -41,6 +41,7 @@ public final class WalletMapper {
                 payout.getProvider() != null ? payout.getProvider() : "CASHFREE",
                 payout.getProviderPayoutId(),
                 payout.getProviderReferenceId() != null ? payout.getProviderReferenceId() : payout.getBankRef(),
-                payout.getFailureReason());
+                payout.getFailureReason(),
+                payout.getUpdatedAt());
     }
 }

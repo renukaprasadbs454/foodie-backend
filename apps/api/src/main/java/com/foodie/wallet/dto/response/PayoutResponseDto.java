@@ -18,5 +18,6 @@ public record PayoutResponseDto(
         String provider,
         String transactionId,
         String providerReference,
-        String failureReason) {
+        String failureReason,
+        Instant updatedAt) {
 }

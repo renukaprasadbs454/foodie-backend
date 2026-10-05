@@ -21,6 +21,12 @@ public class DeliveryPricingConfig {
     @Column(name = "money_per_km", nullable = false, precision = 10, scale = 2)
     private BigDecimal moneyPerKm;
 
+    @Column(name = "pricing_basis", nullable = false, length = 20)
+    private String pricingBasis = "UNIVERSAL";
+
+    @Column(name = "config_data", columnDefinition = "TEXT")
+    private String configData;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -36,6 +42,8 @@ public class DeliveryPricingConfig {
             UUID id,
             BigDecimal minPricePerDelivery,
             BigDecimal moneyPerKm,
+            String pricingBasis,
+            String configData,
             Instant createdAt,
             Instant updatedAt,
             UUID updatedBy
@@ -43,6 +51,8 @@ public class DeliveryPricingConfig {
         this.id = id;
         this.minPricePerDelivery = minPricePerDelivery;
         this.moneyPerKm = moneyPerKm;
+        this.pricingBasis = (pricingBasis != null && !pricingBasis.isBlank()) ? pricingBasis : "UNIVERSAL";
+        this.configData = configData;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.updatedBy = updatedBy;
@@ -53,15 +63,29 @@ public class DeliveryPricingConfig {
                 UUID.fromString("99999999-9999-9999-9999-999999999999"),
                 new BigDecimal("200.00"),
                 new BigDecimal("25.00"),
+                "UNIVERSAL",
+                null,
                 Instant.now(),
                 Instant.now(),
                 null
         );
     }
 
-    public void update(BigDecimal minPricePerDelivery, BigDecimal moneyPerKm, UUID updatedBy) {
+    public void update(
+            BigDecimal minPricePerDelivery,
+            BigDecimal moneyPerKm,
+            String pricingBasis,
+            String configData,
+            UUID updatedBy
+    ) {
         this.minPricePerDelivery = minPricePerDelivery;
         this.moneyPerKm = moneyPerKm;
+        if (pricingBasis != null && !pricingBasis.isBlank()) {
+            this.pricingBasis = pricingBasis;
+        }
+        if (configData != null) {
+            this.configData = configData;
+        }
         this.updatedBy = updatedBy;
         this.updatedAt = Instant.now();
     }
@@ -76,6 +100,14 @@ public class DeliveryPricingConfig {
 
     public BigDecimal getMoneyPerKm() {
         return moneyPerKm;
+    }
+
+    public String getPricingBasis() {
+        return pricingBasis;
+    }
+
+    public String getConfigData() {
+        return configData;
     }
 
     public Instant getCreatedAt() {

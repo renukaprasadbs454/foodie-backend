@@ -63,6 +63,8 @@ services:
       CASHFREE_CLIENT_ID: ${CASHFREE_APP_ID:-}
       CASHFREE_CLIENT_SECRET: ${CASHFREE_SECRET_KEY:-}
       CASHFREE_ENV: ${CASHFREE_ENV:-SANDBOX}
+    volumes:
+      - foodie_storage_data:/tmp/foodie-object-storage
     ports:
       - "8080:8080"
     healthcheck:
@@ -93,3 +95,4 @@ services:
 volumes:
   foodie_pg_data:
   foodie_redis_data:
+  foodie_storage_data:

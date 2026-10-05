@@ -2,6 +2,7 @@ package com.foodie.delivery.repository;
 
 import com.foodie.common.enums.DeliveryAssignmentStatus;
 import com.foodie.delivery.entity.DeliveryAssignment;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -24,4 +25,18 @@ public interface DeliveryAssignmentRepository extends JpaRepository<DeliveryAssi
     long countByDeliveryPartnerIdAndStatus(UUID deliveryPartnerId, DeliveryAssignmentStatus status);
 
     List<DeliveryAssignment> findByStatusAndAssignedAtBefore(DeliveryAssignmentStatus status, java.time.Instant cutoff);
+
+    long countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+            UUID deliveryPartnerId,
+            DeliveryAssignmentStatus status,
+            Instant from,
+            Instant to
+    );
+
+    List<DeliveryAssignment> findByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+            UUID deliveryPartnerId,
+            DeliveryAssignmentStatus status,
+            Instant from,
+            Instant to
+    );
 }

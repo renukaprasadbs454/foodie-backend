@@ -32,6 +32,7 @@ import com.foodie.delivery.repository.DeliveryAssignmentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerDocumentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.service.DeliveryService;
+import com.foodie.delivery.service.biometrics.FaceBiometricsService;
 import com.foodie.delivery.service.PartnerGeoService.GeoPartnerHit;
 import com.foodie.delivery.service.PartnerGeoService;
 import com.foodie.infrastructure.storage.DocumentMagicBytes;
@@ -100,6 +101,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final RedisRateLimiter redisRateLimiter;
     private final DeliveryProperties deliveryProperties;
     private final DeliveryPricingService deliveryPricingService;
+    private final FaceBiometricsService faceBiometricsService;
 
     public DeliveryServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -120,7 +122,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             PasswordEncoder passwordEncoder,
             RedisRateLimiter redisRateLimiter,
             DeliveryProperties deliveryProperties,
-            DeliveryPricingService deliveryPricingService) {
+            DeliveryPricingService deliveryPricingService,
+            FaceBiometricsService faceBiometricsService) {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
@@ -140,6 +143,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.redisRateLimiter = redisRateLimiter;
         this.deliveryProperties = deliveryProperties;
         this.deliveryPricingService = deliveryPricingService;
+        this.faceBiometricsService = faceBiometricsService;
     }
 
     @Override
@@ -224,6 +228,28 @@ public class DeliveryServiceImpl implements DeliveryService {
                         null)));
         byte[] bytes = readBytes(file, 5 * 1024 * 1024, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
+
+        // Validate that uploaded image contains a clear human face for KYC approval
+        try {
+            BufferedImage selfieImg = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (selfieImg != null) {
+                FaceBiometricsService.FaceDetectionResult detection = faceBiometricsService.detectFace(selfieImg);
+                if (!detection.detected()) {
+                    log.warn("Face detection failed during KYC selfie upload for partner {}: {}", partner.getId(), detection.message());
+                    throw new BadRequestException(ErrorCode.BAD_REQUEST,
+                            "No valid human face detected. Please capture a clear selfie showing your full face.");
+                }
+                if (detection.faceCount() > 1) {
+                    throw new BadRequestException(ErrorCode.BAD_REQUEST,
+                            "Multiple faces detected. Please ensure only your face is visible in the selfie.");
+                }
+            }
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Could not parse image for face detection during profile upload", e);
+        }
+
         String key = "delivery-partners/" + partner.getId() + "/profile/"
                 + UUID.randomUUID() + "." + detected.extension();
         objectStorageClient.putObject(key, new java.io.ByteArrayInputStream(bytes), bytes.length,
@@ -237,8 +263,12 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional
     public AvailabilityResponseDto setAvailability(UUID userCredentialId, SetAvailabilityRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
-        if (Boolean.TRUE.equals(request.isOnline()) && partner.getKycStatus() != KycStatus.VERIFIED) {
-            partner.verifyKyc();
+        if (Boolean.TRUE.equals(request.isOnline())) {
+            if (partner.getKycStatus() != KycStatus.VERIFIED) {
+                throw new UnprocessableEntityException(
+                        ErrorCode.KYC_NOT_VERIFIED,
+                        "KYC must be verified before going online.");
+            }
         }
         partner.setOnline(request.isOnline());
         deliveryPartnerRepository.save(partner);
@@ -527,25 +557,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private DeliveryPartner requirePartner(UUID userCredentialId) {
-        DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
-                .orElseGet(() -> {
-                    DeliveryPartner p = DeliveryPartner.create(
-                            userCredentialId,
-                            DEFAULT_FULL_NAME,
-                            com.foodie.common.enums.VehicleType.BIKE,
-                            null);
-                    p.verifyKyc();
-                    DeliveryPartner saved = deliveryPartnerRepository.save(p);
-                    return saved != null ? saved : p;
-                });
-        if (partner != null && partner.getKycStatus() != KycStatus.VERIFIED) {
-            partner.verifyKyc();
-            DeliveryPartner saved = deliveryPartnerRepository.save(partner);
-            if (saved != null) {
-                partner = saved;
-            }
-        }
-        return partner;
+        return deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
     }
 
     private DeliveryAssignment requireAssignment(UUID userCredentialId, UUID assignmentId) {
@@ -635,81 +648,116 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public boolean verifyFace(UUID userCredentialId, MultipartFile file) {
-        log.info("Face verification processing for user {}", userCredentialId);
+        log.info("Face verification request initiated for user credential ID {}", userCredentialId);
 
-        Optional<DeliveryPartner> optionalPartner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId);
-        if (optionalPartner.isEmpty()) {
-            return false;
+        DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+
+        UUID partnerId = partner.getId();
+        KycStatus kycStatus = partner.getKycStatus();
+        String existingBaselineKey = partner.getProfileImageKey();
+
+        // 1. Validate KYC Status gate
+        if (kycStatus != KycStatus.VERIFIED) {
+            String reason = "Your KYC verification is not approved yet. Face verification requires an approved KYC profile photo.";
+            log.warn("Face verification 422 rejected: partnerId={}, KYC status={}, baselineKey={}, reason={}",
+                    partnerId, kycStatus, existingBaselineKey, reason);
+            throw new UnprocessableEntityException(ErrorCode.KYC_NOT_VERIFIED, reason);
         }
 
-        DeliveryPartner partner = optionalPartner.get();
-        if (partner.getProfileImageKey() == null) {
-            log.warn("No profile photo to match against");
-            return false;
+        // 2. Validate uploaded file bytes and MIME type
+        byte[] incomingBytes = readBytes(file, MAX_DOCUMENT_BYTES, "Selfie too large");
+        int incomingSize = incomingBytes != null ? incomingBytes.length : 0;
+        String declaredMime = file != null ? file.getContentType() : null;
+        String originalFilename = file != null ? file.getOriginalFilename() : null;
+
+        log.info("[FaceDiag] Uploaded selfie metadata: partnerId={}, originalFilename={}, declaredMime={}, sizeBytes={}",
+                partnerId, originalFilename, declaredMime, incomingSize);
+
+        if (incomingBytes == null || incomingBytes.length == 0) {
+            log.warn("Face verification 400 rejected: partnerId={}, reason=Empty or missing selfie bytes", partnerId);
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Live selfie capture is empty or missing.");
         }
 
+        // Save exact received JPEG temporarily in development debug folder
         try {
-            byte[] incomingBytes = readBytes(file, MAX_DOCUMENT_BYTES, "Selfie too large");
+            java.io.File debugDir = new java.io.File("/tmp/foodie-face-debug");
+            if (!debugDir.exists()) {
+                debugDir.mkdirs();
+            }
+            String debugFileName = "debug-face-" + UUID.randomUUID() + ".jpg";
+            java.io.File debugFile = new java.io.File(debugDir, debugFileName);
+            java.nio.file.Files.write(debugFile.toPath(), incomingBytes);
+            log.info("[FaceDiag] Saved exact received JPEG to: {}", debugFile.getAbsolutePath());
+        } catch (Exception ex) {
+            log.warn("[FaceDiag] Could not write debug image: {}", ex.getMessage());
+        }
 
-            // Fetch the verified Profile DP from Object Storage to compare embeddings
-            byte[] dpBytes = objectStorageClient.getObject(partner.getProfileImageKey());
-            if (dpBytes == null || dpBytes.length == 0) {
-                log.warn("Identity check failed, corrupted DP storage.");
-                return false;
+        // 3. Decode image and detect valid human face
+        FaceBiometricsService.FaceDetectionResult liveDetection = faceBiometricsService.validateFaceSelfie(incomingBytes);
+        log.info("[FaceDiag] Face detection evaluation: partnerId={}, detected={}, faceCount={}, score={}, message={}",
+                partnerId, liveDetection.detected(), liveDetection.faceCount(), String.format("%.2f", liveDetection.score()), liveDetection.message());
+
+        if (!liveDetection.detected()) {
+            log.warn("Face verification 400 rejected: partnerId={}, reason={}", partnerId, liveDetection.message());
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, liveDetection.message());
+        }
+
+        if (liveDetection.faceCount() > 1) {
+            String msg = "Multiple faces detected in the camera frame. Ensure only you are visible.";
+            log.warn("Face verification 400 rejected: partnerId={}, reason={}", partnerId, msg);
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, msg);
+        }
+
+        // 4. Check existing baseline KYC photo in storage
+        byte[] dpBytes = null;
+        if (existingBaselineKey != null && !existingBaselineKey.isBlank()) {
+            dpBytes = objectStorageClient.getObject(existingBaselineKey);
+        }
+
+        boolean baselineExists = dpBytes != null && dpBytes.length > 0;
+        String verificationBranch = baselineExists ? "CASE_A_COMPARE_BASELINE" : "CASE_B_ESTABLISH_BASELINE";
+
+        log.info("Face verification dispatch: partnerId={}, KYC status={}, baselineKey={}, baselineBytesPresent={}, branch={}",
+                partnerId, kycStatus, existingBaselineKey, baselineExists, verificationBranch);
+
+        if (baselineExists) {
+            // Case A: VERIFIED + baseline exists -> Compare with baseline
+            FaceBiometricsService.FaceVerificationResult result = faceBiometricsService.verifyFace(incomingBytes, dpBytes);
+            if (!result.verified()) {
+                log.warn("Face verification failed in Case A: partnerId={}, confidence={}, message={}",
+                        partnerId, String.format("%.2f", result.confidenceScore()), result.message());
+                throw new BadRequestException(ErrorCode.BAD_REQUEST, result.message());
             }
 
-            // NATIVE VISUAL STRUCTURAL MATCHER (Sandbox Mode):
-            // Instead of byte size, we will structurally map the image pixels using a
-            // simplified Perceptual scaling matrix.
-            BufferedImage incomingImg = ImageIO.read(new ByteArrayInputStream(incomingBytes));
-            BufferedImage dpImg = ImageIO.read(new ByteArrayInputStream(dpBytes));
-
-            if (incomingImg == null || dpImg == null) {
-                log.warn("Could not decode image buffers.");
-                return false;
-            }
-
-            // Scale both images to 16x16 to extract their structural core footprint
-            int[] incomingPixels = extractVisualFootprint(incomingImg);
-            int[] dpPixels = extractVisualFootprint(dpImg);
-
-            long errorSum = 0;
-            for (int i = 0; i < 256; i++) {
-                int diff = incomingPixels[i] - dpPixels[i];
-                errorSum += diff * diff;
-            }
-
-            long mse = errorSum / 256;
-            log.info("Face Match AI footprint analysis. Visual MSE Score: {}", mse);
-
-            // Strict visual constraint: MSE > 1500 typically means completely different
-            // scene
-            if (mse > 1500) {
-                log.warn("Identity check failed. Structural consistency mismatched. MSE was {}", mse);
-                return false;
-            }
+            log.info("Face verification succeeded in Case A: partnerId={}, match confidence={}",
+                    partnerId, String.format("%.2f", result.confidenceScore()));
             return true;
-        } catch (Exception e) {
-            log.error("Failed to process face verification", e);
-            return false;
-        }
-    }
-
-    private int[] extractVisualFootprint(BufferedImage img) {
-        BufferedImage scaled = new BufferedImage(16, 16, BufferedImage.TYPE_BYTE_GRAY);
-        Graphics2D g = scaled.createGraphics();
-        g.drawImage(img, 0, 0, 16, 16, null);
-        g.dispose();
-
-        int[] pixels = new int[256];
-        for (int y = 0; y < 16; y++) {
-            for (int x = 0; x < 16; x++) {
-                pixels[y * 16 + x] = scaled.getRGB(x, y) & 0xFF;
+        } else {
+            // Case B: VERIFIED + baseline missing -> Validate passed, save as baseline and persist key
+            log.info("Establishing new baseline KYC photo in Case B: partnerId={}", partnerId);
+            String ext = "jpg";
+            String cType = "image/jpeg";
+            try {
+                ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(incomingBytes), declaredMime);
+                ext = detected.extension();
+                cType = detected.contentType();
+            } catch (Exception ignored) {
+                if (declaredMime != null && !declaredMime.isBlank()) {
+                    cType = declaredMime;
+                }
             }
+
+            String key = "delivery-partners/" + partnerId + "/profile/" + UUID.randomUUID() + "." + ext;
+            objectStorageClient.putObject(key, new ByteArrayInputStream(incomingBytes), incomingBytes.length, cType);
+            partner.setProfileImageKey(key);
+            deliveryPartnerRepository.save(partner);
+
+            log.info("Face verification baseline successfully established and persisted: partnerId={}, key={}", partnerId, key);
+            return true;
         }
-        return pixels;
     }
 
     @Override

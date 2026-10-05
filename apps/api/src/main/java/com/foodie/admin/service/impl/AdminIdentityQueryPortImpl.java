@@ -1,5 +1,6 @@
 package com.foodie.admin.service.impl;
 
+import com.foodie.admin.entity.AdminUser;
 import com.foodie.admin.repository.AdminUserRepository;
 import com.foodie.shared.contract.AdminIdentityQueryPort;
 import java.util.Optional;
@@ -19,5 +20,15 @@ public class AdminIdentityQueryPortImpl implements AdminIdentityQueryPort {
     public Optional<String> findRoleNameByUserCredentialId(UUID userCredentialId) {
         return adminUserRepository.findByUserCredentialId(userCredentialId)
                 .map(admin -> admin.getRole().getName().name());
+    }
+
+    @Override
+    public Optional<UUID> findAdminUserIdByUserCredentialId(UUID userCredentialId) {
+        if (userCredentialId == null) {
+            return Optional.empty();
+        }
+        return adminUserRepository.findByUserCredentialId(userCredentialId)
+                .map(AdminUser::getId)
+                .or(() -> adminUserRepository.findById(userCredentialId).map(AdminUser::getId));
     }
 }

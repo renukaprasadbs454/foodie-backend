@@ -1,12 +1,14 @@
 package com.foodie.wallet;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
+import com.foodie.delivery.service.DeliveryIncentiveService;
 import com.foodie.shared.contract.OrderDeliveryFeeQuery;
 import com.foodie.shared.event.DeliveryCompletedEvent;
 import com.foodie.wallet.listener.DeliveryCompletedWalletListener;
@@ -25,16 +27,17 @@ class DeliveryCompletedWalletListenerTest {
 
     @Mock private WalletService walletService;
     @Mock private OrderDeliveryFeeQuery orderDeliveryFeeQuery;
+    @Mock private DeliveryIncentiveService deliveryIncentiveService;
 
     private DeliveryCompletedWalletListener listener;
 
     @BeforeEach
     void setUp() {
-        listener = new DeliveryCompletedWalletListener(walletService, orderDeliveryFeeQuery);
+        listener = new DeliveryCompletedWalletListener(walletService, orderDeliveryFeeQuery, deliveryIncentiveService);
     }
 
     @Test
-    void creditsPartnerWithOrderDeliveryFee() {
+    void creditsPartnerWithOrderDeliveryFeeAndProcessesIncentives() {
         UUID orderId = UUID.randomUUID();
         UUID partnerId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
@@ -50,15 +53,19 @@ class DeliveryCompletedWalletListenerTest {
                 LedgerReferenceType.DELIVERY_ASSIGNMENT,
                 assignmentId
         );
+        verify(deliveryIncentiveService).processDeliveryCompletion(partnerId, orderId, assignmentId);
     }
 
     @Test
-    void skipsWhenFeeMissing() {
+    void skipsWalletCreditWhenFeeMissingButStillProcessesIncentives() {
         UUID orderId = UUID.randomUUID();
+        UUID partnerId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
         when(orderDeliveryFeeQuery.findDeliveryFeeByOrderId(orderId)).thenReturn(Optional.empty());
 
-        listener.onDeliveryCompleted(DeliveryCompletedEvent.of(orderId, UUID.randomUUID(), UUID.randomUUID()));
+        listener.onDeliveryCompleted(DeliveryCompletedEvent.of(orderId, partnerId, assignmentId));
 
-        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+        verify(walletService, never()).credit(any(), any(), any(), eq(LedgerReferenceType.DELIVERY_ASSIGNMENT), any());
+        verify(deliveryIncentiveService).processDeliveryCompletion(partnerId, orderId, assignmentId);
     }
 }

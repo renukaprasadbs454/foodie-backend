@@ -2,9 +2,11 @@ package com.foodie.admin.controller;
 
 import com.foodie.admin.dto.request.BulkApprovePayoutsRequestDto;
 import com.foodie.admin.dto.request.CommissionConfigDto;
+import com.foodie.admin.dto.response.AdminLedgerEntryResponseDto;
 import com.foodie.admin.dto.response.AdminPayoutResponseDto;
 import com.foodie.admin.dto.response.PaymentSettlementResponseDto;
 import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
+import com.foodie.admin.dto.response.PaymentTransactionResponseDto;
 import com.foodie.admin.service.AdminPaymentService;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.common.enums.OwnerType;
@@ -65,6 +67,20 @@ public class AdminPaymentController {
     @Operation(summary = "List payment settlements with admin escrow & split breakdown")
     public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements() {
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements()));
+    }
+
+    @GetMapping("/transactions")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List all customer payment transactions with gateway details")
+    public ResponseEntity<ApiResponse<List<PaymentTransactionResponseDto>>> listTransactions() {
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listTransactions()));
+    }
+
+    @GetMapping("/ledger")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List authoritative double-entry financial ledger entries")
+    public ResponseEntity<ApiResponse<List<AdminLedgerEntryResponseDto>>> listLedgerEntries() {
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listLedgerEntries()));
     }
 
     @GetMapping("/restaurant-settlements")

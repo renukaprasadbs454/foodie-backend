@@ -1,13 +1,16 @@
 package com.foodie.admin.service.impl;
 
 import com.foodie.admin.dto.request.CommissionConfigDto;
+import com.foodie.admin.dto.response.AdminLedgerEntryResponseDto;
 import com.foodie.admin.dto.response.PaymentSettlementResponseDto;
 import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
+import com.foodie.admin.dto.response.PaymentTransactionResponseDto;
 import com.foodie.admin.service.AdminPaymentService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Service;
 import com.foodie.order.repository.OrderRepository;
@@ -16,6 +19,12 @@ import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.entity.DeliveryPartner;
+import com.foodie.payment.repository.PaymentRepository;
+import com.foodie.payment.entity.Payment;
+import com.foodie.wallet.repository.LedgerEntryRepository;
+import com.foodie.wallet.entity.LedgerEntry;
+import com.foodie.wallet.repository.WalletAccountRepository;
+import com.foodie.wallet.entity.WalletAccount;
 
 @Service
 public class AdminPaymentServiceImpl implements AdminPaymentService {
@@ -23,12 +32,23 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
         private final OrderRepository orderRepository;
         private final RestaurantRepository restaurantRepository;
         private final DeliveryPartnerRepository deliveryPartnerRepository;
+        private final PaymentRepository paymentRepository;
+        private final LedgerEntryRepository ledgerEntryRepository;
+        private final WalletAccountRepository walletAccountRepository;
 
-        public AdminPaymentServiceImpl(OrderRepository orderRepository, RestaurantRepository restaurantRepository,
-                        DeliveryPartnerRepository deliveryPartnerRepository) {
+        public AdminPaymentServiceImpl(
+                        OrderRepository orderRepository,
+                        RestaurantRepository restaurantRepository,
+                        DeliveryPartnerRepository deliveryPartnerRepository,
+                        PaymentRepository paymentRepository,
+                        LedgerEntryRepository ledgerEntryRepository,
+                        WalletAccountRepository walletAccountRepository) {
                 this.orderRepository = orderRepository;
                 this.restaurantRepository = restaurantRepository;
                 this.deliveryPartnerRepository = deliveryPartnerRepository;
+                this.paymentRepository = paymentRepository;
+                this.ledgerEntryRepository = ledgerEntryRepository;
+                this.walletAccountRepository = walletAccountRepository;
         }
 
         private final AtomicReference<CommissionConfigDto> activeConfig = new AtomicReference<>(
@@ -131,7 +151,104 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                 }
 
                 // Sort descending by placedAt
-                result.sort((a, b) -> b.settledAt().compareTo(a.settledAt()));
+                result.sort((a, b) -> {
+                        if (a.settledAt() == null && b.settledAt() == null) return 0;
+                        if (a.settledAt() == null) return 1;
+                        if (b.settledAt() == null) return -1;
+                        return b.settledAt().compareTo(a.settledAt());
+                });
+
+                return result;
+        }
+
+        @Override
+        public List<PaymentTransactionResponseDto> listTransactions() {
+                List<Payment> payments = paymentRepository.findAll();
+                List<PaymentTransactionResponseDto> result = new ArrayList<>();
+
+                for (Payment payment : payments) {
+                        UUID userId = null;
+                        if (payment.getOrderId() != null) {
+                                Order order = orderRepository.findById(payment.getOrderId()).orElse(null);
+                                if (order != null) {
+                                        userId = order.getCustomerId();
+                                }
+                        }
+
+                        String paymentMethod = "RAZORPAY_UPI";
+                        if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
+                                if (payment.getAmount() == null || payment.getAmount().compareTo(BigDecimal.ZERO) == 0) {
+                                        paymentMethod = "FOODIE_WALLET";
+                                } else {
+                                        paymentMethod = "SPLIT_WALLET_GATEWAY";
+                                }
+                        }
+
+                        String gatewayTxId = payment.getCashfreeOrderId() != null
+                                        ? payment.getCashfreeOrderId()
+                                        : (payment.getPaymentSessionId() != null
+                                                        ? payment.getPaymentSessionId()
+                                                        : (payment.getId() != null ? payment.getId().toString() : "N/A"));
+
+                        String gatewayName = payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("WALLET_")
+                                        ? "FOODIE_WALLET"
+                                        : "RAZORPAY";
+
+                        result.add(new PaymentTransactionResponseDto(
+                                        payment.getId(),
+                                        payment.getOrderId(),
+                                        userId,
+                                        payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO,
+                                        "INR",
+                                        paymentMethod,
+                                        payment.getStatus() != null ? payment.getStatus().name() : "CAPTURED",
+                                        gatewayTxId,
+                                        gatewayName,
+                                        payment.getCreatedAt(),
+                                        payment.getUpdatedAt()));
+                }
+
+                result.sort((a, b) -> {
+                        if (a.createdAt() == null && b.createdAt() == null) return 0;
+                        if (a.createdAt() == null) return 1;
+                        if (b.createdAt() == null) return -1;
+                        return b.createdAt().compareTo(a.createdAt());
+                });
+
+                return result;
+        }
+
+        @Override
+        public List<AdminLedgerEntryResponseDto> listLedgerEntries() {
+                List<LedgerEntry> entries = ledgerEntryRepository.findAll();
+                List<AdminLedgerEntryResponseDto> result = new ArrayList<>();
+
+                for (LedgerEntry entry : entries) {
+                        BigDecimal balanceAfter = BigDecimal.ZERO;
+                        if (entry.getWalletAccountId() != null) {
+                                WalletAccount account = walletAccountRepository.findById(entry.getWalletAccountId()).orElse(null);
+                                if (account != null && account.getBalance() != null) {
+                                        balanceAfter = account.getBalance();
+                                }
+                        }
+
+                        result.add(new AdminLedgerEntryResponseDto(
+                                        entry.getId(),
+                                        entry.getWalletAccountId(),
+                                        entry.getAmount() != null ? entry.getAmount() : BigDecimal.ZERO,
+                                        entry.getEntryType(),
+                                        entry.getReferenceType(),
+                                        entry.getReferenceId(),
+                                        balanceAfter,
+                                        entry.getCreatedAt()));
+                }
+
+                result.sort((a, b) -> {
+                        if (a.createdAt() == null && b.createdAt() == null) return 0;
+                        if (a.createdAt() == null) return 1;
+                        if (b.createdAt() == null) return -1;
+                        return b.createdAt().compareTo(a.createdAt());
+                });
 
                 return result;
         }

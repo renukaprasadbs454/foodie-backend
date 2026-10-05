@@ -40,6 +40,7 @@ public class LocalObjectStorageClient implements ObjectStorageClient {
             Files.copy(content, target, StandardCopyOption.REPLACE_EXISTING);
             log.info("Stored object key={} bytes={} contentType={}", key, contentLength, contentType);
         } catch (IOException ex) {
+            log.error("Failed to store object key={} at target {}: {}", key, target, ex.getMessage(), ex);
             throw new UncheckedIOException("Failed to store object " + key, ex);
         }
     }

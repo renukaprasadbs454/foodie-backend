@@ -1,22 +1,62 @@
 package com.foodie.admin;
 
 import com.foodie.admin.dto.request.CommissionConfigDto;
+import com.foodie.admin.dto.response.AdminLedgerEntryResponseDto;
 import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
+import com.foodie.admin.dto.response.PaymentTransactionResponseDto;
 import com.foodie.admin.service.impl.AdminPaymentServiceImpl;
+import com.foodie.common.enums.LedgerEntryType;
+import com.foodie.common.enums.LedgerReferenceType;
+import com.foodie.delivery.repository.DeliveryPartnerRepository;
+import com.foodie.order.entity.Order;
+import com.foodie.order.repository.OrderRepository;
+import com.foodie.payment.entity.Payment;
+import com.foodie.payment.repository.PaymentRepository;
+import com.foodie.restaurant.repository.RestaurantRepository;
+import com.foodie.wallet.entity.LedgerEntry;
+import com.foodie.wallet.repository.LedgerEntryRepository;
+import com.foodie.wallet.repository.WalletAccountRepository;
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class AdminPaymentServiceImplTest {
+
+    @Mock
+    private OrderRepository orderRepository;
+    @Mock
+    private RestaurantRepository restaurantRepository;
+    @Mock
+    private DeliveryPartnerRepository deliveryPartnerRepository;
+    @Mock
+    private PaymentRepository paymentRepository;
+    @Mock
+    private LedgerEntryRepository ledgerEntryRepository;
+    @Mock
+    private WalletAccountRepository walletAccountRepository;
 
     private AdminPaymentServiceImpl paymentService;
 
     @BeforeEach
     void setUp() {
-        paymentService = new AdminPaymentServiceImpl(null, null, null);
+        paymentService = new AdminPaymentServiceImpl(
+                orderRepository,
+                restaurantRepository,
+                deliveryPartnerRepository,
+                paymentRepository,
+                ledgerEntryRepository,
+                walletAccountRepository);
     }
 
     @Test
@@ -72,5 +112,71 @@ class AdminPaymentServiceImplTest {
         assertThat(split.restaurantNetShare()).isEqualByComparingTo("400.00");
         assertThat(split.deliveryPartnerNetShare()).isEqualByComparingTo("95.00");
         assertThat(split.totalPaid()).isEqualByComparingTo("650.00");
+    }
+
+    @Test
+    @DisplayName("listTransactions maps payment and customer accurately")
+    void listTransactionsSuccess() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+
+        Payment payment = Payment.initiate(
+                orderId,
+                "session_123",
+                new BigDecimal("250.00"),
+                BigDecimal.ZERO,
+                "idempotency_123");
+        payment.markCaptured("cf_order_999");
+
+        Order order = Order.place(
+                "ORD-999",
+                customerId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("200.00"),
+                new BigDecimal("30.00"),
+                BigDecimal.ZERO,
+                new BigDecimal("20.00"),
+                new BigDecimal("250.00"),
+                "idempotency_ord_123");
+
+        when(paymentRepository.findAll()).thenReturn(List.of(payment));
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
+        List<PaymentTransactionResponseDto> result = paymentService.listTransactions();
+
+        assertThat(result).hasSize(1);
+        PaymentTransactionResponseDto dto = result.get(0);
+        assertThat(dto.orderId()).isEqualTo(orderId);
+        assertThat(dto.userId()).isEqualTo(customerId);
+        assertThat(dto.amount()).isEqualByComparingTo("250.00");
+        assertThat(dto.gatewayTransactionId()).isEqualTo("cf_order_999");
+        assertThat(dto.gatewayName()).isEqualTo("RAZORPAY");
+        assertThat(dto.status()).isEqualTo("CAPTURED");
+    }
+
+    @Test
+    @DisplayName("listLedgerEntries returns mapped ledger records")
+    void listLedgerEntriesSuccess() {
+        UUID walletAccountId = UUID.randomUUID();
+        UUID refId = UUID.randomUUID();
+
+        LedgerEntry entry = LedgerEntry.credit(
+                walletAccountId,
+                new BigDecimal("150.00"),
+                LedgerReferenceType.ORDER_PAYMENT,
+                refId);
+
+        when(ledgerEntryRepository.findAll()).thenReturn(List.of(entry));
+
+        List<AdminLedgerEntryResponseDto> result = paymentService.listLedgerEntries();
+
+        assertThat(result).hasSize(1);
+        AdminLedgerEntryResponseDto dto = result.get(0);
+        assertThat(dto.walletAccountId()).isEqualTo(walletAccountId);
+        assertThat(dto.amount()).isEqualByComparingTo("150.00");
+        assertThat(dto.entryType()).isEqualTo(LedgerEntryType.CREDIT);
+        assertThat(dto.referenceType()).isEqualTo(LedgerReferenceType.ORDER_PAYMENT);
+        assertThat(dto.referenceId()).isEqualTo(refId);
     }
 }
