@@ -41,6 +41,7 @@ import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.admin.entity.LocationZone;
 import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
 import com.foodie.restaurant.service.impl.RestaurantServiceImpl;
 import com.foodie.shared.event.RestaurantApprovedEvent;
@@ -83,6 +84,8 @@ class RestaurantServiceImplTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private LocationZoneRepository locationZoneRepository;
+    @Mock
+    private UserCredentialRepository userCredentialRepository;
 
     private RestaurantServiceImpl service;
     private final UUID ownerId = UUID.randomUUID();
@@ -103,6 +106,7 @@ class RestaurantServiceImplTest {
                 eventPublisher,
                 new ObjectMapper().findAndRegisterModules(),
                 locationZoneRepository,
+                userCredentialRepository,
                 new BigDecimal("18.00"));
     }
 
