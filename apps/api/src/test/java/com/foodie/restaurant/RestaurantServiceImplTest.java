@@ -137,7 +137,7 @@ class RestaurantServiceImplTest {
         RestaurantDetailResponseDto dto = service.create(ownerId, request);
 
         assertThat(dto.commissionPct()).isEqualByComparingTo("18.00");
-        assertThat(dto.status()).isEqualTo("PENDING");
+        assertThat(dto.status()).isEqualTo("ONBOARDING");
         verify(eventPublisher).publishEvent(any(RestaurantCreatedEvent.class));
         verify(restaurantCacheService).evictAllListCaches();
     }
@@ -162,7 +162,7 @@ class RestaurantServiceImplTest {
         dummyZone.setRestaurantEnabled(true);
         dummyZone.setLatitude(12.9352);
         dummyZone.setLongitude(77.6245);
-        dummyZone.setRadiusKm(5.0);
+        dummyZone.setRadiusKm(500.0); // Make radius large enough to cover the update location
         when(locationZoneRepository.findAll()).thenReturn(List.of(dummyZone));
 
         RestaurantLocationResponseDto location = service.getLocation(ownerId);
@@ -280,7 +280,7 @@ class RestaurantServiceImplTest {
         RestaurantDetailResponseDto dto = service.updateMyRestaurant(ownerId, request);
 
         assertThat(dto.name()).isEqualTo("New Name");
-        assertThat(dto.status()).isEqualTo("PENDING");
+        assertThat(dto.status()).isEqualTo("ONBOARDING");
         assertThat(dto.commissionPct()).isEqualByComparingTo("18.00");
         verify(restaurantCacheService).evictRestaurant(restaurant.getId());
     }
