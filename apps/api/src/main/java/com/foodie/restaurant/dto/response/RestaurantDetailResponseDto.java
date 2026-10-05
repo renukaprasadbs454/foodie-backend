@@ -28,7 +28,8 @@ public record RestaurantDetailResponseDto(
                 Integer topPosition,
                 String openTime,
                 String closeTime,
-                List<String> openDays) {
+                List<String> openDays,
+                String phone) {
         public RestaurantDetailResponseDto(
                         UUID restaurantId,
                         String name,
@@ -42,11 +43,12 @@ public record RestaurantDetailResponseDto(
                         BigDecimal avgRating,
                         String status,
                         BigDecimal commissionPct,
-                        UUID ownerUserCredentialId) {
+                        UUID ownerUserCredentialId,
+                        String phone) {
                 this(
                                 restaurantId, name, description, cuisineTypes, address,
                                 latitude, longitude, logoImageUrl, coverImageUrl, avgRating,
                                 status, com.foodie.common.enums.RestaurantType.BOTH, null, commissionPct,
-                                ownerUserCredentialId, null, null, Boolean.FALSE, null, null, null, null);
+                                ownerUserCredentialId, null, null, Boolean.FALSE, null, null, null, null, phone);
         }
 }

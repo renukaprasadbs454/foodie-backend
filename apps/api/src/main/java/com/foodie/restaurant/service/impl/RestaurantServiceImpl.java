@@ -50,6 +50,7 @@ import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.admin.entity.LocationZone;
 import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.security.repository.UserCredentialRepository;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -99,6 +100,7 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final LocationZoneRepository locationZoneRepository;
+    private final UserCredentialRepository userCredentialRepository;
     private final BigDecimal defaultCommissionPct;
 
     public RestaurantServiceImpl(
@@ -115,6 +117,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
             LocationZoneRepository locationZoneRepository,
+            UserCredentialRepository userCredentialRepository,
             @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantAddressRepository = restaurantAddressRepository;
@@ -129,6 +132,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
         this.locationZoneRepository = locationZoneRepository;
+        this.userCredentialRepository = userCredentialRepository;
         this.defaultCommissionPct = defaultCommissionPct;
     }
 
@@ -750,6 +754,8 @@ public class RestaurantServiceImpl implements RestaurantService {
     private RestaurantDetailResponseDto buildDetail(Restaurant restaurant, boolean privileged) {
         RestaurantLegalDetailResponseDto legalDetails = null;
         List<RestaurantDocumentResponseDto> documents = null;
+        String phone = null;
+        
         if (privileged) {
             legalDetails = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
                     .map(restaurantMapper::toLegalDetailResponse).orElse(null);
@@ -759,13 +765,27 @@ public class RestaurantServiceImpl implements RestaurantService {
                         return restaurantMapper.toDocument(doc, docUrl);
                     }).toList();
         }
-        return restaurantMapper.toDetail(
+        RestaurantDetailResponseDto dto = restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
                 privileged,
                 legalDetails,
                 documents);
+
+        if (privileged && restaurant.getOwnerUserCredentialId() != null) {
+            phone = userCredentialRepository.findById(restaurant.getOwnerUserCredentialId())
+                    .map(u -> u.getPhoneNumber())
+                    .orElse(null);
+        }
+
+        return new RestaurantDetailResponseDto(
+                dto.restaurantId(), dto.name(), dto.description(), dto.cuisineTypes(), dto.address(),
+                dto.latitude(), dto.longitude(), dto.logoImageUrl(), dto.coverImageUrl(),
+                dto.avgRating(), dto.status(), dto.restaurantType(), dto.rejectionReason(),
+                dto.commissionPct(), dto.ownerUserCredentialId(), dto.legalDetails(),
+                dto.documents(), dto.isOpen(), dto.topPosition(), dto.openTime(), dto.closeTime(), dto.openDays(),
+                phone);
     }
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {
