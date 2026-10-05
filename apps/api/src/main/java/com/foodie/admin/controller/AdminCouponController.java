@@ -1,7 +1,6 @@
 package com.foodie.admin.controller;
 
 import com.foodie.admin.service.AdminOperationsService;
-import com.foodie.admin.dto.response.ModerationResponseDto;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.coupon.dto.request.CreateCouponRequestDto;
 import com.foodie.coupon.dto.response.CouponResponseDto;

@@ -21,18 +21,18 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         try {
             log.info("Updating wallet_account check constraints for CUSTOMER owner_type...");
-            jdbcTemplate.execute("ALTER TABLE wallet_account DROP CONSTRAINT IF EXISTS chk_wallet_owner_type");
+            jdbcTemplate.execute("ALTER TABLE \"wallet_account\" DROP CONSTRAINT IF EXISTS chk_wallet_owner_type");
             jdbcTemplate.execute(
-                    "ALTER TABLE wallet_account ADD CONSTRAINT chk_wallet_owner_type CHECK (owner_type IN ('DELIVERY_PARTNER', 'PLATFORM', 'CUSTOMER'))");
+                    "ALTER TABLE \"wallet_account\" ADD CONSTRAINT chk_wallet_owner_type CHECK (owner_type IN ('DELIVERY_PARTNER', 'PLATFORM', 'CUSTOMER', 'RESTAURANT'))");
         } catch (Exception e) {
-            log.warn("Could not alter wallet_account check constraint: {}", e.getMessage());
+            log.debug("Could not alter wallet_account check constraint: {}", e.getMessage());
         }
 
         try {
-            jdbcTemplate.execute("ALTER TABLE payment DROP CONSTRAINT IF EXISTS chk_payment_amount");
-            jdbcTemplate.execute("ALTER TABLE payment ADD CONSTRAINT chk_payment_amount CHECK (amount >= 0)");
+            jdbcTemplate.execute("ALTER TABLE \"payment\" DROP CONSTRAINT IF EXISTS chk_payment_amount");
+            jdbcTemplate.execute("ALTER TABLE \"payment\" ADD CONSTRAINT chk_payment_amount CHECK (amount >= 0)");
         } catch (Exception e) {
-            log.warn("Could not alter payment check constraint: {}", e.getMessage());
+            log.debug("Could not alter payment check constraint: {}", e.getMessage());
         }
 
         try {

@@ -14,7 +14,6 @@ import com.foodie.common.enums.RestaurantDocType;
 import com.foodie.common.enums.RestaurantStatus;
 import com.foodie.common.exception.ConflictException;
 import com.foodie.common.exception.ErrorCode;
-import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.common.exception.UnprocessableEntityException;
 import com.foodie.infrastructure.storage.ObjectStorageClient;
 import com.foodie.restaurant.dto.request.CreateRestaurantRequestDto;

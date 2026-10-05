@@ -55,7 +55,6 @@ class CustomerServiceImplTest {
 
     private CustomerServiceImpl service;
     private final UUID credentialId = UUID.randomUUID();
-    private Customer customer;
 
     @BeforeEach
     void setUp() {
@@ -68,8 +67,6 @@ class CustomerServiceImplTest {
                 activeOrderAddressQuery,
                 passwordEncoder
         );
-        customer = Customer.createInitial(credentialId, null);
-        // assign id via reflection-free save simulation: use a subclass trick — set through repository stub returns
     }
 
     @Test

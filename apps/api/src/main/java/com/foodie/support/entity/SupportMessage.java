@@ -31,7 +31,7 @@ public class SupportMessage {
     @Column(name = "message_type", nullable = false)
     private String messageType;
 
-    @Column(name = "content", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "content", nullable = false, length = 10000)
     private String content;
 
     @CreationTimestamp

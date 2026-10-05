@@ -6,7 +6,6 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.shared.contract.CustomerSummaryProvider;
-import com.foodie.shared.contract.OrderDeliveryPort;
 import com.foodie.shared.event.DeliveryCompletedEvent;
 import com.foodie.user.dto.response.CustomerLoyaltyResponseDto;
 import com.foodie.user.dto.response.LoyaltyLedgerItemDto;
@@ -36,7 +35,6 @@ public class LoyaltyServiceImpl implements LoyaltyService {
     private final LoyaltyPointLedgerRepository loyaltyPointLedgerRepository;
     private final CustomerSummaryProvider customerSummaryProvider;
     private final WalletService walletService;
-    private final OrderDeliveryPort orderDeliveryPort;
     private final com.foodie.order.repository.OrderRepository orderRepository;
 
     public LoyaltyServiceImpl(
@@ -44,13 +42,11 @@ public class LoyaltyServiceImpl implements LoyaltyService {
             LoyaltyPointLedgerRepository loyaltyPointLedgerRepository,
             CustomerSummaryProvider customerSummaryProvider,
             WalletService walletService,
-            OrderDeliveryPort orderDeliveryPort,
             com.foodie.order.repository.OrderRepository orderRepository) {
         this.customerLoyaltyRepository = customerLoyaltyRepository;
         this.loyaltyPointLedgerRepository = loyaltyPointLedgerRepository;
         this.customerSummaryProvider = customerSummaryProvider;
         this.walletService = walletService;
-        this.orderDeliveryPort = orderDeliveryPort;
         this.orderRepository = orderRepository;
     }
 

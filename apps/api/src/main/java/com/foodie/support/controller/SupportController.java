@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +75,7 @@ public class SupportController {
 
     // Batch endpoint for legacy sync support if needed
     @PostMapping("/conversations/sync")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<ApiResponse<SupportConversation>> syncConversation(@RequestBody Map<String, Object> req) {
         String category = (String) req.getOrDefault("category", "CUSTOMER");
         String subject = (String) req.getOrDefault("subject", "Support Chat");

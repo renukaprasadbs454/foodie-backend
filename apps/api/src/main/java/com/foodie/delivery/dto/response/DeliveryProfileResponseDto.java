@@ -1,6 +1,5 @@
 package com.foodie.delivery.dto.response;
 
-import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
 import java.util.List;
 import java.util.UUID;
 

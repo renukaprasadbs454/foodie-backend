@@ -164,17 +164,13 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
 
     private CouponResponseDto createCouponWithStatus(CreateCouponRequestDto request,
             Coupon.ApprovalStatus approvalStatus) {
-        if (request.getDiscountType() == DiscountType.PERCENT && request.getMaxDiscountAmount() == null) {
-            throw new UnprocessableEntityException(
-                    ErrorCode.MAX_DISCOUNT_REQUIRED_FOR_PERCENT,
-                    "maxDiscountAmount is required when discountType is PERCENT");
-        }
+        validateCreateRules(request);
         if (couponRepository.existsByCode(request.getCode().toUpperCase())) {
             throw new ConflictException(ErrorCode.COUPON_CODE_ALREADY_EXISTS, "Coupon code already exists");
         }
 
         String code = request.getCode().toUpperCase();
-        Instant expiry = request.getExpiryDate().atTime(23, 59, 59).toInstant(java.time.ZoneOffset.UTC);
+        Instant expiry = endOfDayUtc(request.getExpiryDate());
 
         Coupon coupon = Coupon.create(
                 code,

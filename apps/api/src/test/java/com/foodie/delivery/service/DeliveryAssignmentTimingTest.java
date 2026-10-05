@@ -2,13 +2,9 @@ package com.foodie.delivery.service;
 
 import com.foodie.common.enums.OrderActorType;
 import com.foodie.common.enums.OrderStatus;
-import com.foodie.order.entity.Order;
 import com.foodie.order.statemachine.OrderStateMachine;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

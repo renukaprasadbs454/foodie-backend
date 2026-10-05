@@ -167,8 +167,7 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
     @Transactional
     public DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId) {
         AdminUser admin = requirePermission(actorCredentialId, "DELIVERY", "KYC_APPROVE");
-        // Temporarily commented out due to other agent breaking DeliveryService
-        DeliveryProfileResponseDto after = null; // deliveryService.verifyKyc(partnerId, admin.getId());
+        DeliveryProfileResponseDto after = deliveryService.verifyKyc(partnerId, admin.getId());
         adminService.recordAudit(
                 admin.getId(),
                 "APPROVE_DELIVERY_KYC",

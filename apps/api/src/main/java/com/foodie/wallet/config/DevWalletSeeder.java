@@ -4,7 +4,6 @@ import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.user.repository.CustomerRepository;
 import com.foodie.wallet.service.WalletService;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.UUID;

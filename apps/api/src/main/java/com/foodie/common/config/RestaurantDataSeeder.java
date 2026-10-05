@@ -32,21 +32,18 @@ public class RestaurantDataSeeder implements ApplicationRunner {
         private final RestaurantAddressRepository restaurantAddressRepository;
         private final CategoryRepository categoryRepository;
         private final MenuItemRepository menuItemRepository;
-        private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
         public RestaurantDataSeeder(
                         UserCredentialRepository userCredentialRepository,
                         RestaurantRepository restaurantRepository,
                         RestaurantAddressRepository restaurantAddressRepository,
                         CategoryRepository categoryRepository,
-                        MenuItemRepository menuItemRepository,
-                        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+                        MenuItemRepository menuItemRepository) {
                 this.userCredentialRepository = userCredentialRepository;
                 this.restaurantRepository = restaurantRepository;
                 this.restaurantAddressRepository = restaurantAddressRepository;
                 this.categoryRepository = categoryRepository;
                 this.menuItemRepository = menuItemRepository;
-                this.jdbcTemplate = jdbcTemplate;
         }
 
         @Override

@@ -1,6 +1,5 @@
 package com.foodie.delivery.service.impl;
 
-import com.foodie.delivery.service.PartnerGeoService.GeoPartnerHit;
 import com.foodie.delivery.service.PartnerGeoService;
 import java.time.Instant;
 import java.util.ArrayList;

@@ -48,9 +48,7 @@ public class AuthServiceImpl implements AuthService {
 
     private static final Duration OTP_TTL = Duration.ofMinutes(5);
     private static final Duration OTP_REQUEST_WINDOW = Duration.ofMinutes(10);
-    private static final Duration OTP_VERIFY_WINDOW = Duration.ofMinutes(10);
     private static final int OTP_REQUEST_LIMIT = 5;
-    private static final int OTP_VERIFY_LIMIT = 10;
     private static final Duration ADMIN_LOGIN_WINDOW = Duration.ofMinutes(10);
     private static final int ADMIN_LOGIN_LIMIT = 10;
 
@@ -407,7 +405,7 @@ public class AuthServiceImpl implements AuthService {
         String refreshHash = HashUtils.sha256Hex(refreshRaw);
         Instant expiresAt = Instant.now().plusSeconds(jwtTokenProvider.refreshTtlSeconds(credential.getUserType()));
 
-        RefreshToken refreshToken = refreshTokenRepository.save(
+        refreshTokenRepository.save(
                 RefreshToken.issue(credential, refreshHash, expiresAt, deviceInfo));
 
         Duration sessionTtl = Duration.between(Instant.now(), expiresAt);

@@ -140,10 +140,10 @@ public class AdminDataSeeder implements ApplicationRunner {
     private void seedRole(String idStr, String roleName) {
         try {
             Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM role WHERE name = ?", Integer.class, roleName);
+                    "SELECT COUNT(*) FROM \"role\" WHERE \"name\" = ?", Integer.class, roleName);
             if (count == null || count == 0) {
                 jdbcTemplate.update(
-                        "INSERT INTO role (id, name) VALUES (?, ?)",
+                        "INSERT INTO \"role\" (\"id\", \"name\") VALUES (?, ?)",
                         UUID.fromString(idStr), roleName);
             }
         } catch (Exception e) {
@@ -158,32 +158,32 @@ public class AdminDataSeeder implements ApplicationRunner {
 
         try {
             Integer credCount = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM user_credential WHERE email = ? AND user_type = 'ADMIN'",
+                    "SELECT COUNT(*) FROM \"user_credential\" WHERE \"email\" = ? AND \"user_type\" = 'ADMIN'",
                     Integer.class, email);
 
             if (credCount == null || credCount == 0) {
                 jdbcTemplate.update(
-                        "INSERT INTO user_credential (id, phone_number, email, password_hash, user_type, active, created_at, updated_at) " +
+                        "INSERT INTO \"user_credential\" (\"id\", \"phone_number\", \"email\", \"password_hash\", \"user_type\", \"active\", \"created_at\", \"updated_at\") " +
                                 "VALUES (?, ?, ?, ?, 'ADMIN', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                         credId, phone, email, BCRYPT_PASSWORD);
             } else {
                 jdbcTemplate.update(
-                        "UPDATE user_credential SET password_hash = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE email = ? AND user_type = 'ADMIN'",
+                        "UPDATE \"user_credential\" SET \"password_hash\" = ?, \"active\" = TRUE, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"email\" = ? AND \"user_type\" = 'ADMIN'",
                         BCRYPT_PASSWORD, email);
             }
 
             Integer adminCount = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM admin_user WHERE user_credential_id = ?",
+                    "SELECT COUNT(*) FROM \"admin_user\" WHERE \"user_credential_id\" = ?",
                     Integer.class, credId);
 
             if (adminCount == null || adminCount == 0) {
                 jdbcTemplate.update(
-                        "INSERT INTO admin_user (id, user_credential_id, role_id, full_name, created_at, updated_at) " +
+                        "INSERT INTO \"admin_user\" (\"id\", \"user_credential_id\", \"role_id\", \"full_name\", \"created_at\", \"updated_at\") " +
                                 "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                         adminId, credId, roleId, fullName);
             } else {
                 jdbcTemplate.update(
-                        "UPDATE admin_user SET role_id = ?, full_name = ?, updated_at = CURRENT_TIMESTAMP WHERE user_credential_id = ?",
+                        "UPDATE \"admin_user\" SET \"role_id\" = ?, \"full_name\" = ?, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"user_credential_id\" = ?",
                         roleId, fullName, credId);
             }
         } catch (Exception e) {

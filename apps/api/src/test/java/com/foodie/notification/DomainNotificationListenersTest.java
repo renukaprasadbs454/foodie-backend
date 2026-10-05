@@ -18,7 +18,6 @@ import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.shared.event.OrderPlacedEvent;
 import com.foodie.shared.event.OrderStatusChangedEvent;
 import com.foodie.shared.event.PaymentFailedEvent;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +65,7 @@ class DomainNotificationListenersTest {
         listeners.onOrderPlaced(OrderPlacedEvent.of(orderId, customerId, restaurantId));
 
         verify(notificationService).send(
-                eq(ownerId), eq(NotificationEventType.ORDER_PLACED), any(Map.class));
+                eq(ownerId), eq(NotificationEventType.ORDER_PLACED), any());
     }
 
     @Test
@@ -91,6 +90,6 @@ class DomainNotificationListenersTest {
         listeners.onPaymentFailed(PaymentFailedEvent.of(orderId, UUID.randomUUID()));
 
         verify(notificationService).send(
-                eq(credentialId), eq(NotificationEventType.PAYMENT_FAILED), any(Map.class));
+                eq(credentialId), eq(NotificationEventType.PAYMENT_FAILED), any());
     }
 }

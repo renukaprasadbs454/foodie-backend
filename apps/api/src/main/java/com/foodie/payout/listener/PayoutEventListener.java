@@ -14,6 +14,7 @@ public class PayoutEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(PayoutEventListener.class);
 
+    @SuppressWarnings("unused")
     private final PayoutProcessingService payoutProcessingService;
 
     public PayoutEventListener(PayoutProcessingService payoutProcessingService) {

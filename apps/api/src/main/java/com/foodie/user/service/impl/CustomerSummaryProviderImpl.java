@@ -1,6 +1,5 @@
 package com.foodie.user.service.impl;
 
-import com.foodie.auth.entity.UserCredential;
 import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.shared.contract.CustomerSummaryProvider;
 import com.foodie.user.entity.Customer;

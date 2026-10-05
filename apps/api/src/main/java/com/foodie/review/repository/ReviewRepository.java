@@ -1,6 +1,7 @@
 package com.foodie.review.repository;
 
 import com.foodie.review.entity.Review;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,4 +17,9 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     @Query("select coalesce(avg(r.restaurantRating), 0) from Review r where r.restaurantId = :restaurantId")
     Double averageRestaurantRating(@Param("restaurantId") UUID restaurantId);
+
+    List<Review> findByDeliveryPartnerIdOrderByCreatedAtDesc(UUID deliveryPartnerId);
+
+    @Query("select coalesce(avg(r.deliveryRating), 5.0) from Review r where r.deliveryPartnerId = :deliveryPartnerId and r.deliveryRating is not null")
+    Double averageDeliveryRating(@Param("deliveryPartnerId") UUID deliveryPartnerId);
 }

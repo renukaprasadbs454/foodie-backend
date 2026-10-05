@@ -6,7 +6,6 @@ import com.foodie.common.enums.DeliveryDocType;
 import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.OrderStatus;
 import com.foodie.common.enums.PaymentStatus;
-import com.foodie.common.enums.UserType;
 import com.foodie.common.enums.VehicleType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ConflictException;
@@ -68,11 +67,10 @@ import com.foodie.delivery.service.DeliveryPricingService;
 import java.math.BigDecimal;
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 
 import com.foodie.user.repository.AddressRepository;
+import com.foodie.user.repository.CustomerRepository;
 
 @Service
 public class DeliveryServiceImpl implements DeliveryService {
@@ -89,7 +87,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryLocationHistoryRepository deliveryLocationHistoryRepository;
     private final DeliveryCashDepositRepository deliveryCashDepositRepository;
     private final PaymentRepository paymentRepository;
+    private final com.foodie.review.repository.ReviewRepository reviewRepository;
     private final AddressRepository addressRepository;
+    private final CustomerRepository customerRepository;
     private final DeliveryMapper deliveryMapper;
     private final ObjectStorageClient objectStorageClient;
     private final PartnerGeoService partnerGeoService;
@@ -108,7 +108,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             DeliveryLocationHistoryRepository deliveryLocationHistoryRepository,
             DeliveryCashDepositRepository deliveryCashDepositRepository,
             PaymentRepository paymentRepository,
+            com.foodie.review.repository.ReviewRepository reviewRepository,
             AddressRepository addressRepository,
+            CustomerRepository customerRepository,
             DeliveryMapper deliveryMapper,
             ObjectStorageClient objectStorageClient,
             PartnerGeoService partnerGeoService,
@@ -125,7 +127,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.deliveryLocationHistoryRepository = deliveryLocationHistoryRepository;
         this.deliveryCashDepositRepository = deliveryCashDepositRepository;
         this.paymentRepository = paymentRepository;
+        this.reviewRepository = reviewRepository;
         this.addressRepository = addressRepository;
+        this.customerRepository = customerRepository;
         this.deliveryMapper = deliveryMapper;
         this.objectStorageClient = objectStorageClient;
         this.partnerGeoService = partnerGeoService;
@@ -898,6 +902,103 @@ public class DeliveryServiceImpl implements DeliveryService {
                 partner.getAccountNumber(),
                 partner.getIfscCode(),
                 partner.getBankName()
+        );
+    }
+
+        @Override
+    @Transactional(readOnly = true)
+    public com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(UUID userCredentialId) {
+        DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
+                .orElseGet(() -> DeliveryPartner.create(userCredentialId, DEFAULT_FULL_NAME, VehicleType.BIKE, null));
+
+        List<com.foodie.review.entity.Review> dbReviews = (reviewRepository != null && partner.getId() != null)
+                ? reviewRepository.findByDeliveryPartnerIdOrderByCreatedAtDesc(partner.getId())
+                : List.of();
+
+        List<com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.DeliveryReviewItemDto> items = new java.util.ArrayList<>();
+        java.util.Map<String, Integer> breakdown = new java.util.LinkedHashMap<>();
+        breakdown.put("5", 0);
+        breakdown.put("4", 0);
+        breakdown.put("3", 0);
+        breakdown.put("2", 0);
+        breakdown.put("1", 0);
+
+        double totalScore = 0;
+        int ratingCount = 0;
+        int positiveCount = 0;
+        int fastDeliveryCount = 0;
+        int politeCount = 0;
+        int carefulHandlingCount = 0;
+        int followedInstructionsCount = 0;
+
+        java.time.format.DateTimeFormatter timeFormatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")
+                .withZone(java.time.ZoneId.systemDefault());
+
+        for (com.foodie.review.entity.Review r : dbReviews) {
+            if (r.getDeliveryRating() != null && r.getDeliveryRating() > 0) {
+                int star = Math.min(5, Math.max(1, (int) r.getDeliveryRating()));
+                breakdown.put(String.valueOf(star), breakdown.getOrDefault(String.valueOf(star), 0) + 1);
+                totalScore += star;
+                ratingCount++;
+                if (star >= 4) {
+                    positiveCount++;
+                }
+                if (star == 5) {
+                    fastDeliveryCount++;
+                    carefulHandlingCount++;
+                }
+                if (star >= 4) {
+                    politeCount++;
+                    followedInstructionsCount++;
+                }
+            }
+            List<String> tags = new java.util.ArrayList<>();
+            if (r.getDeliveryRating() != null && r.getDeliveryRating() == 5) {
+                tags.add("? Super Fast");
+                tags.add("?? Handled With Care");
+            } else if (r.getDeliveryRating() != null && r.getDeliveryRating() >= 4) {
+                tags.add("?? Polite & Friendly");
+            }
+
+            String customerName = "Customer";
+            if (customerRepository != null && r.getCustomerId() != null) {
+                customerName = customerRepository.findById(r.getCustomerId())
+                        .map(com.foodie.user.entity.Customer::getFullName)
+                        .filter(name -> name != null && !name.isBlank())
+                        .orElse("Customer");
+            }
+
+            String timeAgo = r.getCreatedAt() != null ? timeFormatter.format(r.getCreatedAt()) : "Recently";
+            String orderNumber = r.getOrderId() != null ? "#ORD-" + r.getOrderId().toString().substring(0, 8).toUpperCase() : "";
+
+            items.add(new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.DeliveryReviewItemDto(
+                    r.getId(),
+                    customerName,
+                    r.getDeliveryRating() != null ? r.getDeliveryRating().intValue() : 5,
+                    r.getComment() != null ? r.getComment() : "",
+                    orderNumber,
+                    timeAgo,
+                    tags
+            ));
+        }
+
+        double avgRating = ratingCount > 0 ? Math.round((totalScore / ratingCount) * 10.0) / 10.0 : 0.0;
+        int positivePct = ratingCount > 0 ? (int) Math.round(((double) positiveCount / ratingCount) * 100.0) : 0;
+
+        List<com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto> compliments = List.of(
+                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Super Fast Delivery", fastDeliveryCount, "flash"),
+                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Polite & Friendly", politeCount, "happy"),
+                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Handled With Care", carefulHandlingCount, "cube"),
+                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Followed Instructions", followedInstructionsCount, "checkmark-circle")
+        );
+
+        return new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto(
+                avgRating,
+                ratingCount,
+                positivePct,
+                breakdown,
+                compliments,
+                items
         );
     }
 }

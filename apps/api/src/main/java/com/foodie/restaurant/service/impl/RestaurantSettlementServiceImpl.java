@@ -98,9 +98,9 @@ public class RestaurantSettlementServiceImpl implements RestaurantSettlementServ
             Instant periodEnd) {
         RestaurantSettlement settlement = generateSettlementInternal(restaurantId, periodStart, periodEnd);
         if (settlement == null) {
-            // Create default zero-amount or baseline settlement
-            Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
+            if (!restaurantRepository.existsById(restaurantId)) {
+                throw new ResourceNotFoundException("Restaurant not found.");
+            }
             String num = "SETTLE-" + System.currentTimeMillis() % 1000000;
             settlement = settlementRepository.save(RestaurantSettlement.create(
                     restaurantId, num, periodStart, periodEnd,

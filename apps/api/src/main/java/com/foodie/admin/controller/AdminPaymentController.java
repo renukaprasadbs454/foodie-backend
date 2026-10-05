@@ -8,7 +8,6 @@ import com.foodie.admin.dto.response.PaymentSplitBreakdownDto;
 import com.foodie.admin.service.AdminPaymentService;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.common.enums.OwnerType;
-import com.foodie.payout.service.PayoutProcessingService;
 import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.wallet.entity.Payout;
@@ -42,7 +41,6 @@ public class AdminPaymentController {
     private final WalletAccountRepository walletAccountRepository;
     private final RestaurantSummaryProvider restaurantSummaryProvider;
     private final DeliveryPartnerLookup deliveryPartnerLookup;
-    private final PayoutProcessingService payoutProcessingService;
     private final WalletService walletService;
 
     public AdminPaymentController(
@@ -52,7 +50,6 @@ public class AdminPaymentController {
             WalletAccountRepository walletAccountRepository,
             RestaurantSummaryProvider restaurantSummaryProvider,
             DeliveryPartnerLookup deliveryPartnerLookup,
-            PayoutProcessingService payoutProcessingService,
             WalletService walletService) {
         this.adminPaymentService = adminPaymentService;
         this.restaurantSettlementService = restaurantSettlementService;
@@ -60,7 +57,6 @@ public class AdminPaymentController {
         this.walletAccountRepository = walletAccountRepository;
         this.restaurantSummaryProvider = restaurantSummaryProvider;
         this.deliveryPartnerLookup = deliveryPartnerLookup;
-        this.payoutProcessingService = payoutProcessingService;
         this.walletService = walletService;
     }
 

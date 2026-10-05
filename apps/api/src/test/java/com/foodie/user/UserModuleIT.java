@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+@SuppressWarnings("rawtypes")
 class UserModuleIT extends AbstractIntegrationTest {
 
     @Autowired

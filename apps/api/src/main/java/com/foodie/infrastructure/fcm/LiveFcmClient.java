@@ -16,6 +16,7 @@ public class LiveFcmClient implements FcmClient {
 
     private static final Logger log = LoggerFactory.getLogger(LiveFcmClient.class);
 
+    @SuppressWarnings("unused")
     private final FcmProperties properties;
 
     public LiveFcmClient(FcmProperties properties) {

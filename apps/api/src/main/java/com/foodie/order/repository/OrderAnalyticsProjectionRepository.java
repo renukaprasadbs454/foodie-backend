@@ -1,7 +1,6 @@
 package com.foodie.order.repository;
 
 import com.foodie.order.entity.Order;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -41,7 +40,7 @@ public interface OrderAnalyticsProjectionRepository extends JpaRepository<Order,
     List<Object[]> countByStatusPlacedBetween(@Param("from") Instant from, @Param("to") Instant to);
 
     @Query(value = """
-            SELECT CAST(o.placed_at AS date) AS day,
+            SELECT CAST(o.placed_at AS date) AS order_date,
                    COUNT(o.id) AS order_count,
                    COALESCE(SUM(o.total_amount), 0) AS revenue
             FROM "order" o

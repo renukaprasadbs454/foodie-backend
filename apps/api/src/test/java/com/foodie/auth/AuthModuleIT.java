@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+@SuppressWarnings({"rawtypes", "unchecked"})
 class AuthModuleIT extends AbstractIntegrationTest {
 
     @Autowired
@@ -113,7 +114,6 @@ class AuthModuleIT extends AbstractIntegrationTest {
         assertThat(data.get("isNewUser")).isEqualTo(false);
 
         String refreshToken = data.get("refreshToken").toString();
-        String accessToken = data.get("accessToken").toString();
 
         ResponseEntity<Map> refreshed = restTemplate.postForEntity(
                 "/api/v1/auth/refresh",

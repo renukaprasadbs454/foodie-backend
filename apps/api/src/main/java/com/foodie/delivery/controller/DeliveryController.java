@@ -216,4 +216,12 @@ public class DeliveryController {
             @Valid @RequestBody com.foodie.delivery.dto.request.DeliveryBankDetailsRequestDto request) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.updateBankDetails(principal.userId(), request)));
     }
+
+    @GetMapping("/me/reviews")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Get delivery partner ratings and customer reviews")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto>> getReviews(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getDeliveryPartnerReviews(principal.userId())));
+    }
 }

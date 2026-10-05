@@ -20,8 +20,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.UUID;
-import org.springframework.context.ApplicationEventPublisher;
-import com.foodie.delivery.service.DeliveryService;
 
 @RestController
 @RequestMapping("/api/v1/debug")

@@ -2,11 +2,9 @@ package com.foodie.search.service.impl;
 
 import com.foodie.infrastructure.storage.ObjectStorageClient;
 import com.foodie.menu.dto.response.MenuItemResponseDto;
-import com.foodie.menu.dto.response.VariantResponseDto;
 import com.foodie.menu.entity.MenuItem;
 import com.foodie.menu.mapper.MenuMapper;
 import com.foodie.menu.repository.MenuItemRepository;
-import com.foodie.menu.repository.VariantRepository;
 import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
 import com.foodie.restaurant.service.RestaurantService;
 import com.foodie.search.dto.response.GlobalSearchResponseDto;
@@ -24,20 +22,17 @@ public class SearchServiceImpl implements SearchService {
     private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(15);
 
     private final MenuItemRepository menuItemRepository;
-    private final VariantRepository variantRepository;
     private final MenuMapper menuMapper;
     private final RestaurantService restaurantService;
     private final ObjectStorageClient objectStorageClient;
 
     public SearchServiceImpl(
             MenuItemRepository menuItemRepository,
-            VariantRepository variantRepository,
             MenuMapper menuMapper,
             RestaurantService restaurantService,
             ObjectStorageClient objectStorageClient
     ) {
         this.menuItemRepository = menuItemRepository;
-        this.variantRepository = variantRepository;
         this.menuMapper = menuMapper;
         this.restaurantService = restaurantService;
         this.objectStorageClient = objectStorageClient;

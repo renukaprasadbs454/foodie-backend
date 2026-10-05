@@ -9,6 +9,7 @@ import com.foodie.delivery.dto.response.AvailabilityResponseDto;
 import com.foodie.delivery.dto.response.DeliveryAssignmentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryOfferResponseDto;
+import com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileImageResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileResponseDto;
 import java.util.List;
@@ -71,4 +72,6 @@ public interface DeliveryService {
 
         com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto updateBankDetails(
                 UUID userCredentialId, com.foodie.delivery.dto.request.DeliveryBankDetailsRequestDto request);
+
+        DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(UUID userCredentialId);
 }

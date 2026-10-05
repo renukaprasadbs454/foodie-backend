@@ -55,6 +55,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final OrderPaymentPort orderPaymentPort;
     private final CustomerSummaryProvider customerSummaryProvider;
     private final CashfreePaymentClient cashfreeClient;
+    @SuppressWarnings("unused")
     private final WebhookDedupService webhookDedupService;
     private final PaymentIdempotencyStore idempotencyStore;
     private final String appId;
@@ -138,8 +139,6 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
 
-        CustomerSummaryProvider.CustomerSummary customer = customerSummaryProvider
-                .findByUserCredentialId(userCredentialId).orElse(null);
         String customerPhone = "9999999999";
 
         var existing = paymentRepository.findByOrderId(orderId);
@@ -523,21 +522,6 @@ public class PaymentServiceImpl implements PaymentService {
                 appId,
                 payment.getWalletAmount(),
                 payment.getStatus().name());
-    }
-
-    private static String shortReceipt(UUID orderId) {
-        String compact = orderId.toString().replace("-", "");
-        return compact.substring(0, Math.min(40, compact.length()));
-    }
-
-    private static String firstNonBlank(String a, String b) {
-        if (a != null && !a.isBlank()) {
-            return a;
-        }
-        if (b != null && !b.isBlank()) {
-            return b;
-        }
-        return null;
     }
 
     @Override

@@ -22,6 +22,7 @@ public class LiveRazorpayClient implements RazorpayClient {
 
     private static final Logger log = LoggerFactory.getLogger(LiveRazorpayClient.class);
 
+    @SuppressWarnings("unused")
     private final RazorpayProperties properties;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;

@@ -10,7 +10,6 @@ import com.foodie.payout.dto.PayoutStatusResult;
 import com.foodie.payout.enums.PayoutProviderType;
 import com.foodie.payout.provider.PayoutProvider;
 import com.foodie.wallet.entity.Payout;
-import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
