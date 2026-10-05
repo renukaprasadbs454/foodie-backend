@@ -72,7 +72,10 @@ public class RestaurantMapper {
                                 legalDetails,
                                 documents,
                                 restaurant.getIsOpen(),
-                                restaurant.getTopPosition());
+                                restaurant.getTopPosition(),
+                                restaurant.getOpenTime() != null ? restaurant.getOpenTime().toString() : null,
+                                restaurant.getCloseTime() != null ? restaurant.getCloseTime().toString() : null,
+                                restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null);
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {
@@ -129,17 +132,14 @@ public class RestaurantMapper {
                                                 details.getUpiVerificationStatus()));
         }
 
-        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document, String fileUrl) {
+        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document, String documentUrl) {
                 return new RestaurantDocumentResponseDto(
                                 document.getId(),
                                 document.getDocType().name(),
                                 document.getVerifiedAt(),
-                                fileUrl,
-                                fileUrl);
-        }
-
-        public RestaurantDocumentResponseDto toDocument(RestaurantDocument document) {
-                return toDocument(document, null);
+                                documentUrl,
+                                documentUrl,
+                                documentUrl);
         }
 
         public RestaurantUpiResponseDto toUpiResponse(Restaurant restaurant) {

@@ -102,6 +102,23 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyRestaurant(principal.userId())));
     }
 
+    @PutMapping("/me/timings")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Update my restaurant operational timings")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> updateTimings(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody com.foodie.restaurant.dto.request.UpdateTimingsRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.updateTimings(principal.userId(), request)));
+    }
+
+    @PostMapping("/me/submit")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Submit onboarding application to become PENDING")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> submitRegistration(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.submitRegistration(principal.userId())));
+    }
+
     @PutMapping("/me/status")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Toggle restaurant online/offline status")

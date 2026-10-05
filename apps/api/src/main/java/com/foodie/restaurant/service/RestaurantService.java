@@ -59,6 +59,10 @@ public interface RestaurantService {
 
         RestaurantDetailResponseDto updateMyRestaurant(UUID ownerCredentialId, UpdateRestaurantRequestDto request);
 
+        RestaurantDetailResponseDto updateTimings(UUID ownerCredentialId, com.foodie.restaurant.dto.request.UpdateTimingsRequestDto request);
+
+        RestaurantDetailResponseDto submitRegistration(UUID ownerCredentialId);
+
         RestaurantLocationResponseDto getLocation(UUID ownerCredentialId);
 
         RestaurantLocationResponseDto updateLocation(UUID ownerCredentialId,

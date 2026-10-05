@@ -77,4 +77,8 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
      Page<Restaurant> findByStatus(
                com.foodie.common.enums.RestaurantStatus status,
                Pageable pageable);
+
+     Page<Restaurant> findByStatusNot(
+               com.foodie.common.enums.RestaurantStatus status,
+               Pageable pageable);
 }

@@ -59,6 +59,16 @@ public class Restaurant extends BaseEntity {
     @Column(name = "restaurant_type", length = 30)
     private com.foodie.common.enums.RestaurantType restaurantType = com.foodie.common.enums.RestaurantType.BOTH;
 
+    @Column(name = "open_time")
+    private java.time.LocalTime openTime;
+
+    @Column(name = "close_time")
+    private java.time.LocalTime closeTime;
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "open_days")
+    private String[] openDays;
+
     @Column(name = "is_open", nullable = false)
     private Boolean isOpen = Boolean.FALSE;
 
@@ -116,10 +126,22 @@ public class Restaurant extends BaseEntity {
         restaurant.latitude = address.getLatitude();
         restaurant.longitude = address.getLongitude();
         restaurant.avgRating = BigDecimal.ZERO.setScale(1);
-        restaurant.status = RestaurantStatus.PENDING;
+        restaurant.status = RestaurantStatus.ONBOARDING; // Initial state during document/image upload
         restaurant.commissionPct = commissionPct;
         restaurant.isOpen = Boolean.FALSE;
         return restaurant;
+    }
+
+    public void submitRegistration() {
+        if (this.status == RestaurantStatus.ONBOARDING) {
+            this.status = RestaurantStatus.PENDING;
+        }
+    }
+
+    public void updateTimings(java.time.LocalTime openTime, java.time.LocalTime closeTime, String[] openDays) {
+        this.openTime = openTime;
+        this.closeTime = closeTime;
+        this.openDays = openDays;
     }
 
     public void updateProfile(String name, String description, String[] cuisineTypes) {
@@ -229,6 +251,18 @@ public class Restaurant extends BaseEntity {
 
     public BigDecimal getCommissionPct() {
         return commissionPct;
+    }
+
+    public java.time.LocalTime getOpenTime() {
+        return openTime;
+    }
+
+    public java.time.LocalTime getCloseTime() {
+        return closeTime;
+    }
+
+    public String[] getOpenDays() {
+        return openDays;
     }
 
     public Boolean getIsOpen() {

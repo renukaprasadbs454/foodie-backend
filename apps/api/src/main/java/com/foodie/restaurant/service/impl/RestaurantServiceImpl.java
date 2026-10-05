@@ -208,7 +208,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (statusEnum != null) {
             result = restaurantRepository.findByStatus(statusEnum, pageable);
         } else {
-            result = restaurantRepository.findAll(pageable);
+            result = restaurantRepository.findByStatusNot(com.foodie.common.enums.RestaurantStatus.ONBOARDING, pageable);
         }
         List<RestaurantDetailResponseDto> items = result.getContent().stream()
                 .map(r -> buildDetail(r, true))
@@ -450,7 +450,8 @@ public class RestaurantServiceImpl implements RestaurantService {
         objectStorageClient.putObject(key, new ByteArrayInputStream(bytes), bytes.length, detected.contentType());
         RestaurantDocument document = restaurantDocumentRepository.save(
                 RestaurantDocument.create(restaurant, docType, key));
-        return restaurantMapper.toDocument(document, signedOrNull(key));
+        String docUrl = objectStorageClient.createSignedGetUrl(document.getS3Key(), java.time.Duration.ofHours(1));
+        return restaurantMapper.toDocument(document, docUrl);
     }
 
     @Override
@@ -622,6 +623,26 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     @Override
     @Transactional
+    public RestaurantDetailResponseDto updateTimings(UUID ownerCredentialId, com.foodie.restaurant.dto.request.UpdateTimingsRequestDto request) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.updateTimings(request.openTime(), request.closeTime(), request.openDays().toArray(new String[0]));
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        restaurantCacheService.evictAllListCaches();
+        return buildDetail(restaurant, true);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto submitRegistration(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        restaurant.submitRegistration();
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        restaurantCacheService.evictAllListCaches();
+        return buildDetail(restaurant, true);
+    }
+
+    @Override
+    @Transactional
     public RestaurantDetailResponseDto approve(UUID restaurantId, UUID adminId) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
@@ -717,7 +738,8 @@ public class RestaurantServiceImpl implements RestaurantService {
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
         document.markVerified();
         log.info("Restaurant document {} verified by admin {}", documentId, adminId);
-        return restaurantMapper.toDocument(document, signedOrNull(document.getS3Key()));
+        String docUrl = objectStorageClient.createSignedGetUrl(document.getS3Key(), java.time.Duration.ofHours(1));
+        return restaurantMapper.toDocument(document, docUrl);
     }
 
     private Restaurant requireOwned(UUID ownerCredentialId) {
@@ -732,7 +754,10 @@ public class RestaurantServiceImpl implements RestaurantService {
             legalDetails = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
                     .map(restaurantMapper::toLegalDetailResponse).orElse(null);
             documents = restaurantDocumentRepository.findByRestaurantId(restaurant.getId()).stream()
-                    .map(doc -> restaurantMapper.toDocument(doc, signedOrNull(doc.getS3Key()))).toList();
+                    .map(doc -> {
+                        String docUrl = objectStorageClient.createSignedGetUrl(doc.getS3Key(), java.time.Duration.ofHours(1));
+                        return restaurantMapper.toDocument(doc, docUrl);
+                    }).toList();
         }
         return restaurantMapper.toDetail(
                 restaurant,
