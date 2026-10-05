@@ -38,6 +38,17 @@ public class LocalObjectStorageController {
             return ResponseEntity.notFound().build();
         }
 
+        if (Files.isDirectory(file)) {
+            try (var stream = Files.walk(file, 2)) {
+                var actualFile = stream.filter(Files::isRegularFile).findFirst();
+                if (actualFile.isPresent()) {
+                    file = actualFile.get();
+                } else {
+                    return ResponseEntity.notFound().build();
+                }
+            }
+        }
+
         Resource resource = new FileSystemResource(file.toFile());
         String contentType = Files.probeContentType(file);
         if (contentType == null) {
