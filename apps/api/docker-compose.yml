@@ -20,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: foodie-redis
     ports:
-      - "6379:6379"
+      - "16379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - foodie_redis_data:/data

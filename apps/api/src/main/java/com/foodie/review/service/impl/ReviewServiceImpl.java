@@ -113,7 +113,16 @@ public class ReviewServiceImpl implements ReviewService {
         Page<Review> result = reviewRepository.findByRestaurantId(restaurantId, pageable);
         List<RestaurantReviewItemDto> items = result.getContent().stream()
                 .filter(review -> !moderationStore.isFlagged(review.getId()))
-                .map(ReviewMapper::toPublicItem)
+                .map(review -> {
+                    String customerName = null;
+                    if (review.getCustomerId() != null) {
+                        customerName = customerSummaryProvider.findByCustomerId(review.getCustomerId())
+                                .map(CustomerSummaryProvider.CustomerSummary::fullName)
+                                .filter(name -> name != null && !name.isBlank())
+                                .orElse(null);
+                    }
+                    return ReviewMapper.toPublicItem(review, customerName);
+                })
                 .toList();
         // Pagination meta reflects DB page; flagged rows may thin the page (acceptable
         // V1 trade-off).

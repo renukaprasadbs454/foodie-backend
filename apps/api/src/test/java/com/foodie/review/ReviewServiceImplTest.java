@@ -132,7 +132,7 @@ class ReviewServiceImplTest {
     }
 
     @Test
-    void listForRestaurant_hidesFlaggedAndOmitsCustomer() {
+    void listForRestaurant_hidesFlagged() {
         Review visible = Review.submit(orderId, customerId, restaurantId, partnerId, 5, 4, "Nice");
         ReflectionTestUtils.setField(visible, "id", UUID.randomUUID());
         Review flagged = Review.submit(UUID.randomUUID(), customerId, restaurantId, null, 1, null, "Bad");
@@ -143,15 +143,14 @@ class ReviewServiceImplTest {
                 .thenReturn(new PageImpl<>(List.of(visible, flagged)));
         when(moderationStore.isFlagged(visible.getId())).thenReturn(false);
         when(moderationStore.isFlagged(flaggedId)).thenReturn(true);
+        when(customerSummaryProvider.findByCustomerId(customerId))
+                .thenReturn(Optional.of(new CustomerSummaryProvider.CustomerSummary(customerId, "John Doe", null)));
 
         var page = service.listForRestaurant(restaurantId, 0, 20, "createdAt");
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().getFirst().comment()).isEqualTo("Nice");
-        // Public DTO has no customer fields — structural guarantee via record shape
-        assertThat(page.items().getFirst().getClass().getRecordComponents())
-                .extracting(c -> c.getName())
-                .doesNotContain("customerId", "customerName");
+        assertThat(page.items().getFirst().customerName()).isEqualTo("John Doe");
     }
 
     @Test

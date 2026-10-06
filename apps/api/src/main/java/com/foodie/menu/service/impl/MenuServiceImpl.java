@@ -30,6 +30,7 @@ import com.foodie.menu.repository.VariantRepository;
 import com.foodie.menu.service.MenuCacheService;
 import com.foodie.menu.service.MenuService;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
+import com.foodie.shared.contract.ReviewRatingQuery;
 import com.foodie.shared.event.MenuItemPriceChangedEvent;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -45,6 +46,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,31 @@ public class MenuServiceImpl implements MenuService {
     private final ObjectStorageClient objectStorageClient;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ReviewRatingQuery reviewRatingQuery;
+
+    @Autowired
+    public MenuServiceImpl(
+            CategoryRepository categoryRepository,
+            MenuItemRepository menuItemRepository,
+            VariantRepository variantRepository,
+            MenuMapper menuMapper,
+            RestaurantSummaryProvider restaurantSummaryProvider,
+            MenuCacheService menuCacheService,
+            ObjectStorageClient objectStorageClient,
+            ApplicationEventPublisher eventPublisher,
+            ObjectMapper objectMapper,
+            ReviewRatingQuery reviewRatingQuery) {
+        this.categoryRepository = categoryRepository;
+        this.menuItemRepository = menuItemRepository;
+        this.variantRepository = variantRepository;
+        this.menuMapper = menuMapper;
+        this.restaurantSummaryProvider = restaurantSummaryProvider;
+        this.menuCacheService = menuCacheService;
+        this.objectStorageClient = objectStorageClient;
+        this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
+        this.reviewRatingQuery = reviewRatingQuery;
+    }
 
     public MenuServiceImpl(
             CategoryRepository categoryRepository,
@@ -77,15 +104,17 @@ public class MenuServiceImpl implements MenuService {
             ObjectStorageClient objectStorageClient,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper) {
-        this.categoryRepository = categoryRepository;
-        this.menuItemRepository = menuItemRepository;
-        this.variantRepository = variantRepository;
-        this.menuMapper = menuMapper;
-        this.restaurantSummaryProvider = restaurantSummaryProvider;
-        this.menuCacheService = menuCacheService;
-        this.objectStorageClient = objectStorageClient;
-        this.eventPublisher = eventPublisher;
-        this.objectMapper = objectMapper;
+        this(
+                categoryRepository,
+                menuItemRepository,
+                variantRepository,
+                menuMapper,
+                restaurantSummaryProvider,
+                menuCacheService,
+                objectStorageClient,
+                eventPublisher,
+                objectMapper,
+                null);
     }
 
     @Override
@@ -117,6 +146,10 @@ public class MenuServiceImpl implements MenuService {
                         .collect(
                                 Collectors.groupingBy(Variant::getMenuItemId, LinkedHashMap::new, Collectors.toList()));
 
+        Map<UUID, ReviewRatingQuery.MenuItemRating> ratingsByItem = (reviewRatingQuery != null && !itemIds.isEmpty())
+                ? reviewRatingQuery.getMenuItemRatings(itemIds)
+                : Map.of();
+
         List<FullMenuResponseDto.MenuCategoryDto> categoryDtos = new ArrayList<>();
         for (Category category : categories) {
             List<MenuItem> categoryItems = itemsByCategory.get(category.getId());
@@ -130,10 +163,14 @@ public class MenuServiceImpl implements MenuService {
                                 .stream()
                                 .map(menuMapper::toVariant)
                                 .toList();
+                        ReviewRatingQuery.MenuItemRating rating = ratingsByItem.getOrDefault(
+                                item.getId(), ReviewRatingQuery.MenuItemRating.empty());
                         return menuMapper.toFullMenuItem(
                                 item,
                                 signedOrNull(item.getImageS3Key()),
-                                variantDtos);
+                                variantDtos,
+                                rating.avgRating(),
+                                rating.reviewCount());
                     })
                     .toList();
             categoryDtos.add(menuMapper.toFullMenuCategory(category, itemDtos));
@@ -154,7 +191,10 @@ public class MenuServiceImpl implements MenuService {
         MenuItem item = menuItemRepository.findById(menuItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Menu item not found with id: " + menuItemId));
         String imageUrl = signedOrNull(item.getImageS3Key());
-        return menuMapper.toMenuItem(item, imageUrl);
+        ReviewRatingQuery.MenuItemRating rating = reviewRatingQuery != null
+                ? reviewRatingQuery.getMenuItemRating(item.getId())
+                : ReviewRatingQuery.MenuItemRating.empty();
+        return menuMapper.toMenuItem(item, imageUrl, rating.avgRating(), rating.reviewCount());
     }
 
     @Override
@@ -167,9 +207,18 @@ public class MenuServiceImpl implements MenuService {
             items = menuItemRepository.findByRestaurantIdOrderByCreatedAtAsc(restaurantId);
         }
 
+        List<UUID> itemIds = items.stream().map(MenuItem::getId).toList();
+        Map<UUID, ReviewRatingQuery.MenuItemRating> ratingsByItem = (reviewRatingQuery != null && !itemIds.isEmpty())
+                ? reviewRatingQuery.getMenuItemRatings(itemIds)
+                : Map.of();
+
         return items.stream()
                 .filter(item -> isVeg == null || item.isVeg() == isVeg)
-                .map(item -> menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key())))
+                .map(item -> {
+                    ReviewRatingQuery.MenuItemRating rating = ratingsByItem.getOrDefault(
+                            item.getId(), ReviewRatingQuery.MenuItemRating.empty());
+                    return menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key()), rating.avgRating(), rating.reviewCount());
+                })
                 .toList();
     }
 
@@ -253,7 +302,10 @@ public class MenuServiceImpl implements MenuService {
 
         publishPriceChanged(restaurantId, item.getId());
         menuCacheService.evict(restaurantId);
-        return menuMapper.toMenuItem(item, null);
+        ReviewRatingQuery.MenuItemRating rating = reviewRatingQuery != null
+                ? reviewRatingQuery.getMenuItemRating(item.getId())
+                : ReviewRatingQuery.MenuItemRating.empty();
+        return menuMapper.toMenuItem(item, null, rating.avgRating(), rating.reviewCount());
     }
 
     @Override
@@ -292,7 +344,10 @@ public class MenuServiceImpl implements MenuService {
             publishPriceChanged(restaurantId, item.getId());
         }
         menuCacheService.evict(restaurantId);
-        return menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key()));
+        ReviewRatingQuery.MenuItemRating rating = reviewRatingQuery != null
+                ? reviewRatingQuery.getMenuItemRating(item.getId())
+                : ReviewRatingQuery.MenuItemRating.empty();
+        return menuMapper.toMenuItem(item, signedOrNull(item.getImageS3Key()), rating.avgRating(), rating.reviewCount());
     }
 
     @Override
@@ -398,3 +453,4 @@ public class MenuServiceImpl implements MenuService {
         return objectStorageClient.createSignedGetUrl(key, SIGNED_URL_TTL);
     }
 }
+

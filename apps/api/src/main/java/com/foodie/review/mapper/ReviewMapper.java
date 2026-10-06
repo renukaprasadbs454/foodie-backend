@@ -23,7 +23,15 @@ public final class ReviewMapper {
     }
 
     public static RestaurantReviewItemDto toPublicItem(Review review) {
+        return toPublicItem(review, null);
+    }
+
+    public static RestaurantReviewItemDto toPublicItem(Review review, String customerName) {
         return new RestaurantReviewItemDto(
+                review.getId(),
+                review.getOrderId(),
+                review.getCustomerId(),
+                customerName != null && !customerName.isBlank() ? customerName : "Verified Customer",
                 review.getRestaurantRating(),
                 review.getDeliveryRating() == null ? null : review.getDeliveryRating().intValue(),
                 review.getComment(),
