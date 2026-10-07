@@ -172,7 +172,7 @@ public class DeliveryController {
                 deliveryService.verifyFace(principal.userId(), file)));
     }
 
-    @PostMapping(value = "/me/verify-face", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = {"/me/verify-face", "/me/verify-face-online"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify delivery partner identity using selfie (for go-online check)")
     public ResponseEntity<ApiResponse<Boolean>> verifyFaceForOnline(

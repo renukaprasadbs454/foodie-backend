@@ -229,25 +229,11 @@ public class DeliveryServiceImpl implements DeliveryService {
         byte[] bytes = readBytes(file, 5 * 1024 * 1024, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
 
-        // Validate that uploaded image contains a clear human face for KYC approval
-        try {
-            BufferedImage selfieImg = ImageIO.read(new ByteArrayInputStream(bytes));
-            if (selfieImg != null) {
-                FaceBiometricsService.FaceDetectionResult detection = faceBiometricsService.detectFace(selfieImg);
-                if (!detection.detected()) {
-                    log.warn("Face detection failed during KYC selfie upload for partner {}: {}", partner.getId(), detection.message());
-                    throw new BadRequestException(ErrorCode.BAD_REQUEST,
-                            "No valid human face detected. Please capture a clear selfie showing your full face.");
-                }
-                if (detection.faceCount() > 1) {
-                    throw new BadRequestException(ErrorCode.BAD_REQUEST,
-                            "Multiple faces detected. Please ensure only your face is visible in the selfie.");
-                }
-            }
-        } catch (BadRequestException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("Could not parse image for face detection during profile upload", e);
+        // Validate that uploaded image contains a single live human face for KYC reference
+        FaceBiometricsService.FaceDetectionResult detection = faceBiometricsService.validateFaceSelfie(bytes);
+        if (!detection.detected()) {
+            log.warn("Face detection / liveness failed during KYC selfie upload for partner {}: {}", partner.getId(), detection.message());
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, detection.message());
         }
 
         String key = "delivery-partners/" + partner.getId() + "/profile/"
@@ -679,20 +665,6 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (incomingBytes == null || incomingBytes.length == 0) {
             log.warn("Face verification 400 rejected: partnerId={}, reason=Empty or missing selfie bytes", partnerId);
             throw new BadRequestException(ErrorCode.BAD_REQUEST, "Live selfie capture is empty or missing.");
-        }
-
-        // Save exact received JPEG temporarily in development debug folder
-        try {
-            java.io.File debugDir = new java.io.File("/tmp/foodie-face-debug");
-            if (!debugDir.exists()) {
-                debugDir.mkdirs();
-            }
-            String debugFileName = "debug-face-" + UUID.randomUUID() + ".jpg";
-            java.io.File debugFile = new java.io.File(debugDir, debugFileName);
-            java.nio.file.Files.write(debugFile.toPath(), incomingBytes);
-            log.info("[FaceDiag] Saved exact received JPEG to: {}", debugFile.getAbsolutePath());
-        } catch (Exception ex) {
-            log.warn("[FaceDiag] Could not write debug image: {}", ex.getMessage());
         }
 
         // 3. Decode image and detect valid human face
