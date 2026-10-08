@@ -66,6 +66,8 @@ import com.foodie.delivery.entity.DeliveryLocationHistory;
 import com.foodie.delivery.repository.DeliveryLocationHistoryRepository;
 import com.foodie.delivery.repository.DeliveryCashDepositRepository;
 import com.foodie.payment.repository.PaymentRepository;
+import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
+import com.foodie.delivery.entity.DeliveryPartnerIncentiveEarning;
 import com.foodie.delivery.service.DeliveryPricingService;
 import java.math.BigDecimal;
 import javax.imageio.ImageIO;
@@ -83,6 +85,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     private static final Duration LOCATION_PING_WINDOW = Duration.ofSeconds(3);
     private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(15);
     private static final String DEFAULT_FULL_NAME = "Delivery Partner";
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private DeliveryPartnerIncentiveEarningRepository earningRepository;
 
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
@@ -378,6 +383,45 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deliveryPartnerRepository.save(partner);
             }
         });
+        
+        try {
+            OrderDeliveryPort.OrderDeliverySnapshot orderForEarning = orderDeliveryPort.findByOrderId(assignment.getOrderId()).orElse(null);
+            if (orderForEarning != null) {
+                Double distance = null;
+                RestaurantPickupQuery.PickupLocation pickupForEarning = restaurantPickupQuery.findByRestaurantId(orderForEarning.restaurantId()).orElse(null);
+                if (pickupForEarning != null && pickupForEarning.latitude() != null && pickupForEarning.longitude() != null) {
+                    Double distToRest = partnerGeoService.findNearby(pickupForEarning.latitude().doubleValue(), pickupForEarning.longitude().doubleValue(), deliveryProperties.getOfferRadiusKm())
+                            .stream().filter(h -> h.partnerId().equals(assignment.getDeliveryPartner().getId())).findFirst().map(GeoPartnerHit::distanceKm).orElse(0.0);
+                    Double distToCust = 0.0;
+                    if (orderForEarning.addressId() != null) {
+                        var addrOpt = addressRepository.findById(orderForEarning.addressId());
+                        if (addrOpt.isPresent() && addrOpt.get().getLatitude() != null && addrOpt.get().getLongitude() != null) {
+                            double lat1 = pickupForEarning.latitude().doubleValue();
+                            double lon1 = pickupForEarning.longitude().doubleValue();
+                            double lat2 = addrOpt.get().getLatitude().doubleValue();
+                            double lon2 = addrOpt.get().getLongitude().doubleValue();
+                            double dLat = Math.toRadians(lat2 - lat1);
+                            double dLon = Math.toRadians(lon2 - lon1);
+                            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                            distToCust = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                        }
+                    }
+                    distance = distToRest + distToCust;
+                }
+                BigDecimal payout = deliveryPricingService.calculateDeliveryFee(distance);
+                earningRepository.save(DeliveryPartnerIncentiveEarning.create(
+                        assignment.getDeliveryPartner(),
+                        "BASE_PAYOUT",
+                        "Delivery Base Payout",
+                        payout,
+                        "ORDER",
+                        assignment.getId(),
+                        assignment.getOrderId(),
+                        java.time.LocalDate.now()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to save base earning for partner: {}", e.getMessage());
+        }
 
         orderDeliveryPort.markDelivered(assignment.getOrderId());
         eventPublisher.publishEvent(DeliveryCompletedEvent.of(
@@ -598,24 +642,29 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant pickup location not found."));
 
         String deliveryAddress = null;
+        Double deliveryLat = null;
+        Double deliveryLng = null;
         if (order.addressId() != null) {
-            deliveryAddress = addressRepository.findById(order.addressId())
-                    .map(a -> {
-                        StringBuilder sb = new StringBuilder();
-                        if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank()) sb.append(a.getHouseFlatNo()).append(", ");
-                        if (a.getLine1() != null && !a.getLine1().isBlank()) sb.append(a.getLine1()).append(", ");
-                        if (a.getLine2() != null && !a.getLine2().isBlank()) sb.append(a.getLine2()).append(", ");
-                        if (a.getCity() != null && !a.getCity().isBlank()) sb.append(a.getCity());
-                        if (a.getPincode() != null && !a.getPincode().isBlank()) sb.append(" - ").append(a.getPincode());
-                        return sb.toString();
-                    })
-                    .orElse(null);
+            var addressOpt = addressRepository.findById(order.addressId());
+            if (addressOpt.isPresent()) {
+                var a = addressOpt.get();
+                deliveryLat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
+                deliveryLng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
+                StringBuilder sb = new StringBuilder();
+                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank()) sb.append(a.getHouseFlatNo()).append(", ");
+                if (a.getLine1() != null && !a.getLine1().isBlank()) sb.append(a.getLine1()).append(", ");
+                if (a.getLine2() != null && !a.getLine2().isBlank()) sb.append(a.getLine2()).append(", ");
+                if (a.getCity() != null && !a.getCity().isBlank()) sb.append(a.getCity());
+                if (a.getPincode() != null && !a.getPincode().isBlank()) sb.append(" - ").append(a.getPincode());
+                deliveryAddress = sb.toString();
+            }
         }
 
         Double estimatedDistance = null;
+        Double distToRestaurant = null;
         if (pickup.latitude() != null && pickup.longitude() != null) {
             try {
-                estimatedDistance = partnerGeoService.findNearby(
+                distToRestaurant = partnerGeoService.findNearby(
                         pickup.latitude().doubleValue(),
                         pickup.longitude().doubleValue(),
                         deliveryProperties.getOfferRadiusKm()).stream()
@@ -626,6 +675,26 @@ public class DeliveryServiceImpl implements DeliveryService {
             } catch (Exception e) {
                 log.warn("Redis error calculating GeoRadius: {}", e.getMessage());
             }
+        }
+        
+        Double distToCustomer = 0.0;
+        if (deliveryLat != null && deliveryLng != null && pickup.latitude() != null && pickup.longitude() != null) {
+            // Haversine distance
+            double lat1 = pickup.latitude().doubleValue();
+            double lon1 = pickup.longitude().doubleValue();
+            double lat2 = deliveryLat;
+            double lon2 = deliveryLng;
+            double R = 6371; 
+            double dLat = Math.toRadians(lat2 - lat1);
+            double dLon = Math.toRadians(lon2 - lon1);
+            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            distToCustomer = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+        
+        if (distToRestaurant != null) {
+            estimatedDistance = distToRestaurant + distToCustomer;
+        } else {
+            estimatedDistance = distToCustomer > 0 ? distToCustomer : null;
         }
 
         BigDecimal estimatedFee = deliveryPricingService.calculateDeliveryFee(estimatedDistance);

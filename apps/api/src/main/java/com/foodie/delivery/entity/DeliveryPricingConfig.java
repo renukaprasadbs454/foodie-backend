@@ -61,7 +61,7 @@ public class DeliveryPricingConfig {
     public static DeliveryPricingConfig createDefault() {
         return new DeliveryPricingConfig(
                 UUID.fromString("99999999-9999-9999-9999-999999999999"),
-                new BigDecimal("200.00"),
+                new BigDecimal("120.00"),
                 new BigDecimal("25.00"),
                 "UNIVERSAL",
                 null,
