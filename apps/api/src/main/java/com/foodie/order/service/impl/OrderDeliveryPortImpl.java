@@ -64,8 +64,12 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     @Transactional
     public void markPickedUpAndOutForDelivery(UUID orderId) {
         Order order = require(orderId);
-        apply(order, OrderStatus.PICKED_UP, null);
-        apply(order, OrderStatus.OUT_FOR_DELIVERY, null);
+        if (order.getStatus() != OrderStatus.PICKED_UP && order.getStatus() != OrderStatus.OUT_FOR_DELIVERY && order.getStatus() != OrderStatus.DELIVERED) {
+            apply(order, OrderStatus.PICKED_UP, null);
+        }
+        if (order.getStatus() != OrderStatus.OUT_FOR_DELIVERY && order.getStatus() != OrderStatus.DELIVERED) {
+            apply(order, OrderStatus.OUT_FOR_DELIVERY, null);
+        }
     }
 
     @Override
