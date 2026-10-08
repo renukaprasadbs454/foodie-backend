@@ -29,7 +29,8 @@ public class DeliveryMapper {
                                 partner.getKycStatus().name(),
                                 partner.isOnline(),
                                 profileImageUrl,
-                                documents);
+                                documents,
+                                partner.getCashInHand());
         }
 
         public DeliveryDocumentResponseDto toDocument(DeliveryPartnerDocument document) {

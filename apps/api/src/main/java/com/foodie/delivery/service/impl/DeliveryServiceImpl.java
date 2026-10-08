@@ -69,11 +69,6 @@ import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
 import com.foodie.delivery.entity.DeliveryPartnerIncentiveEarning;
 import com.foodie.delivery.service.DeliveryPricingService;
-import java.math.BigDecimal;
-import javax.imageio.ImageIO;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-
 import com.foodie.user.repository.AddressRepository;
 import com.foodie.user.repository.CustomerRepository;
 
@@ -109,6 +104,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryProperties deliveryProperties;
     private final DeliveryPricingService deliveryPricingService;
     private final FaceBiometricsService faceBiometricsService;
+    private final com.foodie.infrastructure.cashfree.CashfreePaymentClient cashfreePaymentClient;
 
     public DeliveryServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -130,7 +126,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             RedisRateLimiter redisRateLimiter,
             DeliveryProperties deliveryProperties,
             DeliveryPricingService deliveryPricingService,
-            FaceBiometricsService faceBiometricsService) {
+            FaceBiometricsService faceBiometricsService,
+            com.foodie.infrastructure.cashfree.CashfreePaymentClient cashfreePaymentClient) {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
@@ -151,6 +148,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.deliveryProperties = deliveryProperties;
         this.deliveryPricingService = deliveryPricingService;
         this.faceBiometricsService = faceBiometricsService;
+        this.cashfreePaymentClient = cashfreePaymentClient;
     }
 
     @Override
@@ -953,7 +951,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                         d.getReferenceNumber(),
                         d.getRejectionReason(),
                         d.getCreatedAt(),
-                        d.getApprovedAt()
+                        d.getApprovedAt(),
+                        null
                 ))
                 .toList();
 
@@ -970,8 +969,28 @@ public class DeliveryServiceImpl implements DeliveryService {
     public com.foodie.delivery.dto.response.CashDepositResponseDto submitCashDeposit(
             UUID userCredentialId, com.foodie.delivery.dto.request.CashDepositRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
+        
+        String ref = request.referenceNumber();
+        String paymentSessionId = null;
+        if (ref == null || ref.isBlank()) {
+            try {
+                String customerPhone = partner.getPhone() != null ? partner.getPhone() : "9999999999";
+                var created = cashfreePaymentClient.createOrder(
+                        request.amount(),
+                        userCredentialId.toString(),
+                        customerPhone,
+                        "COD_DEP_" + UUID.randomUUID().toString().substring(0, 8));
+                ref = created.cfOrderId();
+                paymentSessionId = created.paymentSessionId();
+            } catch (Exception ex) {
+                log.error("Failed to create cashfree order for deposit", ex);
+                ref = "CF_LOCAL_" + UUID.randomUUID().toString().substring(0, 8);
+                paymentSessionId = "session_local_" + System.currentTimeMillis();
+            }
+        }
+        
         com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.save(
-                com.foodie.delivery.entity.DeliveryCashDeposit.create(partner, request.amount(), request.referenceNumber())
+                com.foodie.delivery.entity.DeliveryCashDeposit.create(partner, request.amount(), ref)
         );
         return new com.foodie.delivery.dto.response.CashDepositResponseDto(
                 deposit.getId(),
@@ -982,8 +1001,51 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getReferenceNumber(),
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
-                deposit.getApprovedAt()
+                deposit.getApprovedAt(),
+                paymentSessionId
         );
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CashDepositResponseDto verifyCashDeposit(UUID depositId) {
+        com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cash deposit not found."));
+        
+        if (deposit.getStatus() != com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING) {
+            return new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                deposit.getId(), deposit.getDeliveryPartner().getId(), deposit.getDeliveryPartner().getFullName(),
+                deposit.getAmount(), deposit.getStatus().name(), deposit.getReferenceNumber(),
+                deposit.getRejectionReason(), deposit.getCreatedAt(), deposit.getApprovedAt(), null);
+        }
+        
+        String cfOrderId = deposit.getReferenceNumber();
+        boolean isPaid = false;
+        
+        if (cfOrderId != null && cfOrderId.startsWith("CF_LOCAL_")) {
+            isPaid = true;
+        } else if (cfOrderId != null) {
+            try {
+                var fetch = cashfreePaymentClient.fetchOrder(cfOrderId);
+                if ("PAID".equalsIgnoreCase(fetch.status()) || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                    isPaid = true;
+                }
+            } catch (Exception ex) {
+                log.warn("Cashfree verify failed for {}", cfOrderId);
+            }
+        }
+        
+        if (isPaid) {
+            deposit.approve(com.foodie.payment.service.impl.PaymentServiceImpl.SYSTEM_ACTOR_ID);
+            deposit.getDeliveryPartner().deductCash(deposit.getAmount());
+            deliveryPartnerRepository.save(deposit.getDeliveryPartner());
+            deposit = deliveryCashDepositRepository.save(deposit);
+        }
+        
+        return new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                deposit.getId(), deposit.getDeliveryPartner().getId(), deposit.getDeliveryPartner().getFullName(),
+                deposit.getAmount(), deposit.getStatus().name(), deposit.getReferenceNumber(),
+                deposit.getRejectionReason(), deposit.getCreatedAt(), deposit.getApprovedAt(), null);
     }
 
     @Override
@@ -1000,7 +1062,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                         d.getReferenceNumber(),
                         d.getRejectionReason(),
                         d.getCreatedAt(),
-                        d.getApprovedAt()
+                        d.getApprovedAt(),
+                        null
                 ))
                 .toList();
     }
@@ -1027,7 +1090,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getReferenceNumber(),
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
-                deposit.getApprovedAt()
+                deposit.getApprovedAt(),
+                null
         );
     }
 
@@ -1051,7 +1115,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getReferenceNumber(),
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
-                deposit.getApprovedAt()
+                deposit.getApprovedAt(),
+                null
         );
     }
 

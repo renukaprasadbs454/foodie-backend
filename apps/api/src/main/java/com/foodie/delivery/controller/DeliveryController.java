@@ -215,6 +215,15 @@ public class DeliveryController {
                 .body(ApiResponse.success(deliveryService.submitCashDeposit(principal.userId(), request)));
     }
 
+    @PostMapping("/cash-deposits/{id}/verify")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Verify Cashfree cash deposit")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CashDepositResponseDto>> verifyCashDeposit(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.verifyCashDeposit(id)));
+    }
+
     @GetMapping("/me/bank-details")
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     @Operation(summary = "Get delivery partner bank details")

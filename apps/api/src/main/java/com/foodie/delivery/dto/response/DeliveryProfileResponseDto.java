@@ -16,5 +16,6 @@ public record DeliveryProfileResponseDto(
                 String kycStatus,
                 boolean isOnline,
                 String profileImageUrl,
-                List<DeliveryDocumentResponseDto> documents) {
+                List<DeliveryDocumentResponseDto> documents,
+                java.math.BigDecimal cashInHand) {
 }

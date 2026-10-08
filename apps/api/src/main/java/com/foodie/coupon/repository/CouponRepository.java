@@ -18,12 +18,13 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
         @Query("""
                         SELECT c FROM Coupon c
                         WHERE c.active = true
-                          AND c.approvalStatus = 'APPROVED'
+                          AND c.approvalStatus = :approvalStatus
                           AND c.expiryDate > :now
                           AND (c.restaurantId IS NULL OR c.restaurantId = :restaurantId)
                         ORDER BY c.code ASC
                         """)
         List<Coupon> findEligibleCandidates(
                         @Param("restaurantId") UUID restaurantId,
-                        @Param("now") Instant now);
+                        @Param("now") Instant now,
+                        @Param("approvalStatus") Coupon.ApprovalStatus approvalStatus);
 }

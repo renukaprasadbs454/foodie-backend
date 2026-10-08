@@ -13,5 +13,6 @@ public record CashDepositResponseDto(
         String referenceNumber,
         String rejectionReason,
         Instant createdAt,
-        Instant approvedAt
+        Instant approvedAt,
+        String paymentSessionId
 ) {}
