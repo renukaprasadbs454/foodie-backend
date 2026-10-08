@@ -309,7 +309,7 @@ class WalletServiceImplTest {
                 WalletBalanceResponseDto balance = service.getBalance(credentialId, UserType.DELIVERY_PARTNER);
 
                 assertThat(balance.balance()).isEqualByComparingTo("2000.00");
-                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+                verify(ledgerEntryRepository, never()).save(any(LedgerEntry.class));
         }
 
         @Test

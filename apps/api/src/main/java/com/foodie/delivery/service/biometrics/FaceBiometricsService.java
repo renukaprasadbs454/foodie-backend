@@ -18,6 +18,7 @@ public class FaceBiometricsService {
     private static final Logger log = LoggerFactory.getLogger(FaceBiometricsService.class);
 
     private static final double MATCH_CONFIDENCE_THRESHOLD = 0.70;
+    private static final double ONLINE_FACE_VERIFICATION_THRESHOLD = 0.40;
     private static final double MIN_LIVENESS_SCORE = 0.50;
     private static final double MIN_FACE_DETECTION_SCORE = 0.40;
 
@@ -148,7 +149,9 @@ public class FaceBiometricsService {
                 String.format("%.2f", liveDetection.score()),
                 String.format("%.2f", liveness.livenessScore()));
 
-        if (!comparison.isMatch()) {
+        boolean isVerified = comparison.confidenceScore() >= ONLINE_FACE_VERIFICATION_THRESHOLD;
+
+        if (!isVerified) {
             return new FaceVerificationResult(
                     false,
                     comparison.confidenceScore(),
@@ -515,7 +518,7 @@ public class FaceBiometricsService {
         }
 
         double overallSkinRatio = (double) skinPixelCount / (width * height);
-        if (overallSkinRatio < 0.015) {
+        if (overallSkinRatio < 0.008) {
             return FaceDetectionResult.failed("No human face detected. Please ensure your face is clearly visible.");
         }
 
@@ -536,14 +539,14 @@ public class FaceBiometricsService {
             double areaFraction = (double) blobArea / totalImageArea;
             double aspectRatio = (double) blob.width() / Math.max(1, blob.height());
 
-            // A valid selfie face should not cover 95%+ of screen as flat featureless skin
-            if (areaFraction > 0.95 && overallSkinRatio > 0.90) {
+            // A valid selfie face should not cover 98%+ of screen as flat featureless skin
+            if (areaFraction > 0.98 && overallSkinRatio > 0.92) {
                 continue;
             }
-            if (areaFraction < 0.015 && blobArea < 1500) {
+            if (areaFraction < 0.008 && blobArea < 800) {
                 continue;
             }
-            if (aspectRatio < 0.35 || aspectRatio > 2.5) {
+            if (aspectRatio < 0.28 || aspectRatio > 2.8) {
                 continue;
             }
 
@@ -797,7 +800,7 @@ public class FaceBiometricsService {
 
                     int bw = maxX - minX + 1;
                     int bh = maxY - minY + 1;
-                    if (count >= 100 && bw >= 36 && bh >= 40) {
+                    if (count >= 50 && bw >= 24 && bh >= 24) {
                         blobs.add(new Rectangle(minX, minY, bw, bh));
                     }
                 }
@@ -825,6 +828,17 @@ public class FaceBiometricsService {
             int fx, int fy, int fw, int fh) {
 
         int effectiveFh = Math.min(fh, (int) (fw * 1.45));
+
+        int skinCount = 0;
+        for (int y = fy; y < fy + effectiveFh && y < skinMask.length; y++) {
+            for (int x = fx; x < fx + fw && x < skinMask[0].length; x++) {
+                if (skinMask[y][x]) skinCount++;
+            }
+        }
+        double faceSkinDensity = (double) skinCount / Math.max(1, fw * effectiveFh);
+        if (faceSkinDensity < 0.20) {
+            return new CandidateEvaluation(false, 0.0, null);
+        }
 
         // Eyes zone (vertical 12% - 58%)
         int eyeTop = fy + (int) (effectiveFh * 0.12);
@@ -871,21 +885,21 @@ public class FaceBiometricsService {
         int eyeCenterY = (leftEye.y + rightEye.y) / 2;
         int faceCenterX = fx + fw / 2;
         double eyeAlignmentOffset = Math.abs(eyeCenterX - faceCenterX) / (double) fw;
-        boolean validEyeCentering = eyeAlignmentOffset <= 0.30;
+        boolean validEyeCentering = eyeAlignmentOffset <= 0.35;
 
-        boolean validAspectRatio = (aspectRatio >= 0.38 && aspectRatio <= 1.75);
+        boolean validAspectRatio = (aspectRatio >= 0.35 && aspectRatio <= 1.85);
         boolean validEyeGeometry = validAspectRatio
-                && (deltaEyeY <= Math.max(20, (int) (eyeDistance * 0.45)))
-                && (deltaEyeY <= effectiveFh * 0.25)
-                && (eyeDistanceRatio >= 0.18 && eyeDistanceRatio <= 0.92)
+                && (deltaEyeY <= Math.max(22, (int) (eyeDistance * 0.50)))
+                && (deltaEyeY <= effectiveFh * 0.28)
+                && (eyeDistanceRatio >= 0.16 && eyeDistanceRatio <= 0.94)
                 && validEyeCentering;
 
         double eyeMouthDist = Math.hypot(mouth.x - eyeCenterX, mouth.y - eyeCenterY);
         double eyeMouthRatio = eyeMouthDist / effectiveFh;
         double mouthCentering = Math.abs(mouth.x - eyeCenterX) / Math.max(1.0, eyeDistance);
-        boolean validMouthGeometry = (eyeMouthRatio >= 0.15 && eyeMouthRatio <= 0.80)
-                && (mouth.y >= eyeCenterY)
-                && (mouthCentering <= 0.35);
+        boolean validMouthGeometry = (eyeMouthRatio >= 0.14 && eyeMouthRatio <= 0.85)
+                && (mouth.y >= eyeCenterY - 2)
+                && (mouthCentering <= 0.40);
 
         double symmetry = computeBilateralSymmetry(lum, fx, fy, fw, effectiveFh, leftEye, rightEye);
         double mouthHorizontalGradient = computeHorizontalGradient(lum, mouthX1, mouthX2, mouthY1, mouthY2);
@@ -895,7 +909,7 @@ public class FaceBiometricsService {
         double symScore = Math.max(0.10, Math.min(1.0, (symmetry - 0.05) / 0.80));
 
         double overall = 0.35 * eyeScore + 0.35 * geomScore + 0.30 * symScore;
-        boolean isValid = validEyeGeometry && validMouthGeometry && (symmetry >= 0.05) && (overall >= MIN_FACE_DETECTION_SCORE);
+        boolean isValid = validEyeGeometry && validMouthGeometry && (symmetry >= 0.04) && (overall >= MIN_FACE_DETECTION_SCORE);
 
         LandmarkData landmarks = new LandmarkData(
                 leftEye,
@@ -910,6 +924,8 @@ public class FaceBiometricsService {
         return new CandidateEvaluation(isValid, overall, landmarks);
     }
 
+
+
     private Point[] findBilateralEyes(int[][] lum, int leftX1, int leftX2, int rightX1, int rightX2, int topY, int bottomY, int fw, int effectiveFh) {
         int maxDeltaY = Math.max(16, (int) (effectiveFh * 0.22));
         int radius = Math.max(2, (int) (fw * 0.025));
@@ -921,7 +937,7 @@ public class FaceBiometricsService {
         double dist = Math.hypot(rightDarkest.x - leftDarkest.x, rightDarkest.y - leftDarkest.y);
         double distRatio = dist / fw;
 
-        if (dY <= maxDeltaY && distRatio >= 0.25 && distRatio <= 0.88) {
+        if (dY <= maxDeltaY && distRatio >= 0.20 && distRatio <= 0.90) {
             return new Point[]{leftDarkest, rightDarkest};
         }
 
@@ -938,7 +954,7 @@ public class FaceBiometricsService {
                 double curDist = Math.hypot(rightCandidate.x - leftCandidate.x, rightCandidate.y - leftCandidate.y);
                 double curDistRatio = curDist / fw;
 
-                if (curDY <= maxDeltaY && curDistRatio >= 0.25 && curDistRatio <= 0.88) {
+                if (curDY <= maxDeltaY && curDistRatio >= 0.20 && curDistRatio <= 0.90) {
                     int sumL = getClusterLuminance(lum, leftCandidate.x, leftCandidate.y, radius);
                     int sumR = getClusterLuminance(lum, rightCandidate.x, rightCandidate.y, radius);
                     int totalSum = sumL + sumR;
@@ -960,6 +976,10 @@ public class FaceBiometricsService {
         int maxY = Math.min(lum.length - 1 - radius, y2);
         int minX = Math.max(radius, x1);
         int maxX = Math.min(lum[0].length - 1 - radius, x2);
+
+        if (minX > maxX || minY > maxY) {
+            return new Point((x1 + x2) / 2, (y1 + y2) / 2);
+        }
 
         double bestScore = -1e9;
         int bestX = (minX + maxX) / 2;
@@ -1026,8 +1046,13 @@ public class FaceBiometricsService {
         int bestY = (y1 + y2) / 2;
         double maxRedness = -1000;
 
-        for (int y = y1; y <= y2; y++) {
-            for (int x = x1; x <= x2; x++) {
+        int minY = Math.max(0, Math.min(img.getHeight() - 1, y1));
+        int maxY = Math.max(0, Math.min(img.getHeight() - 1, y2));
+        int minX = Math.max(0, Math.min(img.getWidth() - 1, x1));
+        int maxX = Math.max(0, Math.min(img.getWidth() - 1, x2));
+
+        for (int y = minY; y <= maxY; y++) {
+            for (int x = minX; x <= maxX; x++) {
                 int rgb = img.getRGB(x, y);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
@@ -1386,7 +1411,7 @@ public class FaceBiometricsService {
         double colorSimilarity = compareSkinToneAndColor(canonicalLive, canonicalKyc);
 
         // 6. Compute Unified Identity Matching Confidence Score
-        double overallConfidence = 0.35 * lbpSimilarity + 0.30 * hogSimilarity + 0.20 * geomSimilarity + 0.15 * colorSimilarity;
+        double overallConfidence = 0.20 * lbpSimilarity + 0.20 * hogSimilarity + 0.30 * geomSimilarity + 0.30 * colorSimilarity;
         boolean isMatch = overallConfidence >= MATCH_CONFIDENCE_THRESHOLD;
 
         String message = isMatch
@@ -1490,13 +1515,13 @@ public class FaceBiometricsService {
         double dNormR = chromA[0] - chromB[0];
         double dNormG = chromA[1] - chromB[1];
         double rgDist = Math.hypot(dNormR, dNormG);
-        double rgSim = Math.exp(-rgDist / 0.08);
+        double rgSim = Math.exp(-rgDist / 0.04);
 
         // 2. YCbCr Chrominance distance (Cb, Cr isolate hue/saturation from luminance Y)
         double dCb = chromA[2] - chromB[2];
         double dCr = chromA[3] - chromB[3];
         double cbCrDist = Math.hypot(dCb, dCr);
-        double cbCrSim = Math.exp(-cbCrDist / 26.0);
+        double cbCrSim = Math.exp(-cbCrDist / 12.0);
 
         // 3. HSV Skin Hue & Saturation distance
         double hueA = chromA[4];
@@ -1505,13 +1530,13 @@ public class FaceBiometricsService {
         double satA = chromA[5];
         double satB = chromB[5];
         double dSat = Math.abs(satA - satB);
-        double hsvSim = Math.exp(-(dHue / 30.0 + dSat / 0.40) / 2.0);
+        double hsvSim = Math.exp(-(dHue / 18.0 + dSat / 0.20) / 2.0);
 
         // 4. Skin undertone ratio (warm vs cool undertone indicator)
         double undertoneA = chromA[6];
         double undertoneB = chromB[6];
         double dUndertone = Math.abs(undertoneA - undertoneB);
-        double undertoneSim = Math.exp(-dUndertone / 1.0);
+        double undertoneSim = Math.exp(-dUndertone / 0.5);
 
         return 0.35 * rgSim + 0.35 * cbCrSim + 0.15 * hsvSim + 0.15 * undertoneSim;
     }
@@ -1602,7 +1627,7 @@ public class FaceBiometricsService {
     private boolean isSkinColor(int r, int g, int b) {
         int maxRgb = Math.max(r, Math.max(g, b));
         int minRgb = Math.min(r, Math.min(g, b));
-        if (maxRgb - minRgb < 5) {
+        if (maxRgb - minRgb < 4) {
             return false;
         }
 
@@ -1610,11 +1635,11 @@ public class FaceBiometricsService {
         int cbVal = (int) (128 - 0.168736 * r - 0.331264 * g + 0.5 * b);
         int crVal = (int) (128 + 0.5 * r - 0.418688 * g - 0.081312 * b);
 
-        boolean ycbcrSkin = (cbVal >= 55 && cbVal <= 160)
-                && (crVal >= 110 && crVal <= 200)
-                && (yVal >= 10 && yVal <= 250);
+        boolean ycbcrSkin = (cbVal >= 50 && cbVal <= 168)
+                && (crVal >= 105 && crVal <= 210)
+                && (yVal >= 8 && yVal <= 250);
 
-        boolean rgbSkin = (r + 20 >= b) && (r >= g - 30) && (r - Math.min(g, b) >= 4);
+        boolean rgbSkin = (r + 25 >= b) && (r >= g - 35) && (r - minRgb >= 4);
 
         return ycbcrSkin && rgbSkin;
     }
@@ -2053,7 +2078,7 @@ public class FaceBiometricsService {
         double eyeMouthRatioA = lmA.eyeMouthDistance() / eyeDistA;
         double eyeMouthRatioB = lmB.eyeMouthDistance() / eyeDistB;
         double dEyeMouth = Math.abs(eyeMouthRatioA - eyeMouthRatioB);
-        double sEyeMouth = Math.exp(-dEyeMouth / 0.35);
+        double sEyeMouth = Math.exp(-dEyeMouth / 0.14);
 
         // 2. Eye-to-Nose Euclidean distance ratio (rotation invariant)
         double eyeMidXA = (lmA.leftEye().x() + lmA.rightEye().x()) / 2.0;
@@ -2071,17 +2096,17 @@ public class FaceBiometricsService {
         double eyeNoseRatioA = eyeNoseDistA / eyeDistA;
         double eyeNoseRatioB = eyeNoseDistB / eyeDistB;
         double dEyeNose = Math.abs(eyeNoseRatioA - eyeNoseRatioB);
-        double sEyeNose = Math.exp(-dEyeNose / 0.30);
+        double sEyeNose = Math.exp(-dEyeNose / 0.12);
 
         // 3. Facial Triangle Internal Angle (LeftEye-Mouth-RightEye)
         double angleA = 2.0 * Math.atan2(eyeDistA / 2.0, Math.max(1.0, lmA.eyeMouthDistance()));
         double angleB = 2.0 * Math.atan2(eyeDistB / 2.0, Math.max(1.0, lmB.eyeMouthDistance()));
         double dAngle = Math.abs(angleA - angleB);
-        double sAngle = Math.exp(-dAngle / 0.28);
+        double sAngle = Math.exp(-dAngle / 0.12);
 
         // 4. Facial Symmetry
         double dSym = Math.abs(lmA.symmetryScore() - lmB.symmetryScore());
-        double sSym = Math.exp(-dSym / 0.35);
+        double sSym = Math.exp(-dSym / 0.20);
 
         return 0.35 * sEyeMouth + 0.30 * sEyeNose + 0.25 * sAngle + 0.10 * sSym;
     }

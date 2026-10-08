@@ -125,11 +125,6 @@ public class WalletServiceImpl implements WalletService {
                 && ledgerEntryRepository.findByWalletAccountId(account.getId(), PageRequest.of(0, 1)).isEmpty()) {
             account.setBalance(new BigDecimal("2000.00"));
             account = walletAccountRepository.save(account);
-            ledgerEntryRepository.save(LedgerEntry.credit(
-                    account.getId(),
-                    new BigDecimal("2000.00"),
-                    LedgerReferenceType.INCENTIVE,
-                    account.getId()));
         }
         return WalletMapper.toBalance(account);
     }
@@ -617,15 +612,7 @@ public class WalletServiceImpl implements WalletService {
                         if (ownerType == OwnerType.DELIVERY_PARTNER) {
                             account.setBalance(new BigDecimal("2000.00"));
                         }
-                        account = walletAccountRepository.save(account);
-                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                            ledgerEntryRepository.save(LedgerEntry.credit(
-                                    account.getId(),
-                                    new BigDecimal("2000.00"),
-                                    LedgerReferenceType.INCENTIVE,
-                                    account.getId()));
-                        }
-                        return account;
+                        return walletAccountRepository.save(account);
                     } catch (Exception ex) {
                         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                                 .orElseGet(() -> {
@@ -647,15 +634,7 @@ public class WalletServiceImpl implements WalletService {
                         if (ownerType == OwnerType.DELIVERY_PARTNER) {
                             account.setBalance(new BigDecimal("2000.00"));
                         }
-                        account = walletAccountRepository.save(account);
-                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                            ledgerEntryRepository.save(LedgerEntry.credit(
-                                    account.getId(),
-                                    new BigDecimal("2000.00"),
-                                    LedgerReferenceType.INCENTIVE,
-                                    account.getId()));
-                        }
-                        return account;
+                        return walletAccountRepository.save(account);
                     } catch (Exception ex) {
                         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
                                 .orElseGet(() -> {
