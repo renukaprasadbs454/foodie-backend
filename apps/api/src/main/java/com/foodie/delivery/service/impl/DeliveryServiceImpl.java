@@ -362,9 +362,13 @@ public class DeliveryServiceImpl implements DeliveryService {
             UUID assignmentId,
             VerifyOtpRequestDto request) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        
         if (assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
             return deliveryMapper.toAssignment(assignment);
+        }
+        if (assignment.getStatus() != DeliveryAssignmentStatus.PICKED_UP) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Delivery verification requires PICKED_UP assignment.");
         }
         
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());

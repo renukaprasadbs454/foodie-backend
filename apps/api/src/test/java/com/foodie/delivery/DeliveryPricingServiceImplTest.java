@@ -42,10 +42,10 @@ class DeliveryPricingServiceImplTest {
     void calculateDeliveryFee_returnsMinPrice_whenDistanceRateIsSmaller() {
         when(configRepository.findById(any())).thenReturn(Optional.of(defaultConfig));
 
-        // 2 km @ 25/km = 50 < min price 200 -> should return 200.00
+        // 2 km @ 25/km = 50 < min price 120 -> should return 120.00
         BigDecimal fee = pricingService.calculateDeliveryFee(2.0);
 
-        assertThat(fee).isEqualByComparingTo("200.00");
+        assertThat(fee).isEqualByComparingTo("120.00");
     }
 
     @Test

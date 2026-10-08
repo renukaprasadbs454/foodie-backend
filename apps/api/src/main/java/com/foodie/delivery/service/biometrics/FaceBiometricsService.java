@@ -402,15 +402,22 @@ public class FaceBiometricsService {
      * Shared face detector.
      */
     public FaceDetectionResult detectFace(BufferedImage originalImg) {
-        // Bypass face detection completely for development
-        return new FaceDetectionResult(
-                true,
-                new Rectangle(10, 10, 100, 100),
-                1.0,
-                "Face detected (Bypass)",
-                new LandmarkData(new Point(20, 20), new Point(80, 20), new Point(50, 50), new Point(50, 80), 60.0, 60.0, 1.0),
-                1
-        );
+        if (originalImg == null) {
+            return FaceDetectionResult.failed("Image is null.");
+        }
+        FaceDetectionResult res = runFaceDetectionOnImage(originalImg);
+        if (res.detected()) {
+            return res;
+        }
+        int[] angles = {90, 180, 270};
+        for (int angle : angles) {
+            BufferedImage rotated = rotateImage(originalImg, angle);
+            FaceDetectionResult rotRes = runFaceDetectionOnImage(rotated);
+            if (rotRes.detected()) {
+                return mapDetectionResultBackFromRotation(rotRes, originalImg.getWidth(), originalImg.getHeight(), angle);
+            }
+        }
+        return res;
     }
 
     private FaceDetectionResult mapDetectionResultBackFromRotation(FaceDetectionResult rotResult, int origW, int origH, int angle) {
@@ -1103,8 +1110,45 @@ public class FaceBiometricsService {
      * Evaluates liveness and anti-spoofing indicators.
      */
     public LivenessResult evaluateLiveness(BufferedImage img, FaceDetectionResult detection) {
-        // Bypass liveness check for development/testing
-        return new LivenessResult(true, 1.0, "Liveness verified");
+        Rectangle bbox = detection.boundingBox();
+        if (bbox == null) {
+            return new LivenessResult(false, 0.0, "Face region unavailable for liveness check.");
+        }
+
+        BufferedImage faceCrop = cropImage(img, bbox);
+
+        // 1. High-Frequency Texture & Screen Noise
+        double laplacianVar = computeLaplacianVariance(faceCrop);
+        boolean naturalSharpness = (laplacianVar >= 15.0 && laplacianVar <= 18000.0);
+
+        // 2. 3D Ellipsoidal Luminance Curvature
+        double curvature3D = compute3DCurvature(faceCrop);
+        boolean has3DDepth = curvature3D >= 0.20;
+
+        // 3. Color Gamut & Specular Glare Analysis
+        double glareRatio = computeSpecularGlareRatio(faceCrop);
+        boolean noSevereGlare = glareRatio < 0.10;
+
+        // 4. Skin Chrominance Dispersion
+        double chrominanceStdDev = computeSkinChrominanceVariance(faceCrop);
+        boolean naturalSkinSpectrum = chrominanceStdDev >= 3.0 && chrominanceStdDev <= 75.0;
+
+        double livenessScore = 0.30 * (naturalSharpness ? 1.0 : 0.3)
+                + 0.30 * (has3DDepth ? 1.0 : 0.3)
+                + 0.20 * (noSevereGlare ? 1.0 : 0.0)
+                + 0.20 * (naturalSkinSpectrum ? 1.0 : 0.3);
+
+        if (!noSevereGlare) {
+            return new LivenessResult(false, livenessScore, "Excessive glare or screen reflection detected. Please avoid bright screen glare.");
+        }
+        if (!has3DDepth && !naturalSharpness) {
+            return new LivenessResult(false, livenessScore, "2D photo or screen spoofing detected. Please capture a live face in person.");
+        }
+        if (livenessScore < MIN_LIVENESS_SCORE) {
+            return new LivenessResult(false, livenessScore, "Liveness check failed. Please ensure adequate lighting and look straight at the camera.");
+        }
+
+        return new LivenessResult(true, livenessScore, "Liveness verified");
     }
 
     private double computeLaplacianVariance(BufferedImage img) {
