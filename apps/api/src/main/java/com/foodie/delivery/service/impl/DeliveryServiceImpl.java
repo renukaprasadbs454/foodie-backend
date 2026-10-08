@@ -318,13 +318,35 @@ public class DeliveryServiceImpl implements DeliveryService {
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
                     "Pickup verification requires ACCEPTED assignment.");
         }
-        if (!"000000".equals(request.otp()) && !"123456".equals(request.otp()) && !passwordEncoder.matches(request.otp(), assignment.getPickupOtpHash())) {
+        
+        boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
+        if (!isStaticOtp && !passwordEncoder.matches(request.otp(), assignment.getPickupOtpHash())) {
             throw new InvalidOtpException();
         }
+        
         assignment.markPickupVerified();
         deliveryAssignmentRepository.save(assignment);
-        orderDeliveryPort.markPickedUpAndOutForDelivery(assignment.getOrderId());
+        
+        try {
+            orderDeliveryPort.markPickedUpAndOutForDelivery(assignment.getOrderId());
+        } catch (Exception e) {
+            log.error("Error updating order status for pickup: {}", e.getMessage());
+            // We proceed even if status update fails to not block the delivery partner
+        }
         return deliveryMapper.toAssignment(assignment);
+    }
+
+    @Override
+    @Transactional
+    public void arrivedAtRestaurant(UUID userCredentialId, UUID assignmentId) {
+        DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
+        if (assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED) {
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Cannot arrive at restaurant unless assignment is ACCEPTED.");
+        }
+        // Notify customer via Order module
+        orderDeliveryPort.updateStatus(assignment.getOrderId(), com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT);
     }
 
     @Override
@@ -339,9 +361,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
                     "Delivery verification requires PICKED_UP assignment.");
         }
-        if (!"000000".equals(request.otp()) && !"123456".equals(request.otp()) && !passwordEncoder.matches(request.otp(), assignment.getDeliveryOtpHash())) {
+        
+        boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
+        if (!isStaticOtp && !passwordEncoder.matches(request.otp(), assignment.getDeliveryOtpHash())) {
             throw new InvalidOtpException();
         }
+        
         assignment.markDelivered();
         deliveryAssignmentRepository.save(assignment);
 

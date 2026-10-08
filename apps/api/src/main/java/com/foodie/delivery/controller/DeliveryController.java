@@ -138,6 +138,15 @@ public class DeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.verifyPickup(principal.userId(), id, request)));
     }
 
+    @PostMapping("/assignments/{id}/arrived-restaurant")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<Void>> arrivedAtRestaurant(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        deliveryService.arrivedAtRestaurant(principal.userId(), id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @GetMapping("/assignments/{id}/navigation")
     @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryNavigationResponseDto>> getNavigationDetails(

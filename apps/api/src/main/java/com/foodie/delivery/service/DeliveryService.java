@@ -40,6 +40,8 @@ public interface DeliveryService {
 
         void reject(UUID userCredentialId, UUID assignmentId);
 
+        void arrivedAtRestaurant(UUID userCredentialId, UUID assignmentId);
+
         DeliveryAssignmentResponseDto verifyPickup(UUID userCredentialId, UUID assignmentId,
                         VerifyOtpRequestDto request);
 
