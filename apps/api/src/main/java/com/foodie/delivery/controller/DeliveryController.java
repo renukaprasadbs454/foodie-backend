@@ -130,14 +130,20 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/verify-pickup")
-    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
-    @Operation(summary = "Verify restaurant pickup OTP")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponseDto>> verifyPickup(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody VerifyOtpRequestDto request) {
-        return ResponseEntity.ok(ApiResponse.success(
-                deliveryService.verifyPickup(principal.userId(), id, request)));
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.verifyPickup(principal.userId(), id, request)));
+    }
+
+    @GetMapping("/assignments/{id}/navigation")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryNavigationResponseDto>> getNavigationDetails(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getNavigationDetails(principal.userId(), id)));
     }
 
     @PostMapping("/assignments/{id}/verify-delivery")

@@ -12,6 +12,7 @@ import com.foodie.delivery.dto.response.DeliveryOfferResponseDto;
 import com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileImageResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileResponseDto;
+import com.foodie.delivery.dto.response.DeliveryNavigationResponseDto;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.multipart.MultipartFile;
@@ -74,4 +75,6 @@ public interface DeliveryService {
                 UUID userCredentialId, com.foodie.delivery.dto.request.DeliveryBankDetailsRequestDto request);
 
         DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(UUID userCredentialId);
+
+        DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId);
 }

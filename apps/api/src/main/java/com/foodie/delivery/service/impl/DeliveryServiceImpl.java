@@ -24,6 +24,7 @@ import com.foodie.delivery.dto.response.DeliveryDocumentResponseDto;
 import com.foodie.delivery.dto.response.DeliveryOfferResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileImageResponseDto;
 import com.foodie.delivery.dto.response.DeliveryProfileResponseDto;
+import com.foodie.delivery.dto.response.DeliveryNavigationResponseDto;
 import com.foodie.delivery.entity.DeliveryAssignment;
 import com.foodie.delivery.entity.DeliveryPartner;
 import com.foodie.delivery.entity.DeliveryPartnerDocument;
@@ -620,6 +621,58 @@ public class DeliveryServiceImpl implements DeliveryService {
             return null;
         }
         return objectStorageClient.createSignedGetUrl(key, SIGNED_URL_TTL);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId) {
+        DeliveryPartner partner = requirePartner(userCredentialId);
+        DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
+        
+        OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(assignment.getOrderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+
+        RestaurantPickupQuery.PickupLocation pickup = restaurantPickupQuery
+                .findByRestaurantId(order.restaurantId())
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant pickup location not found."));
+                
+        String customerName = "Customer";
+        String customerPhone = "Unknown";
+
+        String deliveryAddress = null;
+        Double deliveryLat = null;
+        Double deliveryLng = null;
+        
+        if (order.addressId() != null) {
+            var addrOpt = addressRepository.findById(order.addressId());
+            if (addrOpt.isPresent()) {
+                var a = addrOpt.get();
+                deliveryLat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
+                deliveryLng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
+                StringBuilder sb = new StringBuilder();
+                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank()) sb.append(a.getHouseFlatNo()).append(", ");
+                if (a.getLine1() != null && !a.getLine1().isBlank()) sb.append(a.getLine1()).append(", ");
+                if (a.getLine2() != null && !a.getLine2().isBlank()) sb.append(a.getLine2()).append(", ");
+                if (a.getCity() != null && !a.getCity().isBlank()) sb.append(a.getCity());
+                if (a.getPincode() != null && !a.getPincode().isBlank()) sb.append(" - ").append(a.getPincode());
+                deliveryAddress = sb.toString();
+            }
+        }
+        
+        return new DeliveryNavigationResponseDto(
+                assignment.getId(),
+                order.orderId(),
+                customerName,
+                customerPhone,
+                deliveryAddress,
+                deliveryLat,
+                deliveryLng,
+                pickup.restaurantName(),
+                "Unknown",
+                pickup.formattedAddress(),
+                pickup.latitude() != null ? pickup.latitude().doubleValue() : null,
+                pickup.longitude() != null ? pickup.longitude().doubleValue() : null
+        );
     }
 
     private static byte[] readBytes(MultipartFile file, long maxBytes, String tooLargeMessage) {
