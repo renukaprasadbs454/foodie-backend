@@ -318,12 +318,6 @@ public class DeliveryServiceImpl implements DeliveryService {
             return deliveryMapper.toAssignment(assignment);
         }
         
-        if (assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED && assignment.getStatus() != DeliveryAssignmentStatus.OFFERED) {
-            throw new UnprocessableEntityException(
-                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Pickup verification requires ACCEPTED assignment, but was " + assignment.getStatus());
-        }
-        
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
         if (!isStaticOtp && !passwordEncoder.matches(request.otp(), assignment.getPickupOtpHash())) {
             throw new InvalidOtpException();
@@ -364,12 +358,6 @@ public class DeliveryServiceImpl implements DeliveryService {
         
         if (assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
             return deliveryMapper.toAssignment(assignment);
-        }
-        
-        if (assignment.getStatus() != DeliveryAssignmentStatus.PICKED_UP && assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED && assignment.getStatus() != DeliveryAssignmentStatus.OFFERED) {
-            throw new UnprocessableEntityException(
-                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Delivery verification requires PICKED_UP or ACCEPTED assignment, but was " + assignment.getStatus());
         }
         
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
