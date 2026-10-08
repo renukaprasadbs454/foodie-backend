@@ -672,6 +672,16 @@ public class DeliveryServiceImpl implements DeliveryService {
             var addrOpt = addressRepository.findById(order.addressId());
             if (addrOpt.isPresent()) {
                 var a = addrOpt.get();
+                if (a.getCustomer() != null) {
+                    customerName = a.getCustomer().getFullName();
+                }
+                if (a.getRecipientName() != null && !a.getRecipientName().isBlank()) {
+                    customerName = a.getRecipientName();
+                }
+                if (a.getRecipientPhone() != null && !a.getRecipientPhone().isBlank()) {
+                    customerPhone = a.getRecipientPhone();
+                }
+                
                 deliveryLat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
                 deliveryLng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
                 StringBuilder sb = new StringBuilder();
