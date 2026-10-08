@@ -43,6 +43,7 @@ import com.foodie.shared.contract.OrderDeliveryPort;
 import com.foodie.shared.contract.RestaurantPickupQuery;
 import com.foodie.shared.event.DeliveryCompletedEvent;
 import com.foodie.shared.event.DeliveryLocationUpdatedEvent;
+import com.foodie.shared.event.DeliveryOfferCreatedEvent;
 import com.foodie.shared.event.DeliveryPartnerAssignedEvent;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -505,20 +506,30 @@ public class DeliveryServiceImpl implements DeliveryService {
         String pickupOtp = HashUtils.sixDigitOtp();
         String deliveryOtp = HashUtils.sixDigitOtp();
 
+        DeliveryAssignment assignmentToPublish;
         if (existingAssignmentOpt.isPresent()) {
             DeliveryAssignment assignment = existingAssignmentOpt.get();
             assignment.reofferTo(selectedPartner.get());
-            deliveryAssignmentRepository.save(assignment);
+            assignmentToPublish = deliveryAssignmentRepository.save(assignment);
         } else {
             DeliveryAssignment assignment = DeliveryAssignment.createOffered(
                     orderId,
                     selectedPartner.get(),
                     passwordEncoder.encode(pickupOtp),
                     passwordEncoder.encode(deliveryOtp));
-            deliveryAssignmentRepository.save(assignment);
+            assignmentToPublish = deliveryAssignmentRepository.save(assignment);
         }
 
         orderDeliveryPort.updateStatus(orderId, OrderStatus.WAITING_FOR_DELIVERY_PARTNER);
+
+        eventPublisher.publishEvent(DeliveryOfferCreatedEvent.of(
+                orderId,
+                selectedPartner.get().getId(),
+                assignmentToPublish.getId(),
+                selectedDistance != null ? selectedDistance : 0.0,
+                pickup.restaurantName() != null ? pickup.restaurantName() : "Restaurant",
+                pickup.formattedAddress() != null ? pickup.formattedAddress() : "Location"
+        ));
 
         log.info(
                 "Created/Updated OFFERED delivery assignment for order {} partner {} distanceKm={}",

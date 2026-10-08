@@ -8,6 +8,7 @@ import com.foodie.shared.contract.DeliveryPartnerLookup;
 import com.foodie.shared.contract.OrderNotificationQuery;
 import com.foodie.shared.contract.PaymentOrderLookup;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
+import com.foodie.shared.event.DeliveryOfferCreatedEvent;
 import com.foodie.shared.event.DeliveryPartnerAssignedEvent;
 import com.foodie.shared.event.OrderCancelledEvent;
 import com.foodie.shared.event.OrderConfirmedEvent;
@@ -152,6 +153,22 @@ public class DomainNotificationListeners {
             Map<String, String> params = baseOrderParams(order.orderNumber(), order.orderId());
             customerCredential(order.customerId()).ifPresent(id ->
                     notificationService.send(id, NotificationEventType.DELIVERY_PARTNER_ASSIGNED, params));
+        });
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onDeliveryOfferCreated(DeliveryOfferCreatedEvent event) {
+        safeRun(() -> {
+            var order = orderNotificationQuery.findByOrderId(event.orderId()).orElse(null);
+            if (order == null) {
+                return;
+            }
+            Map<String, String> params = baseOrderParams(order.orderNumber(), order.orderId());
+            params.put("distance", String.format("%.1f km", event.distanceKm()));
+            params.put("restaurantName", event.restaurantName());
+            params.put("restaurantLocation", event.restaurantLocation());
+
             deliveryPartnerLookup.findUserCredentialIdByPartnerId(event.deliveryPartnerId())
                     .ifPresent(id -> notificationService.send(id, NotificationEventType.DELIVERY_OFFER, params));
         });
