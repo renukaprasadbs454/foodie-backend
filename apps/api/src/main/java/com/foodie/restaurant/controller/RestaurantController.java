@@ -24,6 +24,8 @@ import com.foodie.restaurant.dto.response.RestaurantSummaryResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantUpiResponseDto;
 import com.foodie.restaurant.dto.response.VerificationResultResponseDto;
 import com.foodie.restaurant.service.RestaurantService;
+import com.foodie.menu.service.MenuService;
+import com.foodie.menu.dto.response.MenuItemResponseDto;
 import com.foodie.security.principal.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,9 +56,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class RestaurantController {
 
     private final RestaurantService restaurantService;
+    private final MenuService menuService;
 
-    public RestaurantController(RestaurantService restaurantService) {
+    public RestaurantController(RestaurantService restaurantService, MenuService menuService) {
         this.restaurantService = restaurantService;
+        this.menuService = menuService;
     }
 
     @GetMapping
@@ -72,6 +76,13 @@ public class RestaurantController {
             @RequestParam(required = false) String sort) {
         var result = restaurantService.search(search, cuisineType, minRating, lat, lng, page, size, sort);
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
+    }
+
+    @GetMapping("/{restaurantId}/menu-items-with-ratings")
+    @Operation(summary = "Get menu items with ratings for a restaurant (public)")
+    public ResponseEntity<ApiResponse<List<MenuItemResponseDto>>> getMenuItemsWithRatings(
+            @PathVariable UUID restaurantId) {
+        return ResponseEntity.ok(ApiResponse.success(menuService.getItemsByRestaurant(restaurantId, null, null)));
     }
 
     @GetMapping("/{id}")

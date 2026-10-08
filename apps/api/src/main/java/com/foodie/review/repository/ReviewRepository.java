@@ -16,8 +16,11 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     Page<Review> findByRestaurantId(UUID restaurantId, Pageable pageable);
 
-    @Query("select coalesce(avg(r.restaurantRating), 0) from Review r where r.restaurantId = :restaurantId")
+    @Query("select coalesce(avg(r.restaurantRating * 1.0), 0.0) from Review r where r.restaurantId = :restaurantId")
     Double averageRestaurantRating(@Param("restaurantId") UUID restaurantId);
+
+    @Query("select coalesce(avg(r.restaurantRating * 1.0), 0.0) from Review r where r.restaurantId = :restaurantId")
+    Double findAverageRatingByRestaurantId(@Param("restaurantId") UUID restaurantId);
 
     List<Review> findByDeliveryPartnerIdOrderByCreatedAtDesc(UUID deliveryPartnerId);
 
@@ -27,10 +30,15 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
     @Query("select coalesce(avg(r.restaurantRating * 1.0), 0.0) from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId = :menuItemId")
     Double averageMenuItemRating(@Param("menuItemId") UUID menuItemId);
 
-    @Query("select count(r.id) from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId = :menuItemId")
+    @Query("select coalesce(avg(r.restaurantRating * 1.0), 0.0) from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId = :menuItemId and r.restaurantId = :restaurantId")
+    Double findAverageRatingByMenuItemId(@Param("menuItemId") UUID menuItemId, @Param("restaurantId") UUID restaurantId);
+
+    @Query("select count(distinct r.id) from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId = :menuItemId")
     Long countMenuItemReviews(@Param("menuItemId") UUID menuItemId);
 
-    @Query("select oi.menuItemId as menuItemId, avg(r.restaurantRating * 1.0) as avgRating, count(r.id) as reviewCount from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId in :menuItemIds group by oi.menuItemId")
+    @Query("select count(distinct r.id) from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId = :menuItemId")
+    Long countReviewsByMenuItemId(@Param("menuItemId") UUID menuItemId);
+
+    @Query("select oi.menuItemId as menuItemId, avg(r.restaurantRating * 1.0) as avgRating, count(distinct r.id) as reviewCount from Review r, OrderItem oi where r.orderId = oi.order.id and oi.menuItemId in :menuItemIds group by oi.menuItemId")
     List<MenuItemRatingProjection> findRatingsByMenuItemIds(@Param("menuItemIds") Collection<UUID> menuItemIds);
 }
-

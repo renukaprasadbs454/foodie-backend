@@ -61,6 +61,14 @@ public class MenuController {
                 return ResponseEntity.ok(ApiResponse.success(menuService.getItemById(itemId)));
         }
 
+        @GetMapping("/restaurants/{restaurantId}/menu-items-with-ratings")
+        @Operation(summary = "Get menu items with ratings for a restaurant (public)")
+        public ResponseEntity<ApiResponse<List<MenuItemResponseDto>>> getMenuItemsWithRatings(
+                        @PathVariable UUID restaurantId) {
+                return ResponseEntity.ok(
+                                ApiResponse.success(menuService.getItemsByRestaurant(restaurantId, null, null)));
+        }
+
         @GetMapping("/restaurants/{restaurantId}/items")
         @Operation(summary = "Get food items for a restaurant with category/veg filter (public)")
         public ResponseEntity<ApiResponse<List<MenuItemResponseDto>>> getItemsByRestaurant(

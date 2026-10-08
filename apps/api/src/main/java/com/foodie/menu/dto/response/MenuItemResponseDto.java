@@ -78,6 +78,16 @@ public record MenuItemResponseDto(
                 0L);
     }
 
+    @JsonProperty("averageRating")
+    public BigDecimal getAverageRating() {
+        return avgRating;
+    }
+
+    @JsonProperty("average_rating")
+    public BigDecimal getAverageRatingSnake() {
+        return avgRating;
+    }
+
     @JsonProperty("avgRating")
     public BigDecimal getAvgRatingCamel() {
         return avgRating;

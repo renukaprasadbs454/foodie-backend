@@ -176,7 +176,8 @@ public class MenuServiceImpl implements MenuService {
             categoryDtos.add(menuMapper.toFullMenuCategory(category, itemDtos));
         }
 
-        FullMenuResponseDto menu = new FullMenuResponseDto(activeRestaurantId, categoryDtos);
+        BigDecimal restaurantAvgRating = reviewRatingQuery != null ? reviewRatingQuery.averageRestaurantRating(activeRestaurantId) : BigDecimal.ZERO;
+        FullMenuResponseDto menu = new FullMenuResponseDto(activeRestaurantId, categoryDtos, restaurantAvgRating);
         try {
             menuCacheService.put(activeRestaurantId, objectMapper.writeValueAsString(menu));
         } catch (JsonProcessingException ex) {
