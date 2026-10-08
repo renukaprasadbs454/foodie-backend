@@ -69,6 +69,7 @@ import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
 import com.foodie.delivery.entity.DeliveryPartnerIncentiveEarning;
 import com.foodie.delivery.service.DeliveryPricingService;
+import java.math.BigDecimal;
 import com.foodie.user.repository.AddressRepository;
 import com.foodie.user.repository.CustomerRepository;
 
@@ -974,7 +975,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         String paymentSessionId = null;
         if (ref == null || ref.isBlank()) {
             try {
-                String customerPhone = partner.getPhone() != null ? partner.getPhone() : "9999999999";
+                String customerPhone = "9999999999";
                 var created = cashfreePaymentClient.createOrder(
                         request.amount(),
                         userCredentialId.toString(),
