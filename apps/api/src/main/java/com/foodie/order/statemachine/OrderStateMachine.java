@@ -69,12 +69,12 @@ public final class OrderStateMachine {
                 case READY_FOR_PICKUP ->
                     (from == OrderStatus.PREPARING || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
                             || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || from == OrderStatus.ASSIGNED
-                            || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
+                            || from == OrderStatus.PLACED || from == OrderStatus.REACHED_RESTAURANT) ? Decision.ALLOW : Decision.ILLEGAL;
                 case PICKED_UP ->
                     (from == OrderStatus.READY_FOR_PICKUP || from == OrderStatus.PREPARING
                             || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
                             || from == OrderStatus.PLACED || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER
-                            || from == OrderStatus.ASSIGNED)
+                            || from == OrderStatus.ASSIGNED || from == OrderStatus.REACHED_RESTAURANT)
                                     ? Decision.ALLOW
                                     : Decision.ILLEGAL;
                 default -> Decision.FORBIDDEN;
@@ -103,6 +103,9 @@ public final class OrderStateMachine {
                 || (from == OrderStatus.CONFIRMED && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.REACHED_RESTAURANT)
+                || (from == OrderStatus.PREPARING && to == OrderStatus.REACHED_RESTAURANT)
+                || (from == OrderStatus.ACCEPTED && to == OrderStatus.REACHED_RESTAURANT)
+                || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.REACHED_RESTAURANT)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.OUT_FOR_DELIVERY)
