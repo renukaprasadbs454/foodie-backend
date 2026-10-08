@@ -313,10 +313,15 @@ public class DeliveryServiceImpl implements DeliveryService {
             UUID assignmentId,
             VerifyOtpRequestDto request) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        if (assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED) {
+        
+        if (assignment.getStatus() == DeliveryAssignmentStatus.PICKED_UP || assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
+            return deliveryMapper.toAssignment(assignment);
+        }
+        
+        if (assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED && assignment.getStatus() != DeliveryAssignmentStatus.OFFERED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Pickup verification requires ACCEPTED assignment.");
+                    "Pickup verification requires ACCEPTED assignment, but was " + assignment.getStatus());
         }
         
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
@@ -356,10 +361,15 @@ public class DeliveryServiceImpl implements DeliveryService {
             UUID assignmentId,
             VerifyOtpRequestDto request) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        if (assignment.getStatus() != DeliveryAssignmentStatus.PICKED_UP && assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED) {
+        
+        if (assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
+            return deliveryMapper.toAssignment(assignment);
+        }
+        
+        if (assignment.getStatus() != DeliveryAssignmentStatus.PICKED_UP && assignment.getStatus() != DeliveryAssignmentStatus.ACCEPTED && assignment.getStatus() != DeliveryAssignmentStatus.OFFERED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Delivery verification requires PICKED_UP or ACCEPTED assignment.");
+                    "Delivery verification requires PICKED_UP or ACCEPTED assignment, but was " + assignment.getStatus());
         }
         
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
