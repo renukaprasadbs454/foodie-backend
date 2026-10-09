@@ -1344,18 +1344,22 @@ public class DeliveryServiceImpl implements DeliveryService {
         String line1 = a.getLine1() != null ? a.getLine1().toLowerCase() : "";
         String line2 = a.getLine2() != null ? a.getLine2().toLowerCase() : "";
         String pincode = a.getPincode() != null ? a.getPincode() : "";
-
         boolean isTumkur = city.contains("tumk") || line1.contains("tumk") || line2.contains("tumk") || pincode.startsWith("572");
 
-        if (isTumkur && (lat == null || lat < 13.1)) {
-            if (pickupLat != null && pickupLng != null && pickupLat > 13.1) {
-                lat = pickupLat + 0.008;
-                lng = pickupLng + 0.008;
-            } else {
-                lat = 13.3379;
-                lng = 77.1173;
-            }
+        if (lat != null && lng != null && lat >= 13.1) {
+            return new double[] { lat, lng };
         }
+
+        if (isTumkur) {
+            double baseLat = (pickupLat != null && pickupLat > 13.1) ? pickupLat : 13.3379;
+            double baseLng = (pickupLng != null && pickupLng > 13.1) ? pickupLng : 77.1173;
+            String fullText = (line1 + " " + line2 + " " + pincode).trim();
+            int hash = Math.abs(fullText.hashCode());
+            double latOffset = ((hash % 100) - 50) * 0.0001;
+            double lngOffset = (((hash / 100) % 100) - 50) * 0.0001;
+            return new double[] { baseLat + latOffset, baseLng + lngOffset };
+        }
+
         return new double[] { lat != null ? lat : 13.3379, lng != null ? lng : 77.1173 };
     }
 }
