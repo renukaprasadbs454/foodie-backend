@@ -36,7 +36,8 @@ public final class OrderStateMachine {
         }
 
         if (from == to) {
-            if (actor == OrderActorType.RESTAURANT && (to == OrderStatus.ACCEPTED || to == OrderStatus.PREPARING || to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)) {
+            if (actor == OrderActorType.RESTAURANT && (to == OrderStatus.ACCEPTED || to == OrderStatus.PREPARING
+                    || to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)) {
                 return Decision.ALLOW;
             }
             return Decision.ILLEGAL;
@@ -63,13 +64,15 @@ public final class OrderStateMachine {
                 case REJECTED ->
                     (from == OrderStatus.CONFIRMED || from == OrderStatus.PLACED) ? Decision.ALLOW : Decision.ILLEGAL;
                 case PREPARING ->
-                    (from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || from == OrderStatus.PREPARING)
-                            ? Decision.ALLOW
-                            : Decision.ILLEGAL;
+                    (from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
+                            || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || from == OrderStatus.PREPARING)
+                                    ? Decision.ALLOW
+                                    : Decision.ILLEGAL;
                 case READY_FOR_PICKUP ->
                     (from == OrderStatus.PREPARING || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
                             || from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || from == OrderStatus.ASSIGNED
-                            || from == OrderStatus.PLACED || from == OrderStatus.REACHED_RESTAURANT) ? Decision.ALLOW : Decision.ILLEGAL;
+                            || from == OrderStatus.PLACED || from == OrderStatus.REACHED_RESTAURANT) ? Decision.ALLOW
+                                    : Decision.ILLEGAL;
                 case PICKED_UP ->
                     (from == OrderStatus.READY_FOR_PICKUP || from == OrderStatus.PREPARING
                             || from == OrderStatus.ACCEPTED || from == OrderStatus.CONFIRMED
@@ -107,9 +110,21 @@ public final class OrderStateMachine {
                 || (from == OrderStatus.ACCEPTED && to == OrderStatus.REACHED_RESTAURANT)
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.REACHED_RESTAURANT)
                 || (from == OrderStatus.ASSIGNED && to == OrderStatus.PICKED_UP)
+                || (from == OrderStatus.ACCEPTED && to == OrderStatus.PICKED_UP)
+                || (from == OrderStatus.PREPARING && to == OrderStatus.PICKED_UP)
+                || (from == OrderStatus.CONFIRMED && to == OrderStatus.PICKED_UP)
+                || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.PICKED_UP)
+                || (from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.PICKED_UP)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.OUT_FOR_DELIVERY)
+                || (from == OrderStatus.ASSIGNED && to == OrderStatus.OUT_FOR_DELIVERY)
+                || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.OUT_FOR_DELIVERY)
                 || (from == OrderStatus.PICKED_UP && to == OrderStatus.DELIVERED)
-                || (from == OrderStatus.OUT_FOR_DELIVERY && to == OrderStatus.DELIVERED);
+                || (from == OrderStatus.OUT_FOR_DELIVERY && to == OrderStatus.DELIVERED)
+                || (from == OrderStatus.ASSIGNED && to == OrderStatus.DELIVERED)
+                || (from == OrderStatus.ACCEPTED && to == OrderStatus.DELIVERED)
+                || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.DELIVERED)
+                || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.DELIVERED)
+                || (from == OrderStatus.PREPARING && to == OrderStatus.DELIVERED);
     }
 }
