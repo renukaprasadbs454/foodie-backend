@@ -422,11 +422,6 @@ public class DeliveryServiceImpl implements DeliveryService {
                         .findByRestaurantId(orderForEarning.restaurantId()).orElse(null);
                 if (pickupForEarning != null && pickupForEarning.latitude() != null
                         && pickupForEarning.longitude() != null) {
-                    Double distToRest = partnerGeoService
-                            .findNearby(pickupForEarning.latitude().doubleValue(),
-                                    pickupForEarning.longitude().doubleValue(), deliveryProperties.getOfferRadiusKm())
-                            .stream().filter(h -> h.partnerId().equals(assignment.getDeliveryPartner().getId()))
-                            .findFirst().map(GeoPartnerHit::distanceKm).orElse(0.0);
                     Double distToCust = 0.0;
                     if (orderForEarning.addressId() != null) {
                         var addrOpt = addressRepository.findById(orderForEarning.addressId());
@@ -443,7 +438,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                             distToCust = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                         }
                     }
-                    distance = distToRest + distToCust;
+                    distance = distToCust;
                 }
                 BigDecimal payout = deliveryPricingService.calculateDeliveryFee(distance);
                 earningRepository.save(DeliveryPartnerIncentiveEarning.create(
@@ -742,13 +737,29 @@ public class DeliveryServiceImpl implements DeliveryService {
             distToCustomer = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
-        if (distToRestaurant != null) {
-            estimatedDistance = distToRestaurant + distToCustomer;
-        } else {
-            estimatedDistance = distToCustomer > 0 ? distToCustomer : null;
+        if (distToRestaurant == null && pickup.latitude() != null && pickup.longitude() != null) {
+            try {
+                // Search within wide radius to locate partner distance to restaurant
+                distToRestaurant = partnerGeoService.findNearby(
+                        pickup.latitude().doubleValue(),
+                        pickup.longitude().doubleValue(),
+                        1000.0).stream()
+                        .filter(hit -> hit.partnerId().equals(partnerId))
+                        .findFirst()
+                        .map(GeoPartnerHit::distanceKm)
+                        .orElse(null);
+            } catch (Exception e) {
+                log.warn("Redis error calculating GeoRadius fallback: {}", e.getMessage());
+            }
         }
 
-        BigDecimal estimatedFee = deliveryPricingService.calculateDeliveryFee(estimatedDistance);
+        if (distToRestaurant != null && distToRestaurant > 0) {
+            estimatedDistance = distToRestaurant;
+        } else {
+            estimatedDistance = distToCustomer > 0 ? distToCustomer : 0.0;
+        }
+
+        BigDecimal estimatedFee = deliveryPricingService.calculateDeliveryFee(distToCustomer);
 
         return deliveryMapper.toOffer(
                 assignment,
