@@ -101,6 +101,17 @@ public class CustomerServiceImpl implements CustomerService {
         Address address = addressRepository.findByIdAndCustomerId(addressId, customer.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Address not found."));
 
+        java.math.BigDecimal lat = request.latitude();
+        java.math.BigDecimal lng = request.longitude();
+        String cityStr = request.city() != null ? request.city().toLowerCase() : "";
+        String l1Str = request.line1() != null ? request.line1().toLowerCase() : "";
+        String l2Str = request.line2() != null ? request.line2().toLowerCase() : "";
+        String pinStr = request.pincode() != null ? request.pincode() : "";
+        if ((cityStr.contains("tumk") || l1Str.contains("tumk") || l2Str.contains("tumk") || pinStr.startsWith("572")) && (lat == null || lat.doubleValue() < 13.1)) {
+            lat = java.math.BigDecimal.valueOf(13.3379);
+            lng = java.math.BigDecimal.valueOf(77.1173);
+        }
+
         address.update(
                 request.recipientName(),
                 request.recipientPhone(),
@@ -112,8 +123,8 @@ public class CustomerServiceImpl implements CustomerService {
                 request.line2(),
                 request.city(),
                 request.pincode(),
-                request.latitude(),
-                request.longitude());
+                lat,
+                lng);
         return customerMapper.toAddress(address);
     }
 
@@ -140,6 +151,18 @@ public class CustomerServiceImpl implements CustomerService {
         if (makeDefault) {
             addressRepository.clearDefaultForCustomer(customer.getId());
         }
+
+        java.math.BigDecimal lat = request.latitude();
+        java.math.BigDecimal lng = request.longitude();
+        String cityStr = request.city() != null ? request.city().toLowerCase() : "";
+        String l1Str = request.line1() != null ? request.line1().toLowerCase() : "";
+        String l2Str = request.line2() != null ? request.line2().toLowerCase() : "";
+        String pinStr = request.pincode() != null ? request.pincode() : "";
+        if ((cityStr.contains("tumk") || l1Str.contains("tumk") || l2Str.contains("tumk") || pinStr.startsWith("572")) && (lat == null || lat.doubleValue() < 13.1)) {
+            lat = java.math.BigDecimal.valueOf(13.3379);
+            lng = java.math.BigDecimal.valueOf(77.1173);
+        }
+
         Address address = Address.create(
                 customer,
                 request.recipientName(),
@@ -152,8 +175,8 @@ public class CustomerServiceImpl implements CustomerService {
                 request.line2(),
                 request.city(),
                 request.pincode(),
-                request.latitude(),
-                request.longitude(),
+                lat,
+                lng,
                 makeDefault);
         address = addressRepository.save(address);
         if (makeDefault) {
