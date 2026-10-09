@@ -180,8 +180,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                         request.vehicleType(),
                         request.vehicleNumber()));
         partner.updateProfile(request.fullName(), request.vehicleType(), request.vehicleNumber());
-        if (request.addressLine1() != null || request.city() != null || request.state() != null || request.pincode() != null) {
-            partner.updateAddress(request.addressLine1(), request.addressLine2(), request.city(), request.state(), request.pincode());
+        if (request.addressLine1() != null || request.city() != null || request.state() != null
+                || request.pincode() != null) {
+            partner.updateAddress(request.addressLine1(), request.addressLine2(), request.city(), request.state(),
+                    request.pincode());
         }
         deliveryPartnerRepository.save(partner);
         java.util.List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
@@ -235,10 +237,12 @@ public class DeliveryServiceImpl implements DeliveryService {
         byte[] bytes = readBytes(file, 5 * 1024 * 1024, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
 
-        // Validate that uploaded image contains a single live human face for KYC reference
+        // Validate that uploaded image contains a single live human face for KYC
+        // reference
         FaceBiometricsService.FaceDetectionResult detection = faceBiometricsService.validateFaceSelfie(bytes);
         if (!detection.detected()) {
-            log.warn("Face detection / liveness failed during KYC selfie upload for partner {}: {}", partner.getId(), detection.message());
+            log.warn("Face detection / liveness failed during KYC selfie upload for partner {}: {}", partner.getId(),
+                    detection.message());
             throw new BadRequestException(ErrorCode.BAD_REQUEST, detection.message());
         }
 
@@ -317,19 +321,20 @@ public class DeliveryServiceImpl implements DeliveryService {
             UUID assignmentId,
             VerifyOtpRequestDto request) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        
-        if (assignment.getStatus() == DeliveryAssignmentStatus.PICKED_UP || assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
+
+        if (assignment.getStatus() == DeliveryAssignmentStatus.PICKED_UP
+                || assignment.getStatus() == DeliveryAssignmentStatus.DELIVERED) {
             return deliveryMapper.toAssignment(assignment);
         }
-        
+
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
         if (!isStaticOtp && !passwordEncoder.matches(request.otp(), assignment.getPickupOtpHash())) {
             throw new InvalidOtpException();
         }
-        
+
         assignment.markPickupVerified();
         deliveryAssignmentRepository.save(assignment);
-        
+
         try {
             orderDeliveryPort.markPickedUpAndOutForDelivery(assignment.getOrderId());
         } catch (Exception e) {
@@ -343,13 +348,14 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional
     public void arrivedAtRestaurant(UUID userCredentialId, UUID assignmentId) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        
+
         orderDeliveryPort.findByOrderId(assignment.getOrderId()).ifPresent(order -> {
             if (order.status() != com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT &&
-                order.status() != com.foodie.common.enums.OrderStatus.PICKED_UP &&
-                order.status() != com.foodie.common.enums.OrderStatus.OUT_FOR_DELIVERY &&
-                order.status() != com.foodie.common.enums.OrderStatus.DELIVERED) {
-                orderDeliveryPort.updateStatus(assignment.getOrderId(), com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT);
+                    order.status() != com.foodie.common.enums.OrderStatus.PICKED_UP &&
+                    order.status() != com.foodie.common.enums.OrderStatus.OUT_FOR_DELIVERY &&
+                    order.status() != com.foodie.common.enums.OrderStatus.DELIVERED) {
+                orderDeliveryPort.updateStatus(assignment.getOrderId(),
+                        com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT);
             }
         });
     }
@@ -369,43 +375,68 @@ public class DeliveryServiceImpl implements DeliveryService {
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
                     "Delivery verification requires PICKED_UP assignment.");
         }
-        
+
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
         if (!isStaticOtp && !passwordEncoder.matches(request.otp(), assignment.getDeliveryOtpHash())) {
             throw new InvalidOtpException();
         }
-        
+
         assignment.markDelivered();
         deliveryAssignmentRepository.save(assignment);
 
         // Update Cash in Hand if COD payment (not captured online)
-        paymentRepository.findByOrderId(assignment.getOrderId()).ifPresent(payment -> {
+        OrderDeliveryPort.OrderDeliverySnapshot orderForCash = orderDeliveryPort.findByOrderId(assignment.getOrderId())
+                .orElse(null);
+        Optional<com.foodie.payment.entity.Payment> paymentOpt = paymentRepository
+                .findByOrderId(assignment.getOrderId());
+        BigDecimal cashAmountToCollect = BigDecimal.ZERO;
+
+        if (paymentOpt.isPresent()) {
+            com.foodie.payment.entity.Payment payment = paymentOpt.get();
             if (payment.getStatus() != PaymentStatus.CAPTURED && payment.getAmount() != null) {
-                DeliveryPartner partner = assignment.getDeliveryPartner();
-                partner.addCash(payment.getAmount());
-                deliveryPartnerRepository.save(partner);
+                cashAmountToCollect = payment.getAmount();
+            } else if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                cashAmountToCollect = BigDecimal.ZERO;
             }
-        });
-        
+        } else if (orderForCash != null && orderForCash.totalAmount() != null) {
+            cashAmountToCollect = orderForCash.totalAmount();
+        }
+
+        if (cashAmountToCollect != null && cashAmountToCollect.compareTo(BigDecimal.ZERO) > 0) {
+            DeliveryPartner partner = assignment.getDeliveryPartner();
+            partner.addCash(cashAmountToCollect);
+            deliveryPartnerRepository.save(partner);
+            log.info("COD cash collected: partnerId={}, orderId={}, amount=₹{}, newCashInHand=₹{}",
+                    partner.getId(), assignment.getOrderId(), cashAmountToCollect, partner.getCashInHand());
+        }
+
         try {
-            OrderDeliveryPort.OrderDeliverySnapshot orderForEarning = orderDeliveryPort.findByOrderId(assignment.getOrderId()).orElse(null);
+            OrderDeliveryPort.OrderDeliverySnapshot orderForEarning = orderDeliveryPort
+                    .findByOrderId(assignment.getOrderId()).orElse(null);
             if (orderForEarning != null) {
                 Double distance = null;
-                RestaurantPickupQuery.PickupLocation pickupForEarning = restaurantPickupQuery.findByRestaurantId(orderForEarning.restaurantId()).orElse(null);
-                if (pickupForEarning != null && pickupForEarning.latitude() != null && pickupForEarning.longitude() != null) {
-                    Double distToRest = partnerGeoService.findNearby(pickupForEarning.latitude().doubleValue(), pickupForEarning.longitude().doubleValue(), deliveryProperties.getOfferRadiusKm())
-                            .stream().filter(h -> h.partnerId().equals(assignment.getDeliveryPartner().getId())).findFirst().map(GeoPartnerHit::distanceKm).orElse(0.0);
+                RestaurantPickupQuery.PickupLocation pickupForEarning = restaurantPickupQuery
+                        .findByRestaurantId(orderForEarning.restaurantId()).orElse(null);
+                if (pickupForEarning != null && pickupForEarning.latitude() != null
+                        && pickupForEarning.longitude() != null) {
+                    Double distToRest = partnerGeoService
+                            .findNearby(pickupForEarning.latitude().doubleValue(),
+                                    pickupForEarning.longitude().doubleValue(), deliveryProperties.getOfferRadiusKm())
+                            .stream().filter(h -> h.partnerId().equals(assignment.getDeliveryPartner().getId()))
+                            .findFirst().map(GeoPartnerHit::distanceKm).orElse(0.0);
                     Double distToCust = 0.0;
                     if (orderForEarning.addressId() != null) {
                         var addrOpt = addressRepository.findById(orderForEarning.addressId());
-                        if (addrOpt.isPresent() && addrOpt.get().getLatitude() != null && addrOpt.get().getLongitude() != null) {
+                        if (addrOpt.isPresent() && addrOpt.get().getLatitude() != null
+                                && addrOpt.get().getLongitude() != null) {
                             double lat1 = pickupForEarning.latitude().doubleValue();
                             double lon1 = pickupForEarning.longitude().doubleValue();
                             double lat2 = addrOpt.get().getLatitude().doubleValue();
                             double lon2 = addrOpt.get().getLongitude().doubleValue();
                             double dLat = Math.toRadians(lat2 - lat1);
                             double dLon = Math.toRadians(lon2 - lon1);
-                            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
+                                    * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
                             distToCust = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                         }
                     }
@@ -463,7 +494,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Assignment not found."));
 
         if (assignment.getStatus() == DeliveryAssignmentStatus.OFFERED) {
-            log.info("Partner {} rejected assignment {} for order {}", partner.getId(), assignmentId, assignment.getOrderId());
+            log.info("Partner {} rejected assignment {} for order {}", partner.getId(), assignmentId,
+                    assignment.getOrderId());
             assignment.markRejected();
             deliveryAssignmentRepository.save(assignment);
             // Attempt to reassign to another available partner
@@ -475,7 +507,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional
     public void createAssignmentForOrder(UUID orderId) {
         Optional<DeliveryAssignment> existingAssignmentOpt = deliveryAssignmentRepository.findByOrderId(orderId);
-        if (existingAssignmentOpt.isPresent() && existingAssignmentOpt.get().getStatus() == DeliveryAssignmentStatus.ACCEPTED) {
+        if (existingAssignmentOpt.isPresent()
+                && existingAssignmentOpt.get().getStatus() == DeliveryAssignmentStatus.ACCEPTED) {
             return;
         }
 
@@ -489,7 +522,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         double restaurantLng = pickup.longitude().doubleValue();
         double radiusKm = deliveryProperties.getOfferRadiusKm();
 
-        // Get list of partners currently assigned to active non-delivered orders or active pending offers
+        // Get list of partners currently assigned to active non-delivered orders or
+        // active pending offers
         java.time.Instant offerCutoff = java.time.Instant.now().minusSeconds(120);
         List<UUID> busyPartnerIds = deliveryAssignmentRepository.findAll().stream()
                 .filter(a -> {
@@ -498,14 +532,15 @@ public class DeliveryServiceImpl implements DeliveryService {
                             || a.getStatus() == DeliveryAssignmentStatus.EXPIRED) {
                         return false;
                     }
-                    Optional<OrderDeliveryPort.OrderDeliverySnapshot> orderOpt = orderDeliveryPort.findByOrderId(a.getOrderId());
+                    Optional<OrderDeliveryPort.OrderDeliverySnapshot> orderOpt = orderDeliveryPort
+                            .findByOrderId(a.getOrderId());
                     if (orderOpt.isEmpty()) {
                         return false;
                     }
                     OrderStatus orderStatus = orderOpt.get().status();
                     boolean isBusy = true;
-                    if (orderStatus == OrderStatus.DELIVERED 
-                            || orderStatus == OrderStatus.CANCELLED 
+                    if (orderStatus == OrderStatus.DELIVERED
+                            || orderStatus == OrderStatus.CANCELLED
                             || orderStatus == OrderStatus.REJECTED
                             || orderStatus == OrderStatus.WAITING_FOR_DELIVERY_PARTNER) {
                         isBusy = false;
@@ -513,8 +548,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                         isBusy = a.getAssignedAt() != null
                                 && a.getAssignedAt().isAfter(offerCutoff);
                     } else {
-                        java.time.Instant activeWindow = java.time.Instant.now().minus(java.time.Duration.ofMinutes(30));
-                        isBusy = (a.getStatus() == DeliveryAssignmentStatus.ACCEPTED || a.getStatus() == DeliveryAssignmentStatus.PICKED_UP)
+                        java.time.Instant activeWindow = java.time.Instant.now()
+                                .minus(java.time.Duration.ofMinutes(30));
+                        isBusy = (a.getStatus() == DeliveryAssignmentStatus.ACCEPTED
+                                || a.getStatus() == DeliveryAssignmentStatus.PICKED_UP)
                                 && a.getAssignedAt() != null
                                 && a.getAssignedAt().isAfter(activeWindow);
                     }
@@ -551,12 +588,15 @@ public class DeliveryServiceImpl implements DeliveryService {
             log.warn("Error searching Redis Geo candidate delivery partners: {}", e.getMessage());
         }
 
-        // Fallback: If no strict nearby unassigned partner found, pick any online verified partner not busy (ordered by most recently active)
+        // Fallback: If no strict nearby unassigned partner found, pick any online
+        // verified partner not busy (ordered by most recently active)
         if (selectedPartner.isEmpty()) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
-            log.info("createAssignmentForOrder candidate search for order {}: busyPartnerIds={}, previousPartnerId={}, onlineList={}",
+            log.info(
+                    "createAssignmentForOrder candidate search for order {}: busyPartnerIds={}, previousPartnerId={}, onlineList={}",
                     orderId, busyPartnerIds, previousPartnerId,
-                    onlineList.stream().map(p -> p.getId() + ":" + p.getFullName() + ":kyc=" + p.getKycStatus() + ":cashExceeded=" + p.isCashLimitExceeded()).toList());
+                    onlineList.stream().map(p -> p.getId() + ":" + p.getFullName() + ":kyc=" + p.getKycStatus()
+                            + ":cashExceeded=" + p.isCashLimitExceeded()).toList());
             for (DeliveryPartner candidate : onlineList) {
                 if (candidate.isOnline()
                         && candidate.getKycStatus() == KycStatus.VERIFIED
@@ -601,8 +641,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 assignmentToPublish.getId(),
                 selectedDistance != null ? selectedDistance : 0.0,
                 pickup.restaurantName() != null ? pickup.restaurantName() : "Restaurant",
-                pickup.formattedAddress() != null ? pickup.formattedAddress() : "Location"
-        ));
+                pickup.formattedAddress() != null ? pickup.formattedAddress() : "Location"));
 
         log.info(
                 "Created/Updated OFFERED delivery assignment for order {} partner {} distanceKm={}",
@@ -654,11 +693,16 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deliveryLat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
                 deliveryLng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
                 StringBuilder sb = new StringBuilder();
-                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank()) sb.append(a.getHouseFlatNo()).append(", ");
-                if (a.getLine1() != null && !a.getLine1().isBlank()) sb.append(a.getLine1()).append(", ");
-                if (a.getLine2() != null && !a.getLine2().isBlank()) sb.append(a.getLine2()).append(", ");
-                if (a.getCity() != null && !a.getCity().isBlank()) sb.append(a.getCity());
-                if (a.getPincode() != null && !a.getPincode().isBlank()) sb.append(" - ").append(a.getPincode());
+                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank())
+                    sb.append(a.getHouseFlatNo()).append(", ");
+                if (a.getLine1() != null && !a.getLine1().isBlank())
+                    sb.append(a.getLine1()).append(", ");
+                if (a.getLine2() != null && !a.getLine2().isBlank())
+                    sb.append(a.getLine2()).append(", ");
+                if (a.getCity() != null && !a.getCity().isBlank())
+                    sb.append(a.getCity());
+                if (a.getPincode() != null && !a.getPincode().isBlank())
+                    sb.append(" - ").append(a.getPincode());
                 deliveryAddress = sb.toString();
             }
         }
@@ -679,7 +723,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 log.warn("Redis error calculating GeoRadius: {}", e.getMessage());
             }
         }
-        
+
         Double distToCustomer = 0.0;
         if (deliveryLat != null && deliveryLng != null && pickup.latitude() != null && pickup.longitude() != null) {
             // Haversine distance
@@ -687,13 +731,14 @@ public class DeliveryServiceImpl implements DeliveryService {
             double lon1 = pickup.longitude().doubleValue();
             double lat2 = deliveryLat;
             double lon2 = deliveryLng;
-            double R = 6371; 
+            double R = 6371;
             double dLat = Math.toRadians(lat2 - lat1);
             double dLon = Math.toRadians(lon2 - lon1);
-            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
+                    * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
             distToCustomer = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
-        
+
         if (distToRestaurant != null) {
             estimatedDistance = distToRestaurant + distToCustomer;
         } else {
@@ -725,21 +770,21 @@ public class DeliveryServiceImpl implements DeliveryService {
     public DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId) {
         DeliveryPartner partner = requirePartner(userCredentialId);
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
-        
+
         OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(assignment.getOrderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
 
         RestaurantPickupQuery.PickupLocation pickup = restaurantPickupQuery
                 .findByRestaurantId(order.restaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant pickup location not found."));
-                
+
         String customerName = "Customer";
         String customerPhone = "Unknown";
 
         String deliveryAddress = null;
         Double deliveryLat = null;
         Double deliveryLng = null;
-        
+
         if (order.addressId() != null) {
             var addrOpt = addressRepository.findById(order.addressId());
             if (addrOpt.isPresent()) {
@@ -753,19 +798,24 @@ public class DeliveryServiceImpl implements DeliveryService {
                 if (a.getRecipientPhone() != null && !a.getRecipientPhone().isBlank()) {
                     customerPhone = a.getRecipientPhone();
                 }
-                
+
                 deliveryLat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
                 deliveryLng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
                 StringBuilder sb = new StringBuilder();
-                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank()) sb.append(a.getHouseFlatNo()).append(", ");
-                if (a.getLine1() != null && !a.getLine1().isBlank()) sb.append(a.getLine1()).append(", ");
-                if (a.getLine2() != null && !a.getLine2().isBlank()) sb.append(a.getLine2()).append(", ");
-                if (a.getCity() != null && !a.getCity().isBlank()) sb.append(a.getCity());
-                if (a.getPincode() != null && !a.getPincode().isBlank()) sb.append(" - ").append(a.getPincode());
+                if (a.getHouseFlatNo() != null && !a.getHouseFlatNo().isBlank())
+                    sb.append(a.getHouseFlatNo()).append(", ");
+                if (a.getLine1() != null && !a.getLine1().isBlank())
+                    sb.append(a.getLine1()).append(", ");
+                if (a.getLine2() != null && !a.getLine2().isBlank())
+                    sb.append(a.getLine2()).append(", ");
+                if (a.getCity() != null && !a.getCity().isBlank())
+                    sb.append(a.getCity());
+                if (a.getPincode() != null && !a.getPincode().isBlank())
+                    sb.append(" - ").append(a.getPincode());
                 deliveryAddress = sb.toString();
             }
         }
-        
+
         return new DeliveryNavigationResponseDto(
                 assignment.getId(),
                 order.orderId(),
@@ -778,8 +828,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 "Unknown",
                 pickup.formattedAddress(),
                 pickup.latitude() != null ? pickup.latitude().doubleValue() : null,
-                pickup.longitude() != null ? pickup.longitude().doubleValue() : null
-        );
+                pickup.longitude() != null ? pickup.longitude().doubleValue() : null);
     }
 
     private static byte[] readBytes(MultipartFile file, long maxBytes, String tooLargeMessage) {
@@ -830,7 +879,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         String declaredMime = file != null ? file.getContentType() : null;
         String originalFilename = file != null ? file.getOriginalFilename() : null;
 
-        log.info("[FaceDiag] Uploaded selfie metadata: partnerId={}, originalFilename={}, declaredMime={}, sizeBytes={}",
+        log.info(
+                "[FaceDiag] Uploaded selfie metadata: partnerId={}, originalFilename={}, declaredMime={}, sizeBytes={}",
                 partnerId, originalFilename, declaredMime, incomingSize);
 
         if (incomingBytes == null || incomingBytes.length == 0) {
@@ -839,9 +889,11 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         // 3. Decode image and detect valid human face
-        FaceBiometricsService.FaceDetectionResult liveDetection = faceBiometricsService.validateFaceSelfie(incomingBytes);
+        FaceBiometricsService.FaceDetectionResult liveDetection = faceBiometricsService
+                .validateFaceSelfie(incomingBytes);
         log.info("[FaceDiag] Face detection evaluation: partnerId={}, detected={}, faceCount={}, score={}, message={}",
-                partnerId, liveDetection.detected(), liveDetection.faceCount(), String.format("%.2f", liveDetection.score()), liveDetection.message());
+                partnerId, liveDetection.detected(), liveDetection.faceCount(),
+                String.format("%.2f", liveDetection.score()), liveDetection.message());
 
         if (!liveDetection.detected()) {
             log.warn("Face verification 400 rejected: partnerId={}, reason={}", partnerId, liveDetection.message());
@@ -863,12 +915,14 @@ public class DeliveryServiceImpl implements DeliveryService {
         boolean baselineExists = dpBytes != null && dpBytes.length > 0;
         String verificationBranch = baselineExists ? "CASE_A_COMPARE_BASELINE" : "CASE_B_ESTABLISH_BASELINE";
 
-        log.info("Face verification dispatch: partnerId={}, KYC status={}, baselineKey={}, baselineBytesPresent={}, branch={}",
+        log.info(
+                "Face verification dispatch: partnerId={}, KYC status={}, baselineKey={}, baselineBytesPresent={}, branch={}",
                 partnerId, kycStatus, existingBaselineKey, baselineExists, verificationBranch);
 
         if (baselineExists) {
             // Case A: VERIFIED + baseline exists -> Compare with baseline
-            FaceBiometricsService.FaceVerificationResult result = faceBiometricsService.verifyFace(incomingBytes, dpBytes);
+            FaceBiometricsService.FaceVerificationResult result = faceBiometricsService.verifyFace(incomingBytes,
+                    dpBytes);
             if (!result.verified()) {
                 log.warn("Face verification failed in Case A: partnerId={}, confidence={}, message={}",
                         partnerId, String.format("%.2f", result.confidenceScore()), result.message());
@@ -879,7 +933,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                     partnerId, String.format("%.2f", result.confidenceScore()));
             return true;
         } else {
-            // Case B: VERIFIED + baseline missing -> Validate passed, save as baseline and persist key
+            // Case B: VERIFIED + baseline missing -> Validate passed, save as baseline and
+            // persist key
             log.info("Establishing new baseline KYC photo in Case B: partnerId={}", partnerId);
             String ext = "jpg";
             String cType = "image/jpeg";
@@ -898,7 +953,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             partner.setProfileImageKey(key);
             deliveryPartnerRepository.save(partner);
 
-            log.info("Face verification baseline successfully established and persisted: partnerId={}, key={}", partnerId, key);
+            log.info("Face verification baseline successfully established and persisted: partnerId={}, key={}",
+                    partnerId, key);
             return true;
         }
     }
@@ -908,8 +964,10 @@ public class DeliveryServiceImpl implements DeliveryService {
     public com.foodie.delivery.dto.response.DeliveryLocationResponseDto getLatestLocationForOrder(UUID orderId) {
         DeliveryAssignment assignment = deliveryAssignmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Assignment not found for order."));
-        return deliveryLocationHistoryRepository.findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(assignment.getDeliveryPartner().getId())
-                .map(loc -> new com.foodie.delivery.dto.response.DeliveryLocationResponseDto(loc.getLatitude(), loc.getLongitude(), loc.getRecordedAt()))
+        return deliveryLocationHistoryRepository
+                .findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(assignment.getDeliveryPartner().getId())
+                .map(loc -> new com.foodie.delivery.dto.response.DeliveryLocationResponseDto(loc.getLatitude(),
+                        loc.getLongitude(), loc.getRecordedAt()))
                 .orElseThrow(() -> new ResourceNotFoundException("No location data found for order."));
     }
 
@@ -919,7 +977,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         return deliveryPartnerRepository.findAll().stream()
                 .filter(DeliveryPartner::isOnline)
                 .map(partner -> {
-                    var locOpt = deliveryLocationHistoryRepository.findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(partner.getId());
+                    var locOpt = deliveryLocationHistoryRepository
+                            .findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(partner.getId());
                     BigDecimal lat = locOpt.map(DeliveryLocationHistory::getLatitude).orElse(BigDecimal.ZERO);
                     BigDecimal lng = locOpt.map(DeliveryLocationHistory::getLongitude).orElse(BigDecimal.ZERO);
                     return new com.foodie.delivery.dto.response.LivePartnerLocationDto(
@@ -930,8 +989,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                             lng,
                             partner.isOnline(),
                             partner.getCashInHand(),
-                            partner.isCashLimitExceeded()
-                    );
+                            partner.isCashLimitExceeded());
                 })
                 .toList();
     }
@@ -953,16 +1011,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                         d.getRejectionReason(),
                         d.getCreatedAt(),
                         d.getApprovedAt(),
-                        null
-                ))
+                        null))
                 .toList();
 
         return new com.foodie.delivery.dto.response.CashInHandResponseDto(
                 partner.getCashInHand(),
                 partner.getMaxCashInHandLimit(),
                 partner.isCashLimitExceeded(),
-                deposits
-        );
+                deposits);
     }
 
     @Override
@@ -970,7 +1026,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     public com.foodie.delivery.dto.response.CashDepositResponseDto submitCashDeposit(
             UUID userCredentialId, com.foodie.delivery.dto.request.CashDepositRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
-        
+
         String ref = request.referenceNumber();
         String paymentSessionId = null;
         if (ref == null || ref.isBlank()) {
@@ -989,10 +1045,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 paymentSessionId = "session_local_" + System.currentTimeMillis();
             }
         }
-        
+
         com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.save(
-                com.foodie.delivery.entity.DeliveryCashDeposit.create(partner, request.amount(), ref)
-        );
+                com.foodie.delivery.entity.DeliveryCashDeposit.create(partner, request.amount(), ref));
         return new com.foodie.delivery.dto.response.CashDepositResponseDto(
                 deposit.getId(),
                 partner.getId(),
@@ -1003,8 +1058,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
                 deposit.getApprovedAt(),
-                paymentSessionId
-        );
+                paymentSessionId);
     }
 
     @Override
@@ -1012,17 +1066,17 @@ public class DeliveryServiceImpl implements DeliveryService {
     public com.foodie.delivery.dto.response.CashDepositResponseDto verifyCashDeposit(UUID depositId) {
         com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cash deposit not found."));
-        
+
         if (deposit.getStatus() != com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING) {
             return new com.foodie.delivery.dto.response.CashDepositResponseDto(
-                deposit.getId(), deposit.getDeliveryPartner().getId(), deposit.getDeliveryPartner().getFullName(),
-                deposit.getAmount(), deposit.getStatus().name(), deposit.getReferenceNumber(),
-                deposit.getRejectionReason(), deposit.getCreatedAt(), deposit.getApprovedAt(), null);
+                    deposit.getId(), deposit.getDeliveryPartner().getId(), deposit.getDeliveryPartner().getFullName(),
+                    deposit.getAmount(), deposit.getStatus().name(), deposit.getReferenceNumber(),
+                    deposit.getRejectionReason(), deposit.getCreatedAt(), deposit.getApprovedAt(), null);
         }
-        
+
         String cfOrderId = deposit.getReferenceNumber();
         boolean isPaid = false;
-        
+
         if (cfOrderId != null && cfOrderId.startsWith("CF_LOCAL_")) {
             isPaid = true;
         } else if (cfOrderId != null) {
@@ -1035,14 +1089,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                 log.warn("Cashfree verify failed for {}", cfOrderId);
             }
         }
-        
+
         if (isPaid) {
             deposit.approve(com.foodie.payment.service.impl.PaymentServiceImpl.SYSTEM_ACTOR_ID);
             deposit.getDeliveryPartner().deductCash(deposit.getAmount());
             deliveryPartnerRepository.save(deposit.getDeliveryPartner());
             deposit = deliveryCashDepositRepository.save(deposit);
         }
-        
+
         return new com.foodie.delivery.dto.response.CashDepositResponseDto(
                 deposit.getId(), deposit.getDeliveryPartner().getId(), deposit.getDeliveryPartner().getFullName(),
                 deposit.getAmount(), deposit.getStatus().name(), deposit.getReferenceNumber(),
@@ -1052,7 +1106,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     @Transactional(readOnly = true)
     public List<com.foodie.delivery.dto.response.CashDepositResponseDto> listPendingCashDeposits() {
-        return deliveryCashDepositRepository.findByStatusOrderByCreatedAtDesc(com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING)
+        return deliveryCashDepositRepository
+                .findByStatusOrderByCreatedAtDesc(com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING)
                 .stream()
                 .map(d -> new com.foodie.delivery.dto.response.CashDepositResponseDto(
                         d.getId(),
@@ -1064,8 +1119,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                         d.getRejectionReason(),
                         d.getCreatedAt(),
                         d.getApprovedAt(),
-                        null
-                ))
+                        null))
                 .toList();
     }
 
@@ -1092,13 +1146,13 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
                 deposit.getApprovedAt(),
-                null
-        );
+                null);
     }
 
     @Override
     @Transactional
-    public com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId, String reason) {
+    public com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId,
+            String reason) {
         com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cash deposit not found."));
         if (deposit.getStatus() != com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.PENDING) {
@@ -1117,8 +1171,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deposit.getRejectionReason(),
                 deposit.getCreatedAt(),
                 deposit.getApprovedAt(),
-                null
-        );
+                null);
     }
 
     @Override
@@ -1134,8 +1187,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 partner.getAccountHolderName() != null ? partner.getAccountHolderName() : "",
                 partner.getAccountNumber() != null ? partner.getAccountNumber() : "",
                 partner.getIfscCode() != null ? partner.getIfscCode() : "",
-                partner.getBankName() != null ? partner.getBankName() : ""
-        );
+                partner.getBankName() != null ? partner.getBankName() : "");
     }
 
     @Override
@@ -1152,20 +1204,19 @@ public class DeliveryServiceImpl implements DeliveryService {
                 request.accountHolderName(),
                 request.accountNumber(),
                 request.ifscCode(),
-                request.bankName()
-        );
+                request.bankName());
         partner = deliveryPartnerRepository.save(partner);
         return new com.foodie.delivery.dto.response.DeliveryBankDetailsResponseDto(
                 partner.getAccountHolderName(),
                 partner.getAccountNumber(),
                 partner.getIfscCode(),
-                partner.getBankName()
-        );
+                partner.getBankName());
     }
 
-        @Override
+    @Override
     @Transactional(readOnly = true)
-    public com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(UUID userCredentialId) {
+    public com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(
+            UUID userCredentialId) {
         DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
                 .orElseGet(() -> DeliveryPartner.create(userCredentialId, DEFAULT_FULL_NAME, VehicleType.BIKE, null));
 
@@ -1189,7 +1240,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         int carefulHandlingCount = 0;
         int followedInstructionsCount = 0;
 
-        java.time.format.DateTimeFormatter timeFormatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")
+        java.time.format.DateTimeFormatter timeFormatter = java.time.format.DateTimeFormatter
+                .ofPattern("dd MMM yyyy, hh:mm a")
                 .withZone(java.time.ZoneId.systemDefault());
 
         for (com.foodie.review.entity.Review r : dbReviews) {
@@ -1227,7 +1279,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
 
             String timeAgo = r.getCreatedAt() != null ? timeFormatter.format(r.getCreatedAt()) : "Recently";
-            String orderNumber = r.getOrderId() != null ? "#ORD-" + r.getOrderId().toString().substring(0, 8).toUpperCase() : "";
+            String orderNumber = r.getOrderId() != null
+                    ? "#ORD-" + r.getOrderId().toString().substring(0, 8).toUpperCase()
+                    : "";
 
             items.add(new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.DeliveryReviewItemDto(
                     r.getId(),
@@ -1236,19 +1290,22 @@ public class DeliveryServiceImpl implements DeliveryService {
                     r.getComment() != null ? r.getComment() : "",
                     orderNumber,
                     timeAgo,
-                    tags
-            ));
+                    tags));
         }
 
         double avgRating = ratingCount > 0 ? Math.round((totalScore / ratingCount) * 10.0) / 10.0 : 0.0;
         int positivePct = ratingCount > 0 ? (int) Math.round(((double) positiveCount / ratingCount) * 100.0) : 0;
 
-        List<com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto> compliments = List.of(
-                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Super Fast Delivery", fastDeliveryCount, "flash"),
-                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Polite & Friendly", politeCount, "happy"),
-                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Handled With Care", carefulHandlingCount, "cube"),
-                new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto("Followed Instructions", followedInstructionsCount, "checkmark-circle")
-        );
+        List<com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto> compliments = List
+                .of(
+                        new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto(
+                                "Super Fast Delivery", fastDeliveryCount, "flash"),
+                        new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto(
+                                "Polite & Friendly", politeCount, "happy"),
+                        new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto(
+                                "Handled With Care", carefulHandlingCount, "cube"),
+                        new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto.ComplimentCountDto(
+                                "Followed Instructions", followedInstructionsCount, "checkmark-circle"));
 
         return new com.foodie.delivery.dto.response.DeliveryPartnerReviewsResponseDto(
                 avgRating,
@@ -1256,7 +1313,6 @@ public class DeliveryServiceImpl implements DeliveryService {
                 positivePct,
                 breakdown,
                 compliments,
-                items
-        );
+                items);
     }
 }

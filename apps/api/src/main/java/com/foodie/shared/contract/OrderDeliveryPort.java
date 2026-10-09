@@ -5,7 +5,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Sole legal way Delivery drives order delivery transitions (Phase3 §2.8 / §10.7–§10.9).
+ * Sole legal way Delivery drives order delivery transitions (Phase3 §2.8 /
+ * §10.7–§10.9).
  */
 public interface OrderDeliveryPort {
 
@@ -27,7 +28,7 @@ public interface OrderDeliveryPort {
             UUID deliveryPartnerId,
             UUID addressId,
             java.time.Instant foodReadyAt,
-            java.time.Instant assignmentScheduledAt
-    ) {
+            java.time.Instant assignmentScheduledAt,
+            java.math.BigDecimal totalAmount) {
     }
 }

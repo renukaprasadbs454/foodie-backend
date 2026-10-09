@@ -29,8 +29,7 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     public OrderDeliveryPortImpl(
             OrderRepository orderRepository,
             OrderStatusEventRepository orderStatusEventRepository,
-            ApplicationEventPublisher eventPublisher
-    ) {
+            ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.orderStatusEventRepository = orderStatusEventRepository;
         this.eventPublisher = eventPublisher;
@@ -48,8 +47,8 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
                         order.getDeliveryPartnerId(),
                         order.getAddressId(),
                         order.getFoodReadyAt(),
-                        order.getAssignmentScheduledAt()
-                ));
+                        order.getAssignmentScheduledAt(),
+                        order.getTotalAmount()));
     }
 
     @Override
@@ -64,7 +63,8 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     @Transactional
     public void markPickedUpAndOutForDelivery(UUID orderId) {
         Order order = require(orderId);
-        if (order.getStatus() != OrderStatus.PICKED_UP && order.getStatus() != OrderStatus.OUT_FOR_DELIVERY && order.getStatus() != OrderStatus.DELIVERED) {
+        if (order.getStatus() != OrderStatus.PICKED_UP && order.getStatus() != OrderStatus.OUT_FOR_DELIVERY
+                && order.getStatus() != OrderStatus.DELIVERED) {
             apply(order, OrderStatus.PICKED_UP, null);
         }
         if (order.getStatus() != OrderStatus.OUT_FOR_DELIVERY && order.getStatus() != OrderStatus.DELIVERED) {
@@ -91,13 +91,12 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     }
 
     private void apply(Order order, OrderStatus target, String reason) {
-        OrderStateMachine.Decision decision =
-                OrderStateMachine.evaluate(order.getStatus(), target, OrderActorType.SYSTEM);
+        OrderStateMachine.Decision decision = OrderStateMachine.evaluate(order.getStatus(), target,
+                OrderActorType.SYSTEM);
         if (decision != OrderStateMachine.Decision.ALLOW) {
             throw new UnprocessableEntityException(
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
-                    "Transition from " + order.getStatus() + " to " + target + " is not allowed."
-            );
+                    "Transition from " + order.getStatus() + " to " + target + " is not allowed.");
         }
         OrderStatus from = order.getStatus();
         order.transitionTo(target);
