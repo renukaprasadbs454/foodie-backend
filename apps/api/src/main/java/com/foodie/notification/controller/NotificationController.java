@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,6 +50,16 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 
+    @GetMapping("/unread-count")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get count of unread notifications")
+    public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCount(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        long count = notificationService.countUnread(principal.userId());
+        return ResponseEntity.ok(ApiResponse.success(Map.of("unreadCount", count)));
+    }
+
     @PatchMapping("/{id}/read")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Mark notification as read (own only)")
@@ -58,6 +69,16 @@ public class NotificationController {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 notificationService.markRead(principal.userId(), id)));
+    }
+
+    @PatchMapping("/read-all")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Mark all notifications as read for current user")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> markAllRead(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        int updated = notificationService.markAllRead(principal.userId());
+        return ResponseEntity.ok(ApiResponse.success(Map.of("markedReadCount", updated)));
     }
 
     @GetMapping("/preferences")

@@ -371,12 +371,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             return deliveryMapper.toAssignment(assignment);
         }
         if (assignment.getStatus() != DeliveryAssignmentStatus.PICKED_UP) {
-            assignment.markPickupVerified();
-            try {
-                orderDeliveryPort.markPickedUpAndOutForDelivery(assignment.getOrderId());
-            } catch (Exception e) {
-                log.warn("Auto-pickup transition warning on verifyDelivery: {}", e.getMessage());
-            }
+            throw new UnprocessableEntityException(
+                    ErrorCode.ILLEGAL_STATUS_TRANSITION,
+                    "Delivery verification requires PICKED_UP assignment.");
         }
 
         boolean isStaticOtp = "000000".equals(request.otp()) || "123456".equals(request.otp());
