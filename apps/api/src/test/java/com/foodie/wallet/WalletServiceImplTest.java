@@ -105,6 +105,28 @@ class WalletServiceImplTest {
 
                 assertThat(balance.balance()).isEqualByComparingTo("120.50");
                 assertThat(balance.walletAccountId()).isEqualTo(account.getId());
+                assertThat(balance.processingWithdrawals()).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        void getBalance_returnsAvailableBalanceAndProcessingAmountSeparately() {
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.applyCredit(new BigDecimal("1500.00")); // available balance after ₹500 withdrawal request
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(accountId), any()))
+                                .thenReturn(new BigDecimal("500.00"));
+
+                WalletBalanceResponseDto balance = service.getBalance(credentialId, UserType.DELIVERY_PARTNER);
+
+                assertThat(balance.balance()).isEqualByComparingTo("1500.00");
+                assertThat(balance.processingWithdrawals()).isEqualByComparingTo("500.00");
+                // Confirm no double deduction occurs
+                assertThat(balance.balance()).isEqualByComparingTo("1500.00");
         }
 
         @Test
@@ -190,8 +212,6 @@ class WalletServiceImplTest {
                 when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
                                 OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
-                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
-                                .thenReturn(BigDecimal.ZERO);
 
                 assertThatThrownBy(() -> service.requestPayout(
                                 credentialId,
@@ -205,7 +225,7 @@ class WalletServiceImplTest {
         }
 
         @Test
-        void requestPayout_createsRequestedWithoutLedgerDebit() {
+        void requestPayout_deductsWalletBalanceImmediatelyAndRecordsLedgerDebit() {
                 WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
                 account.applyCredit(new BigDecimal("100.00"));
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
@@ -213,9 +233,8 @@ class WalletServiceImplTest {
                 when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(
                                 OwnerType.DELIVERY_PARTNER, partnerId))
                                 .thenReturn(Optional.of(account));
-                when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(account.getId()), any()))
-                                .thenReturn(BigDecimal.ZERO);
                 when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 PayoutResponseDto response = service.requestPayout(
                                 credentialId, new PayoutRequestDto(new BigDecimal("40.00"), "John Doe", "1234567890",
@@ -224,8 +243,9 @@ class WalletServiceImplTest {
 
                 assertThat(response.status()).isEqualTo(PayoutStatus.REQUESTED);
                 assertThat(response.amount()).isEqualByComparingTo("40.00");
-                assertThat(account.getBalance()).isEqualByComparingTo("100.00");
-                verify(ledgerEntryRepository, never()).save(any());
+                assertThat(account.getBalance()).isEqualByComparingTo("60.00");
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+                verify(eventPublisher).publishEvent(any(com.foodie.shared.event.WalletDebitedEvent.class));
                 verify(eventPublisher).publishEvent(any(PayoutRequestedEvent.class));
                 verify(payoutIdempotencyStore).store(eq("pay-key-1"), any());
         }
@@ -313,7 +333,30 @@ class WalletServiceImplTest {
         }
 
         @Test
-        void approvePayout_completesAndDebitsWalletBalance() {
+        void approvePayout_completesWithoutDoubleDebitIfAlreadyDebited() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("1500.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+                when(walletAccountRepository.findByIdForUpdate(accountId)).thenReturn(Optional.of(account));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.PAYOUT, payoutId))
+                                .thenReturn(Optional.of(LedgerEntry.debit(accountId, new BigDecimal("500.00"), LedgerReferenceType.PAYOUT, payoutId)));
+
+                PayoutResponseDto result = service.approvePayout(payoutId);
+
+                assertThat(result.status()).isEqualTo(PayoutStatus.COMPLETED);
+                assertThat(account.getBalance()).isEqualByComparingTo("1500.00");
+                verify(walletAccountRepository, never()).save(any(WalletAccount.class));
+        }
+
+        @Test
+        void approvePayout_completesAndDebitsWalletBalanceIfNotYetDebited() {
                 UUID payoutId = UUID.randomUUID();
                 UUID accountId = UUID.randomUUID();
                 WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
@@ -326,6 +369,8 @@ class WalletServiceImplTest {
                 when(walletAccountRepository.findByIdForUpdate(accountId)).thenReturn(Optional.of(account));
                 when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
                 when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.PAYOUT, payoutId))
+                                .thenReturn(Optional.empty());
                 when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 PayoutResponseDto result = service.approvePayout(payoutId);
@@ -353,6 +398,8 @@ class WalletServiceImplTest {
                 when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
                 when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
                 when(walletAccountRepository.save(any(WalletAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.PAYOUT, payoutId))
+                                .thenReturn(Optional.empty());
                 when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 PayoutResponseDto result = service.completeApprovedPayout(credentialId, payoutId);
@@ -363,17 +410,92 @@ class WalletServiceImplTest {
         }
 
         @Test
-        void rejectPayout_marksRejected() {
+        void rejectPayout_refundsWalletBalanceExactlyOnce() {
                 UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
                 WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
-                Payout payout = Payout.request(account.getId(), new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("1500.00"));
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                org.springframework.test.util.ReflectionTestUtils.setField(payout, "id", payoutId);
+
                 when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+                when(walletAccountRepository.findByIdForUpdate(accountId)).thenReturn(Optional.of(account));
                 when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.PAYOUT, payoutId))
+                                .thenReturn(Optional.of(LedgerEntry.debit(accountId, new BigDecimal("500.00"), LedgerReferenceType.PAYOUT, payoutId)));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.REFUND, payoutId))
+                                .thenReturn(Optional.empty());
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 PayoutResponseDto result = service.rejectPayout(payoutId, "Fraudulent activity detected");
 
                 assertThat(result.status()).isEqualTo(PayoutStatus.REJECTED);
                 assertThat(payout.getFailureReason()).isEqualTo("Fraudulent activity detected");
+                assertThat(account.getBalance()).isEqualByComparingTo("2000.00");
+                verify(walletAccountRepository).save(account);
+                verify(ledgerEntryRepository).save(any(LedgerEntry.class));
+                verify(eventPublisher).publishEvent(any(com.foodie.shared.event.WalletCreditedEvent.class));
+        }
+
+        @Test
+        void rejectPayout_duplicateCallThrowsIllegalStatusTransition() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                payout.markRejected("First rejection");
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.rejectPayout(payoutId, "Second rejection"))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
+        }
+
+        @Test
+        void approvePayout_duplicateCallThrowsIllegalStatusTransition() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                payout.markCompletedDirect("PAY-TEST");
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.approvePayout(payoutId))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
+        }
+
+        @Test
+        void approvePayout_whenAlreadyRejected_throwsIllegalStatusTransition() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                payout.markRejected("Rejected by Admin");
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.approvePayout(payoutId))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
+        }
+
+        @Test
+        void rejectPayout_whenAlreadyCompleted_throwsIllegalStatusTransition() {
+                UUID payoutId = UUID.randomUUID();
+                UUID accountId = UUID.randomUUID();
+                Payout payout = Payout.request(accountId, new BigDecimal("500.00"));
+                payout.markCompletedDirect("PAY-TEST");
+
+                when(payoutRepository.findById(payoutId)).thenReturn(Optional.of(payout));
+
+                assertThatThrownBy(() -> service.rejectPayout(payoutId, "Trying to reject completed"))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
         }
 
         @Test
@@ -442,5 +564,66 @@ class WalletServiceImplTest {
                                 .isInstanceOf(UnprocessableEntityException.class)
                                 .extracting(ex -> ((UnprocessableEntityException) ex).getErrorCode())
                                 .isEqualTo(ErrorCode.INSUFFICIENT_BALANCE);
+        }
+
+        @Test
+        void payoutLifecycle_requestDeductsBalance_rejectRefundsOnce_subsequentCallsBlocked() {
+                UUID accountId = UUID.randomUUID();
+                WalletAccount account = WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+                org.springframework.test.util.ReflectionTestUtils.setField(account, "id", accountId);
+                account.setBalance(new BigDecimal("2000.00"));
+
+                when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
+                                .thenReturn(Optional.of(partnerId));
+                when(walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(OwnerType.DELIVERY_PARTNER, partnerId))
+                                .thenReturn(Optional.of(account));
+                when(walletAccountRepository.findByIdForUpdate(accountId))
+                                .thenReturn(Optional.of(account));
+                when(payoutRepository.save(any(Payout.class))).thenAnswer(inv -> {
+                        Payout p = inv.getArgument(0);
+                        if (p.getId() == null) {
+                                org.springframework.test.util.ReflectionTestUtils.setField(p, "id", UUID.randomUUID());
+                        }
+                        return p;
+                });
+                when(ledgerEntryRepository.save(any(LedgerEntry.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Step 1: Request ₹300 payout -> balance immediately deducted to ₹1700
+                PayoutResponseDto requestedPayout = service.requestPayout(
+                                credentialId,
+                                new PayoutRequestDto(new BigDecimal("300.00"), "Chintu", "9638527410", "CICD123", "CICD"),
+                                null);
+                assertThat(requestedPayout.status()).isEqualTo(PayoutStatus.REQUESTED);
+                assertThat(account.getBalance()).isEqualByComparingTo("1700.00");
+
+                UUID payoutId = requestedPayout.payoutId();
+                Payout payoutEntity = Payout.request(accountId, new BigDecimal("300.00"), "Chintu", "9638527410", "CICD123", "CICD");
+                org.springframework.test.util.ReflectionTestUtils.setField(payoutEntity, "id", payoutId);
+
+                when(payoutRepository.findByIdForUpdate(payoutId)).thenReturn(Optional.of(payoutEntity));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.PAYOUT, payoutId))
+                                .thenReturn(Optional.of(LedgerEntry.debit(accountId, new BigDecimal("300.00"), LedgerReferenceType.PAYOUT, payoutId)));
+                when(ledgerEntryRepository.findByReferenceTypeAndReferenceId(LedgerReferenceType.REFUND, payoutId))
+                                .thenReturn(Optional.empty());
+
+                // Step 2: Admin rejects payout -> ₹300 refunded back to ₹2000 exactly once
+                PayoutResponseDto rejectedPayout = service.rejectPayout(payoutId, "Admin rejection test");
+                assertThat(rejectedPayout.status()).isEqualTo(PayoutStatus.REJECTED);
+                assertThat(payoutEntity.getStatus()).isEqualTo(PayoutStatus.REJECTED);
+                assertThat(account.getBalance()).isEqualByComparingTo("2000.00");
+
+                // Step 3: Repeated reject attempt throws and does not refund again
+                assertThatThrownBy(() -> service.rejectPayout(payoutId, "Duplicate rejection"))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
+                assertThat(account.getBalance()).isEqualByComparingTo("2000.00");
+
+                // Step 4: Attempt to approve rejected payout is blocked
+                assertThatThrownBy(() -> service.approvePayout(payoutId))
+                                .isInstanceOf(BadRequestException.class)
+                                .extracting(ex -> ((BadRequestException) ex).getErrorCode())
+                                .isEqualTo(ErrorCode.ILLEGAL_STATUS_TRANSITION);
+                assertThat(account.getBalance()).isEqualByComparingTo("2000.00");
         }
 }

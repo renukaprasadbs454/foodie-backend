@@ -16,6 +16,10 @@ public final class WalletMapper {
         return new WalletBalanceResponseDto(account.getId(), account.getBalance());
     }
 
+    public static WalletBalanceResponseDto toBalance(WalletAccount account, java.math.BigDecimal processingWithdrawals) {
+        return new WalletBalanceResponseDto(account.getId(), account.getBalance(), processingWithdrawals);
+    }
+
     public static LedgerEntryResponseDto toLedger(LedgerEntry entry, String status) {
         return new LedgerEntryResponseDto(
                 entry.getId(),

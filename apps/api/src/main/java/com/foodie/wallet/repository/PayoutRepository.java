@@ -39,4 +39,8 @@ public interface PayoutRepository extends JpaRepository<Payout, UUID> {
         java.util.Optional<Payout> findByProviderAndProviderPayoutId(String provider, String providerPayoutId);
 
         java.util.Optional<Payout> findByProviderReferenceId(String providerReferenceId);
+
+        @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+        @Query("select p from Payout p where p.id = :id")
+        java.util.Optional<Payout> findByIdForUpdate(@Param("id") UUID id);
 }

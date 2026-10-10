@@ -184,4 +184,139 @@ class DeliveryIncentiveServiceImplTest {
         assertThat(dailyOffer.remaining()).isEqualTo(7);
         assertThat(dailyOffer.status()).isEqualTo("In Progress");
     }
+
+    @Test
+    void getIncentivesProgress_hidesOffersWhenToggledOffInAdminConfig() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        // Turn OFF peakHourBonus and rainBonus, keep others ON
+        String jsonConfig = """
+        {
+          "pricingBasis": "UNIVERSAL",
+          "universalConfig": {
+            "minPrice": 200,
+            "moneyPerKm": 25,
+            "incentives": [
+              { "id": "basePay", "title": "Base Pay per Order", "value": 50, "unit": "₹ / order", "active": true, "description": "Standard base pay", "category": "Base & Distance" },
+              { "id": "peakHourBonus", "title": "Peak Hour Bonus", "value": 100, "unit": "₹ / order", "active": false, "description": "Peak hour surge", "category": "Weather & Surge" },
+              { "id": "dailyTargetBonus", "title": "Daily Target Bonus", "value": 150, "unit": "₹ / day", "active": true, "description": "15 orders target", "category": "Target & Mileage" },
+              { "id": "weeklyTargetBonus", "title": "Weekly Target Bonus", "value": 800, "unit": "₹ / week", "active": true, "description": "80 orders target", "category": "Target & Mileage" },
+              { "id": "longDistanceBonus", "title": "Long-Distance Bonus", "value": 15, "unit": "₹ / extra km", "active": true, "description": "Over 5 km", "category": "Base & Distance" },
+              { "id": "rainBonus", "title": "Rain/Bad Weather Bonus", "value": 70, "unit": "₹ / order", "active": false, "description": "Rain surge", "category": "Weather & Surge" },
+              { "id": "referralBonus", "title": "Referral Bonus", "value": 500, "unit": "₹ / referral", "active": true, "description": "Referral reward", "category": "Reward & Rating" },
+              { "id": "performanceBonus", "title": "Performance/Rating Bonus", "value": 250, "unit": "₹ / week", "active": true, "description": "Weekly rating 4.85+", "category": "Reward & Rating" }
+            ]
+          }
+        }
+        """;
+
+        DeliveryPricingConfig configWithToggles = new DeliveryPricingConfig(
+                UUID.fromString("99999999-9999-9999-9999-999999999999"),
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "UNIVERSAL",
+                jsonConfig,
+                Instant.now(),
+                Instant.now(),
+                null
+        );
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(configWithToggles));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+
+        // Active should be 6, and peakHourBonus & rainBonus must NOT be present
+        assertThat(progress.offers()).hasSize(6);
+        assertThat(progress.offers().stream().map(o -> o.id()).toList())
+                .containsExactlyInAnyOrder("basePay", "dailyTargetBonus", "weeklyTargetBonus", "longDistanceBonus", "referralBonus", "performanceBonus");
+        assertThat(progress.offers().stream().anyMatch(o -> "peakHourBonus".equals(o.id()))).isFalse();
+        assertThat(progress.offers().stream().anyMatch(o -> "rainBonus".equals(o.id()))).isFalse();
+    }
+
+    @Test
+    void getIncentivesProgress_testEverySingleIncentiveToggleIndividually() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        List<String> allEightIds = List.of(
+                "basePay", "peakHourBonus", "dailyTargetBonus", "weeklyTargetBonus",
+                "longDistanceBonus", "rainBonus", "referralBonus", "performanceBonus"
+        );
+
+        for (String targetOffId : allEightIds) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\"pricingBasis\":\"UNIVERSAL\",\"universalConfig\":{\"minPrice\":200,\"moneyPerKm\":25,\"incentives\":[");
+            for (int i = 0; i < allEightIds.size(); i++) {
+                String id = allEightIds.get(i);
+                boolean isActive = !id.equals(targetOffId);
+                if (i > 0) sb.append(",");
+                sb.append(String.format("{\"id\":\"%s\",\"title\":\"Test %s\",\"value\":100,\"unit\":\"₹ / order\",\"active\":%b,\"description\":\"Desc %s\",\"category\":\"Base & Distance\"}", id, id, isActive, id));
+            }
+            sb.append("]}}");
+
+            DeliveryPricingConfig customConfig = new DeliveryPricingConfig(
+                    UUID.fromString("99999999-9999-9999-9999-999999999999"),
+                    new BigDecimal("200.00"),
+                    new BigDecimal("25.00"),
+                    "UNIVERSAL",
+                    sb.toString(),
+                    Instant.now(),
+                    Instant.now(),
+                    null
+            );
+            when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(customConfig));
+
+            IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+
+            assertThat(progress.offers()).hasSize(7);
+            assertThat(progress.offers().stream().anyMatch(o -> targetOffId.equals(o.id()))).isFalse();
+
+            // All other 7 must be visible with correct details
+            for (String otherId : allEightIds) {
+                if (!otherId.equals(targetOffId)) {
+                    var offer = progress.offers().stream().filter(o -> otherId.equals(o.id())).findFirst().orElse(null);
+                    assertThat(offer).isNotNull();
+                    assertThat(offer.title()).isEqualTo("Test " + otherId);
+                    assertThat(offer.rewardAmount()).isEqualByComparingTo("100.00");
+                }
+            }
+        }
+    }
+
+    @Test
+    void getIncentivesProgress_allOffersHiddenWhenAllToggledOff() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        String jsonConfig = """
+        {
+          "pricingBasis": "UNIVERSAL",
+          "universalConfig": {
+            "minPrice": 200,
+            "moneyPerKm": 25,
+            "incentives": [
+              { "id": "basePay", "active": false },
+              { "id": "peakHourBonus", "active": false },
+              { "id": "dailyTargetBonus", "active": false },
+              { "id": "weeklyTargetBonus", "active": false },
+              { "id": "longDistanceBonus", "active": false },
+              { "id": "rainBonus", "active": false },
+              { "id": "referralBonus", "active": false },
+              { "id": "performanceBonus", "active": false }
+            ]
+          }
+        }
+        """;
+
+        DeliveryPricingConfig configAllOff = new DeliveryPricingConfig(
+                UUID.fromString("99999999-9999-9999-9999-999999999999"),
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "UNIVERSAL",
+                jsonConfig,
+                Instant.now(),
+                Instant.now(),
+                null
+        );
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(configAllOff));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        assertThat(progress.offers()).isEmpty();
+    }
 }

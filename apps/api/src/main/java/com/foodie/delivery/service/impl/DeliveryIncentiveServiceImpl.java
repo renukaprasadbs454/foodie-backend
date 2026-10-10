@@ -416,6 +416,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String validity;
 
             switch (rule.id()) {
+                case "basePay" -> {
+                    target = 1;
+                    isEarned = (tripsToday > 0) || earnedMap.containsKey(rule.id());
+                    currentProgress = isEarned ? 1 : 0;
+                    remaining = isEarned ? 0 : 1;
+                    status = isEarned ? "Completed" : "In Progress";
+                    validity = "Per Order Completed";
+                }
                 case "dailyTargetBonus" -> {
                     target = parseTargetFromDescription(rule.description(), 15);
                     currentProgress = (int) Math.min(tripsToday, target);
@@ -513,8 +521,13 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String basis = root.has("pricingBasis") ? root.get("pricingBasis").asText("UNIVERSAL") : "UNIVERSAL";
                 if ("ZONE".equalsIgnoreCase(basis) && root.has("zoneConfigs")) {
                     JsonNode zoneConfigs = root.get("zoneConfigs");
-                    // Take first or active zone
-                    if (zoneConfigs.fields().hasNext()) {
+                    if (root.has("selectedZoneId") && zoneConfigs.has(root.get("selectedZoneId").asText())) {
+                        JsonNode sel = zoneConfigs.get(root.get("selectedZoneId").asText());
+                        if (sel.has("incentives")) {
+                            incentivesNode = sel.get("incentives");
+                        }
+                    }
+                    if (incentivesNode == null && zoneConfigs.fields().hasNext()) {
                         Map.Entry<String, JsonNode> entry = zoneConfigs.fields().next();
                         if (entry.getValue().has("incentives")) {
                             incentivesNode = entry.getValue().get("incentives");
@@ -526,13 +539,21 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     incentivesNode = root.get("universalConfig").get("incentives");
                 }
 
+                if (incentivesNode == null && root.has("incentives") && root.get("incentives").isArray()) {
+                    incentivesNode = root.get("incentives");
+                }
+
                 if (incentivesNode != null && incentivesNode.isArray()) {
                     for (JsonNode item : incentivesNode) {
                         String id = item.has("id") ? item.get("id").asText() : "";
                         String title = item.has("title") ? item.get("title").asText() : "";
                         BigDecimal value = item.has("value") ? new BigDecimal(item.get("value").asText("0")) : BigDecimal.ZERO;
                         String unit = item.has("unit") ? item.get("unit").asText("₹ / order") : "₹ / order";
-                        boolean active = !item.has("active") || item.get("active").asBoolean(true);
+                        boolean active = true;
+                        if (item.has("active")) {
+                            JsonNode activeNode = item.get("active");
+                            active = activeNode.isBoolean() ? activeNode.asBoolean() : !"false".equalsIgnoreCase(activeNode.asText());
+                        }
                         String desc = item.has("description") ? item.get("description").asText("") : "";
                         String category = item.has("category") ? item.get("category").asText("Reward & Rating") : "Reward & Rating";
                         String condition = item.has("condition") && !item.get("condition").asText().isBlank()

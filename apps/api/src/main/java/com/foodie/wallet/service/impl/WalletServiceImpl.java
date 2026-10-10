@@ -126,7 +126,16 @@ public class WalletServiceImpl implements WalletService {
             account.setBalance(new BigDecimal("2000.00"));
             account = walletAccountRepository.save(account);
         }
-        return WalletMapper.toBalance(account);
+        BigDecimal processingWithdrawals = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        if (account.getId() != null) {
+            BigDecimal pendingSum = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
+                    account.getId(),
+                    EnumSet.of(PayoutStatus.REQUESTED, PayoutStatus.PROCESSING));
+            if (pendingSum != null) {
+                processingWithdrawals = pendingSum.setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+        return WalletMapper.toBalance(account, processingWithdrawals);
     }
 
     @Override
@@ -161,7 +170,8 @@ public class WalletServiceImpl implements WalletService {
     public PayoutResponseDto completeApprovedPayout(UUID userCredentialId, UUID payoutId) {
         UUID partnerId = requirePartnerId(userCredentialId);
         WalletAccount account = getOrCreateForUpdate(OwnerType.DELIVERY_PARTNER, partnerId);
-        Payout payout = payoutRepository.findById(payoutId)
+        Payout payout = payoutRepository.findByIdForUpdate(payoutId)
+                .or(() -> payoutRepository.findById(payoutId))
                 .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
 
         if (!payout.getWalletAccountId().equals(account.getId())) {
@@ -180,27 +190,32 @@ public class WalletServiceImpl implements WalletService {
             throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout must be approved by admin before completing withdrawal. Current status: " + payout.getStatus());
         }
 
-        if (account.getBalance().compareTo(payout.getAmount()) < 0) {
-            throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+        // Check if this payout was already debited (e.g. debited immediately on request)
+        boolean alreadyDebited = ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                LedgerReferenceType.PAYOUT, payout.getId()).isPresent();
+
+        if (!alreadyDebited) {
+            if (account.getBalance().compareTo(payout.getAmount()) < 0) {
+                throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+            }
+            account.applyDebit(payout.getAmount());
+            walletAccountRepository.save(account);
+
+            LedgerEntry ledgerEntry = ledgerEntryRepository.save(
+                    LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
+
+            eventPublisher.publishEvent(WalletDebitedEvent.of(
+                    account.getId(),
+                    OwnerType.DELIVERY_PARTNER,
+                    partnerId,
+                    payout.getAmount(),
+                    LedgerReferenceType.PAYOUT,
+                    payout.getId(),
+                    ledgerEntry.getId()));
         }
 
-        payout.markCompletedDirect("WTH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        payout.markCompletedDirect("PAY-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         payoutRepository.save(payout);
-
-        account.applyDebit(payout.getAmount());
-        walletAccountRepository.save(account);
-
-        LedgerEntry ledgerEntry = ledgerEntryRepository.save(
-                LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
-
-        eventPublisher.publishEvent(WalletDebitedEvent.of(
-                account.getId(),
-                OwnerType.DELIVERY_PARTNER,
-                partnerId,
-                payout.getAmount(),
-                LedgerReferenceType.PAYOUT,
-                payout.getId(),
-                ledgerEntry.getId()));
 
         eventPublisher.publishEvent(PayoutCompletedEvent.of(
                 payout.getId(),
@@ -217,7 +232,8 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public PayoutResponseDto approvePayout(UUID payoutId) {
-        Payout payout = payoutRepository.findById(payoutId)
+        Payout payout = payoutRepository.findByIdForUpdate(payoutId)
+                .or(() -> payoutRepository.findById(payoutId))
                 .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
         if (payout.getStatus() == PayoutStatus.COMPLETED) {
             throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout is already completed.");
@@ -232,27 +248,32 @@ public class WalletServiceImpl implements WalletService {
         WalletAccount account = walletAccountRepository.findByIdForUpdate(payout.getWalletAccountId())
                 .orElseThrow(() -> new ResourceNotFoundException("Wallet account not found: " + payout.getWalletAccountId()));
 
-        if (account.getBalance().compareTo(payout.getAmount()) < 0) {
-            throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+        // Check if this payout was already debited (e.g. debited immediately on request)
+        boolean alreadyDebited = ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                LedgerReferenceType.PAYOUT, payout.getId()).isPresent();
+
+        if (!alreadyDebited) {
+            if (account.getBalance().compareTo(payout.getAmount()) < 0) {
+                throw new UnprocessableEntityException(ErrorCode.INSUFFICIENT_BALANCE, "Insufficient wallet balance to complete withdrawal.");
+            }
+            account.applyDebit(payout.getAmount());
+            walletAccountRepository.save(account);
+
+            LedgerEntry ledgerEntry = ledgerEntryRepository.save(
+                    LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
+
+            eventPublisher.publishEvent(WalletDebitedEvent.of(
+                    account.getId(),
+                    account.getOwnerType(),
+                    account.getOwnerId(),
+                    payout.getAmount(),
+                    LedgerReferenceType.PAYOUT,
+                    payout.getId(),
+                    ledgerEntry.getId()));
         }
 
         payout.markCompletedDirect("PAY-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         payoutRepository.save(payout);
-
-        account.applyDebit(payout.getAmount());
-        walletAccountRepository.save(account);
-
-        LedgerEntry ledgerEntry = ledgerEntryRepository.save(
-                LedgerEntry.debit(account.getId(), payout.getAmount(), LedgerReferenceType.PAYOUT, payout.getId()));
-
-        eventPublisher.publishEvent(WalletDebitedEvent.of(
-                account.getId(),
-                account.getOwnerType(),
-                account.getOwnerId(),
-                payout.getAmount(),
-                LedgerReferenceType.PAYOUT,
-                payout.getId(),
-                ledgerEntry.getId()));
 
         eventPublisher.publishEvent(PayoutCompletedEvent.of(
                 payout.getId(),
@@ -269,13 +290,48 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public PayoutResponseDto rejectPayout(UUID payoutId, String reason) {
-        Payout payout = payoutRepository.findById(payoutId)
+        Payout payout = payoutRepository.findByIdForUpdate(payoutId)
+                .or(() -> payoutRepository.findById(payoutId))
                 .orElseThrow(() -> new ResourceNotFoundException("Payout not found: " + payoutId));
-        if (payout.getStatus() != PayoutStatus.REQUESTED && payout.getStatus() != PayoutStatus.PROCESSING) {
+        if (payout.getStatus() == PayoutStatus.REJECTED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Payout is already rejected.");
+        }
+        if (payout.getStatus() == PayoutStatus.COMPLETED) {
+            throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Cannot reject a completed payout.");
+        }
+        if (payout.getStatus() != PayoutStatus.REQUESTED && payout.getStatus() != PayoutStatus.PROCESSING && payout.getStatus() != PayoutStatus.APPROVED) {
             throw new BadRequestException(ErrorCode.ILLEGAL_STATUS_TRANSITION, "Only pending payouts can be rejected. Current status: " + payout.getStatus());
         }
+
+        WalletAccount account = walletAccountRepository.findByIdForUpdate(payout.getWalletAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("Wallet account not found: " + payout.getWalletAccountId()));
+
         payout.markRejected(reason != null && !reason.isBlank() ? reason : "Rejected by Admin");
         payoutRepository.save(payout);
+
+        // If this payout was debited from the wallet balance on request, refund it exactly once
+        boolean wasDebited = ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                LedgerReferenceType.PAYOUT, payout.getId()).isPresent();
+        boolean alreadyRefunded = ledgerEntryRepository.findByReferenceTypeAndReferenceId(
+                LedgerReferenceType.REFUND, payout.getId()).isPresent();
+
+        if (wasDebited && !alreadyRefunded) {
+            account.applyCredit(payout.getAmount());
+            walletAccountRepository.save(account);
+
+            LedgerEntry refundEntry = ledgerEntryRepository.save(
+                    LedgerEntry.credit(account.getId(), payout.getAmount(), LedgerReferenceType.REFUND, payout.getId()));
+
+            eventPublisher.publishEvent(WalletCreditedEvent.of(
+                    account.getId(),
+                    account.getOwnerType(),
+                    account.getOwnerId(),
+                    payout.getAmount(),
+                    LedgerReferenceType.REFUND,
+                    payout.getId(),
+                    refundEntry.getId()));
+        }
+
         return WalletMapper.toPayout(payout);
     }
 
@@ -303,7 +359,17 @@ public class WalletServiceImpl implements WalletService {
         }
 
         List<LedgerEntryResponseDto> items = result.getContent().stream()
-                .map(e -> WalletMapper.toLedger(e, null))
+                .map(e -> {
+                    String status = null;
+                    if (e.getReferenceType() == LedgerReferenceType.PAYOUT) {
+                        status = payoutRepository.findById(e.getReferenceId())
+                                .map(p -> p.getStatus().name())
+                                .orElse(null);
+                    } else if (e.getReferenceType() == LedgerReferenceType.REFUND) {
+                        status = "REFUNDED";
+                    }
+                    return WalletMapper.toLedger(e, status);
+                })
                 .toList();
         PaginationMeta meta = new PaginationMeta(
                 result.getNumber(),
@@ -330,12 +396,7 @@ public class WalletServiceImpl implements WalletService {
         WalletAccount account = getOrCreateForUpdate(OwnerType.DELIVERY_PARTNER, partnerId);
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal openPayouts = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
-                account.getId(), OPEN_PAYOUT_STATUSES);
-        if (openPayouts == null)
-            openPayouts = BigDecimal.ZERO;
-        BigDecimal available = account.getBalance().subtract(openPayouts);
-        if (amount.compareTo(available) > 0) {
+        if (amount.compareTo(account.getBalance()) > 0) {
             throw new UnprocessableEntityException(
                     ErrorCode.INSUFFICIENT_BALANCE,
                     "Requested payout exceeds available wallet balance.");
@@ -363,10 +424,26 @@ public class WalletServiceImpl implements WalletService {
             }
         }
 
-        // REQUESTED does not debit the ledger — bank settlement (out of Module 9 scope)
-        // will.
         Payout payout = payoutRepository.save(Payout.request(account.getId(), amount, accHolder,
                 accNumber, ifsc, bName));
+
+        // Deduct immediately from available wallet balance
+        account.applyDebit(amount);
+        walletAccountRepository.save(account);
+
+        // Record debit ledger entry immediately so transaction history is synchronized
+        LedgerEntry ledgerEntry = ledgerEntryRepository.save(
+                LedgerEntry.debit(account.getId(), amount, LedgerReferenceType.PAYOUT, payout.getId()));
+
+        eventPublisher.publishEvent(WalletDebitedEvent.of(
+                account.getId(),
+                OwnerType.DELIVERY_PARTNER,
+                partnerId,
+                amount,
+                LedgerReferenceType.PAYOUT,
+                payout.getId(),
+                ledgerEntry.getId()));
+
         PayoutResponseDto response = WalletMapper.toPayout(payout);
         eventPublisher.publishEvent(PayoutRequestedEvent.of(
                 payout.getId(), account.getId(), partnerId, amount));

@@ -67,7 +67,12 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
             try {
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("pricingBasis", pricingBasis);
-                if (request.universalConfig() != null) payload.put("universalConfig", request.universalConfig());
+                if (request.universalConfig() != null) {
+                    payload.put("universalConfig", request.universalConfig());
+                    if (request.universalConfig() instanceof Map<?, ?> map && map.containsKey("incentives")) {
+                        payload.put("incentives", map.get("incentives"));
+                    }
+                }
                 if (request.zoneConfigs() != null) payload.put("zoneConfigs", request.zoneConfigs());
                 if (request.zones() != null) payload.put("zones", request.zones());
                 configDataJson = objectMapper.writeValueAsString(payload);
