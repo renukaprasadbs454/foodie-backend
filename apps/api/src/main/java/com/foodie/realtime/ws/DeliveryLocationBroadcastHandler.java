@@ -20,10 +20,12 @@ public class DeliveryLocationBroadcastHandler {
         messagingTemplate.convertAndSend(
                 "/topic/order/" + event.orderId(),
                 Map.of(
+                        "type", "LOCATION_UPDATE",
                         "lat", event.latitude(),
                         "lng", event.longitude(),
-                        "timestamp", event.occurredAt().toString()
-                )
-        );
+                        "latitude", event.latitude(),
+                        "longitude", event.longitude(),
+                        "location", Map.of("lat", event.latitude(), "lng", event.longitude()),
+                        "timestamp", event.occurredAt().toString()));
     }
 }

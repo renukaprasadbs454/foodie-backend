@@ -123,6 +123,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ErrorCode.FORBIDDEN, "Access denied."));
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.failure(ErrorCode.BAD_REQUEST, "Invalid parameter: " + ex.getName()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnhandled(Exception ex) {
         log.error("Unhandled exception", ex);

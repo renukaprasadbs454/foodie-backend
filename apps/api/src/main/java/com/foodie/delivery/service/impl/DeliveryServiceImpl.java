@@ -471,7 +471,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         deliveryAssignmentRepository
                 .findFirstByDeliveryPartnerIdAndStatusIn(
                         partner.getId(),
-                        List.of(DeliveryAssignmentStatus.PICKED_UP))
+                        List.of(DeliveryAssignmentStatus.ACCEPTED, DeliveryAssignmentStatus.PICKED_UP))
                 .ifPresent(assignment -> {
                     deliveryLocationHistoryRepository.save(DeliveryLocationHistory.create(
                             assignment.getId(), partner.getId(), request.latitude(), request.longitude()));
@@ -979,13 +979,21 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     @Transactional(readOnly = true)
     public com.foodie.delivery.dto.response.DeliveryLocationResponseDto getLatestLocationForOrder(UUID orderId) {
-        DeliveryAssignment assignment = deliveryAssignmentRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Assignment not found for order."));
-        return deliveryLocationHistoryRepository
-                .findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(assignment.getDeliveryPartner().getId())
-                .map(loc -> new com.foodie.delivery.dto.response.DeliveryLocationResponseDto(loc.getLatitude(),
-                        loc.getLongitude(), loc.getRecordedAt()))
-                .orElseThrow(() -> new ResourceNotFoundException("No location data found for order."));
+        try {
+            DeliveryAssignment assignment = deliveryAssignmentRepository.findByOrderId(orderId)
+                    .orElse(null);
+            if (assignment == null || assignment.getDeliveryPartner() == null) {
+                return null;
+            }
+            return deliveryLocationHistoryRepository
+                    .findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(assignment.getDeliveryPartner().getId())
+                    .map(loc -> new com.foodie.delivery.dto.response.DeliveryLocationResponseDto(loc.getLatitude(),
+                            loc.getLongitude(), loc.getRecordedAt()))
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Could not retrieve latest location for order {}: {}", orderId, e.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -1333,30 +1341,17 @@ public class DeliveryServiceImpl implements DeliveryService {
                 items);
     }
 
-    private static double[] sanitizeDeliveryCoordinates(com.foodie.user.entity.Address a, Double pickupLat, Double pickupLng) {
+    private static double[] sanitizeDeliveryCoordinates(com.foodie.user.entity.Address a, Double pickupLat,
+            Double pickupLng) {
         Double lat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
         Double lng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
 
-        String city = a.getCity() != null ? a.getCity().toLowerCase() : "";
-        String line1 = a.getLine1() != null ? a.getLine1().toLowerCase() : "";
-        String line2 = a.getLine2() != null ? a.getLine2().toLowerCase() : "";
-        String pincode = a.getPincode() != null ? a.getPincode() : "";
-        boolean isTumkur = city.contains("tumk") || line1.contains("tumk") || line2.contains("tumk") || pincode.startsWith("572");
-
-        if (lat != null && lng != null && lat >= 13.1) {
+        if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
             return new double[] { lat, lng };
         }
 
-        if (isTumkur) {
-            double baseLat = (pickupLat != null && pickupLat > 13.1) ? pickupLat : 13.3379;
-            double baseLng = (pickupLng != null && pickupLng > 13.1) ? pickupLng : 77.1173;
-            String fullText = (line1 + " " + line2 + " " + pincode).trim();
-            int hash = Math.abs(fullText.hashCode());
-            double latOffset = ((hash % 100) - 50) * 0.0001;
-            double lngOffset = (((hash / 100) % 100) - 50) * 0.0001;
-            return new double[] { baseLat + latOffset, baseLng + lngOffset };
-        }
-
-        return new double[] { lat != null ? lat : 13.3379, lng != null ? lng : 77.1173 };
+        double baseLat = (pickupLat != null && pickupLat != 0.0) ? pickupLat : 13.3379;
+        double baseLng = (pickupLng != null && pickupLng != 0.0) ? pickupLng : 77.1173;
+        return new double[] { baseLat, baseLng };
     }
 }

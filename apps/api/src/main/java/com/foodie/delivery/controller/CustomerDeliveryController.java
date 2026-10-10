@@ -24,17 +24,21 @@ public class CustomerDeliveryController {
 
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
     private final UserCredentialRepository userCredentialRepository;
+    private final com.foodie.delivery.service.DeliveryService deliveryService;
 
     public CustomerDeliveryController(
             DeliveryAssignmentRepository deliveryAssignmentRepository,
-            UserCredentialRepository userCredentialRepository) {
+            UserCredentialRepository userCredentialRepository,
+            com.foodie.delivery.service.DeliveryService deliveryService) {
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
         this.userCredentialRepository = userCredentialRepository;
+        this.deliveryService = deliveryService;
     }
 
     /**
      * Returns live delivery partner details for a given order.
-     * Only returns data when an assignment has been ACCEPTED (or beyond) by a partner.
+     * Only returns data when an assignment has been ACCEPTED (or beyond) by a
+     * partner.
      */
     @GetMapping("/{orderId}/delivery-partner")
     @PreAuthorize("hasRole('CUSTOMER')")
@@ -66,8 +70,8 @@ public class CustomerDeliveryController {
                 partner.getFullName(),
                 partner.getVehicleNumber() != null ? partner.getVehicleNumber() : "Bike",
                 mobileNumber,
-                "4.9",  // Rating not yet persisted — placeholder
-                0       // Completed order count not yet tracked on DeliveryPartner entity
+                "4.9", // Rating not yet persisted — placeholder
+                0 // Completed order count not yet tracked on DeliveryPartner entity
         );
 
         return ResponseEntity.ok(ApiResponse.success(dto));
@@ -76,8 +80,7 @@ public class CustomerDeliveryController {
     @GetMapping("/{orderId}/location")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryLocationResponseDto>> getDeliveryLocationForOrder(
-            @PathVariable UUID orderId,
-            @org.springframework.beans.factory.annotation.Autowired com.foodie.delivery.service.DeliveryService deliveryService) {
+            @PathVariable UUID orderId) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.getLatestLocationForOrder(orderId)));
     }
 }

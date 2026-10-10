@@ -107,7 +107,8 @@ public class CustomerServiceImpl implements CustomerService {
         String l1Str = request.line1() != null ? request.line1().toLowerCase() : "";
         String l2Str = request.line2() != null ? request.line2().toLowerCase() : "";
         String pinStr = request.pincode() != null ? request.pincode() : "";
-        if ((cityStr.contains("tumk") || l1Str.contains("tumk") || l2Str.contains("tumk") || pinStr.startsWith("572")) && (lat == null || lat.doubleValue() < 13.1)) {
+        if ((cityStr.contains("tumk") || l1Str.contains("tumk") || l2Str.contains("tumk") || pinStr.startsWith("572"))
+                && (lat == null || lat.doubleValue() < 13.1)) {
             String fullText = (l1Str + " " + l2Str + " " + pinStr).trim();
             int hash = Math.abs(fullText.hashCode());
             double latOffset = ((hash % 100) - 50) * 0.0001;
@@ -158,17 +159,9 @@ public class CustomerServiceImpl implements CustomerService {
 
         java.math.BigDecimal lat = request.latitude();
         java.math.BigDecimal lng = request.longitude();
-        String cityStr = request.city() != null ? request.city().toLowerCase() : "";
-        String l1Str = request.line1() != null ? request.line1().toLowerCase() : "";
-        String l2Str = request.line2() != null ? request.line2().toLowerCase() : "";
-        String pinStr = request.pincode() != null ? request.pincode() : "";
-        if ((cityStr.contains("tumk") || l1Str.contains("tumk") || l2Str.contains("tumk") || pinStr.startsWith("572")) && (lat == null || lat.doubleValue() < 13.1)) {
-            String fullText = (l1Str + " " + l2Str + " " + pinStr).trim();
-            int hash = Math.abs(fullText.hashCode());
-            double latOffset = ((hash % 100) - 50) * 0.0001;
-            double lngOffset = (((hash / 100) % 100) - 50) * 0.0001;
-            lat = java.math.BigDecimal.valueOf(13.3379 + latOffset);
-            lng = java.math.BigDecimal.valueOf(77.1173 + lngOffset);
+        if (lat == null || lng == null || lat.doubleValue() == 0.0 || lng.doubleValue() == 0.0) {
+            lat = java.math.BigDecimal.valueOf(13.3379);
+            lng = java.math.BigDecimal.valueOf(77.1173);
         }
 
         Address address = Address.create(
