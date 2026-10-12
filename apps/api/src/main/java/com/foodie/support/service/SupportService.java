@@ -88,8 +88,15 @@ public class SupportService {
         conv.setLastMessageAt(Instant.now());
         conv.setUpdatedAt(Instant.now());
 
+        // Reopen resolved conversation if customer or restaurant sends a new message
+        if (("CUSTOMER".equalsIgnoreCase(senderType) || "RESTAURANT".equalsIgnoreCase(senderType))
+                && ("RESOLVED".equalsIgnoreCase(conv.getStatus()) || "CLOSED".equalsIgnoreCase(conv.getStatus()))) {
+            conv.setStatus("IN_PROGRESS");
+            conv.setResolvedAt(null);
+        }
+
         // If agent responds, ensure status is AGENT_ACTIVE
-        if ("AGENT".equals(senderType) && !conv.getStatus().equals("RESOLVED")) {
+        if ("AGENT".equalsIgnoreCase(senderType) && !"RESOLVED".equalsIgnoreCase(conv.getStatus())) {
             conv.setStatus("AGENT_ACTIVE");
             if (conv.getAssignedAgentId() == null) {
                 conv.setAssignedAgentId(senderId);

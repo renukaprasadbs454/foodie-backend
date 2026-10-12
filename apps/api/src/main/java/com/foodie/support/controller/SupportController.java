@@ -26,8 +26,15 @@ public class SupportController {
     private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
 
     private com.foodie.restaurant.entity.Restaurant getAuthenticatedRestaurant(com.foodie.security.principal.AuthPrincipal principal) {
-        if (principal != null && principal.userType() == com.foodie.common.enums.UserType.RESTAURANT) {
-            return restaurantRepository.findByOwnerUserCredentialId(principal.userId()).orElse(null);
+        if (principal != null) {
+            var byOwner = restaurantRepository.findByOwnerUserCredentialId(principal.userId());
+            if (byOwner.isPresent()) {
+                return byOwner.get();
+            }
+            var byId = restaurantRepository.findById(principal.userId());
+            if (byId.isPresent()) {
+                return byId.get();
+            }
         }
         return null;
     }
@@ -69,6 +76,15 @@ public class SupportController {
                     supportService.createRestaurantConversation(rest.getId(), rest.getName(), subject, orderId, null)));
         }
 
+        if ("RESTAURANT".equalsIgnoreCase(category) && req.containsKey("restaurantId")) {
+            try {
+                java.util.UUID rId = java.util.UUID.fromString(req.get("restaurantId"));
+                String rName = req.getOrDefault("restaurantName", "Restaurant Partner");
+                return ResponseEntity.ok(ApiResponse.success(
+                        supportService.createRestaurantConversation(rId, rName, subject, orderId, null)));
+            } catch (Exception ignored) {}
+        }
+
         return ResponseEntity.ok(ApiResponse.success(
                 supportService.getOrCreateConversation(extractCustomerId(principal), category, subject, orderId)));
     }
@@ -102,6 +118,14 @@ public class SupportController {
         com.foodie.restaurant.entity.Restaurant rest = getAuthenticatedRestaurant(principal);
         if (rest != null) {
             SupportMessage msg = supportService.addRestaurantMessage(ticketId, rest.getId(), rest.getName(), message);
+            return ResponseEntity.ok(ApiResponse.success(msg));
+        }
+
+        var convOpt = supportService.getConversation(ticketId);
+        if (convOpt.isPresent() && convOpt.get().getRestaurantId() != null) {
+            var conv = convOpt.get();
+            String sName = request.getOrDefault("senderName", conv.getRestaurantName() != null ? conv.getRestaurantName() : "Restaurant Partner");
+            SupportMessage msg = supportService.addRestaurantMessage(ticketId, conv.getRestaurantId(), sName, message);
             return ResponseEntity.ok(ApiResponse.success(msg));
         }
 
