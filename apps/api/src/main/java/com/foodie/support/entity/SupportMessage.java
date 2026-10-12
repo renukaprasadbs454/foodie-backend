@@ -41,6 +41,9 @@ public class SupportMessage {
     @Column(name = "read_at")
     private Instant readAt;
 
+    @Column(name = "read_status")
+    private Boolean readStatus = false;
+
     public SupportMessage() {
     }
 
@@ -114,5 +117,16 @@ public class SupportMessage {
 
     public void setReadAt(Instant readAt) {
         this.readAt = readAt;
+        if (readAt != null) {
+            this.readStatus = true;
+        }
+    }
+
+    public Boolean getReadStatus() {
+        return readStatus != null ? readStatus : (readAt != null);
+    }
+
+    public void setReadStatus(Boolean readStatus) {
+        this.readStatus = readStatus;
     }
 }

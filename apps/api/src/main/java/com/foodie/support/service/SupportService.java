@@ -150,12 +150,97 @@ public class SupportService {
         return saved;
     }
 
+    @Transactional
+    public SupportConversation createRestaurantConversation(UUID restaurantId, String restaurantName, String subject,
+            String orderId, String initialMessage) {
+        SupportConversation conv = new SupportConversation();
+        conv.setId("ENQ-REST-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        conv.setCustomerId(restaurantId.toString());
+        conv.setRestaurantId(restaurantId);
+        conv.setRestaurantName(restaurantName);
+        conv.setCategory("RESTAURANT");
+        conv.setStatus("OPEN");
+        conv.setSubject((subject != null && !subject.isBlank()) ? subject : "Restaurant Support Enquiry");
+        conv.setOrderId(orderId);
+        conv.setCreatedAt(Instant.now());
+        conv.setUpdatedAt(Instant.now());
+
+        SupportConversation saved = conversationRepository.save(conv);
+
+        if (initialMessage != null && !initialMessage.isBlank()) {
+            addMessage(saved.getId(), "RESTAURANT", restaurantId.toString(), restaurantName, initialMessage);
+        }
+
+        broadcastConversationUpdate(saved);
+        return saved;
+    }
+
+    public List<SupportConversation> getRestaurantConversations(UUID restaurantId) {
+        return conversationRepository.findByRestaurantIdOrderByUpdatedAtDesc(restaurantId);
+    }
+
+    public Optional<SupportConversation> getRestaurantConversation(String conversationId, UUID restaurantId) {
+        return conversationRepository.findByIdAndRestaurantId(conversationId, restaurantId);
+    }
+
+    @Transactional
+    public List<SupportMessage> getRestaurantMessages(String conversationId, UUID restaurantId) {
+        SupportConversation conv = conversationRepository.findByIdAndRestaurantId(conversationId, restaurantId)
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Unauthorized: Conversation does not belong to your restaurant"));
+
+        // Mark incoming agent messages as read by restaurant
+        messageRepository.markAsRead(conversationId, "RESTAURANT", Instant.now());
+
+        return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+    }
+
+    @Transactional
+    public SupportMessage addRestaurantMessage(String conversationId, UUID restaurantId, String restaurantName, String content) {
+        SupportConversation conv = conversationRepository.findByIdAndRestaurantId(conversationId, restaurantId)
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Unauthorized: Conversation does not belong to your restaurant"));
+
+        // If conversation was resolved, reopen it to IN_PROGRESS upon new message from restaurant
+        if ("RESOLVED".equals(conv.getStatus()) || "CLOSED".equals(conv.getStatus())) {
+            conv.setStatus("IN_PROGRESS");
+            conv.setResolvedAt(null);
+            conversationRepository.save(conv);
+        }
+
+        return addMessage(conversationId, "RESTAURANT", restaurantId.toString(), restaurantName, content);
+    }
+
+    @Transactional
+    public SupportConversation updateConversationStatus(String conversationId, String newStatus) {
+        SupportConversation conv = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        conv.setStatus(newStatus);
+        conv.setUpdatedAt(Instant.now());
+        if ("RESOLVED".equals(newStatus)) {
+            conv.setResolvedAt(Instant.now());
+        } else if ("OPEN".equals(newStatus) || "IN_PROGRESS".equals(newStatus)) {
+            conv.setResolvedAt(null);
+        }
+
+        SupportConversation saved = conversationRepository.save(conv);
+        broadcastConversationUpdate(saved);
+        return saved;
+    }
+
+    @Transactional
+    public void markMessagesReadByAdmin(String conversationId) {
+        messageRepository.markAsRead(conversationId, "AGENT", Instant.now());
+    }
+
     private void broadcastMessage(SupportMessage msg) {
         messagingTemplate.convertAndSend("/topic/support/" + msg.getConversationId(), msg);
     }
 
     private void broadcastConversationUpdate(SupportConversation conv) {
         messagingTemplate.convertAndSend("/topic/admin/support", conv);
+        if (conv.getRestaurantId() != null) {
+            messagingTemplate.convertAndSend("/topic/restaurant/" + conv.getRestaurantId() + "/support", conv);
+        }
         messagingTemplate.convertAndSend("/topic/customer/" + conv.getCustomerId() + "/support", conv);
     }
 }

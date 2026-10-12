@@ -20,6 +20,12 @@ public class SupportConversation {
     @Column(name = "customer_id", nullable = false)
     private String customerId;
 
+    @Column(name = "restaurant_id")
+    private java.util.UUID restaurantId;
+
+    @Column(name = "restaurant_name")
+    private String restaurantName;
+
     @Column(name = "assigned_agent_id")
     private String assignedAgentId;
 
@@ -60,6 +66,12 @@ public class SupportConversation {
     
     public String getCustomerId() { return customerId; }
     public void setCustomerId(String customerId) { this.customerId = customerId; }
+    
+    public java.util.UUID getRestaurantId() { return restaurantId; }
+    public void setRestaurantId(java.util.UUID restaurantId) { this.restaurantId = restaurantId; }
+
+    public String getRestaurantName() { return restaurantName; }
+    public void setRestaurantName(String restaurantName) { this.restaurantName = restaurantName; }
     
     public String getAssignedAgentId() { return assignedAgentId; }
     public void setAssignedAgentId(String assignedAgentId) { this.assignedAgentId = assignedAgentId; }

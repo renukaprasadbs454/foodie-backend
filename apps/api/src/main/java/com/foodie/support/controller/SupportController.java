@@ -22,29 +22,55 @@ public class SupportController {
     @Autowired
     private SupportService supportService;
 
-    // Helper to extract customer ID from auth, normally handled properly by Spring
-    // Security
+    @Autowired
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
+    private com.foodie.restaurant.entity.Restaurant getAuthenticatedRestaurant(com.foodie.security.principal.AuthPrincipal principal) {
+        if (principal != null && principal.userType() == com.foodie.common.enums.UserType.RESTAURANT) {
+            return restaurantRepository.findByOwnerUserCredentialId(principal.userId()).orElse(null);
+        }
+        return null;
+    }
+
+    private String extractCustomerId(com.foodie.security.principal.AuthPrincipal principal) {
+        if (principal != null) {
+            return principal.userId().toString();
+        }
+        return "CUST-MOCK-123";
+    }
+
     private String extractCustomerId() {
-        // Fallback for current mocked UI
         return "CUST-MOCK-123";
     }
 
     @GetMapping("/conversations")
-    @Operation(summary = "Get active conversation for customer")
-    public ResponseEntity<ApiResponse<List<SupportConversation>>> getMyConversations() {
-        return ResponseEntity.ok(ApiResponse.success(supportService.getCustomerConversations(extractCustomerId())));
+    @Operation(summary = "Get active conversation for customer or authenticated restaurant")
+    public ResponseEntity<ApiResponse<List<SupportConversation>>> getMyConversations(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.foodie.security.principal.AuthPrincipal principal) {
+        com.foodie.restaurant.entity.Restaurant rest = getAuthenticatedRestaurant(principal);
+        if (rest != null) {
+            return ResponseEntity.ok(ApiResponse.success(supportService.getRestaurantConversations(rest.getId())));
+        }
+        return ResponseEntity.ok(ApiResponse.success(supportService.getCustomerConversations(extractCustomerId(principal))));
     }
 
     @PostMapping("/conversations")
     @Operation(summary = "Create or get active conversation")
     public ResponseEntity<ApiResponse<SupportConversation>> createOrGetConversation(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.foodie.security.principal.AuthPrincipal principal,
             @RequestBody Map<String, String> req) {
-        String category = req.getOrDefault("category", "CUSTOMER");
+        com.foodie.restaurant.entity.Restaurant rest = getAuthenticatedRestaurant(principal);
+        String category = req.getOrDefault("category", rest != null ? "RESTAURANT" : "CUSTOMER");
         String subject = req.getOrDefault("subject", "Live Agent Request");
         String orderId = req.get("orderId");
 
+        if (rest != null) {
+            return ResponseEntity.ok(ApiResponse.success(
+                    supportService.createRestaurantConversation(rest.getId(), rest.getName(), subject, orderId, null)));
+        }
+
         return ResponseEntity.ok(ApiResponse.success(
-                supportService.getOrCreateConversation(extractCustomerId(), category, subject, orderId)));
+                supportService.getOrCreateConversation(extractCustomerId(principal), category, subject, orderId)));
     }
 
     @PostMapping("/conversations/{id}/escalate")
@@ -55,7 +81,13 @@ public class SupportController {
 
     @GetMapping("/conversations/{id}/messages")
     @Operation(summary = "Get messages for a conversation")
-    public ResponseEntity<ApiResponse<List<SupportMessage>>> getMessages(@PathVariable("id") String id) {
+    public ResponseEntity<ApiResponse<List<SupportMessage>>> getMessages(
+            @PathVariable("id") String id,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.foodie.security.principal.AuthPrincipal principal) {
+        com.foodie.restaurant.entity.Restaurant rest = getAuthenticatedRestaurant(principal);
+        if (rest != null) {
+            return ResponseEntity.ok(ApiResponse.success(supportService.getRestaurantMessages(id, rest.getId())));
+        }
         return ResponseEntity.ok(ApiResponse.success(supportService.getMessages(id)));
     }
 
@@ -63,13 +95,20 @@ public class SupportController {
     @Operation(summary = "Send a new message to the conversation")
     public ResponseEntity<ApiResponse<SupportMessage>> sendMessage(
             @PathVariable("id") String ticketId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.foodie.security.principal.AuthPrincipal principal,
             @RequestBody Map<String, String> request) {
 
         String message = request.getOrDefault("message", "");
+        com.foodie.restaurant.entity.Restaurant rest = getAuthenticatedRestaurant(principal);
+        if (rest != null) {
+            SupportMessage msg = supportService.addRestaurantMessage(ticketId, rest.getId(), rest.getName(), message);
+            return ResponseEntity.ok(ApiResponse.success(msg));
+        }
+
         String senderName = request.getOrDefault("senderName", "Customer");
         String senderType = request.getOrDefault("senderType", "CUSTOMER");
 
-        SupportMessage msg = supportService.addMessage(ticketId, senderType, extractCustomerId(), senderName, message);
+        SupportMessage msg = supportService.addMessage(ticketId, senderType, extractCustomerId(principal), senderName, message);
         return ResponseEntity.ok(ApiResponse.success(msg));
     }
 

@@ -754,38 +754,37 @@ public class RestaurantServiceImpl implements RestaurantService {
     private RestaurantDetailResponseDto buildDetail(Restaurant restaurant, boolean privileged) {
         RestaurantLegalDetailResponseDto legalDetails = null;
         List<RestaurantDocumentResponseDto> documents = null;
-        String phone = null;
-        
+        String contactPhone = null;
+
         if (privileged) {
-            legalDetails = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId())
-                    .map(restaurantMapper::toLegalDetailResponse).orElse(null);
+            var legalOpt = restaurantLegalDetailRepository.findByRestaurantId(restaurant.getId());
+            if (legalOpt.isPresent()) {
+                legalDetails = restaurantMapper.toLegalDetailResponse(legalOpt.get());
+                if (legalDetails.contactPhone() != null && !legalDetails.contactPhone().isBlank()) {
+                    contactPhone = legalDetails.contactPhone();
+                }
+            }
             documents = restaurantDocumentRepository.findByRestaurantId(restaurant.getId()).stream()
                     .map(doc -> {
                         String docUrl = objectStorageClient.createSignedGetUrl(doc.getS3Key(), java.time.Duration.ofHours(1));
                         return restaurantMapper.toDocument(doc, docUrl);
                     }).toList();
         }
-        RestaurantDetailResponseDto dto = restaurantMapper.toDetail(
+
+        if ((contactPhone == null || contactPhone.isBlank()) && restaurant.getOwnerUserCredentialId() != null) {
+            contactPhone = userCredentialRepository.findById(restaurant.getOwnerUserCredentialId())
+                    .map(com.foodie.auth.entity.UserCredential::getPhoneNumber)
+                    .orElse(null);
+        }
+
+        return restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
                 signedOrNull(restaurant.getCoverImageKey()),
                 privileged,
                 legalDetails,
-                documents);
-
-        if (privileged && restaurant.getOwnerUserCredentialId() != null) {
-            phone = userCredentialRepository.findById(restaurant.getOwnerUserCredentialId())
-                    .map(u -> u.getPhoneNumber())
-                    .orElse(null);
-        }
-
-        return new RestaurantDetailResponseDto(
-                dto.restaurantId(), dto.name(), dto.description(), dto.cuisineTypes(), dto.address(),
-                dto.latitude(), dto.longitude(), dto.logoImageUrl(), dto.coverImageUrl(),
-                dto.avgRating(), dto.status(), dto.restaurantType(), dto.rejectionReason(),
-                dto.commissionPct(), dto.ownerUserCredentialId(), dto.legalDetails(),
-                dto.documents(), dto.isOpen(), dto.topPosition(), dto.openTime(), dto.closeTime(), dto.openDays(),
-                phone);
+                documents,
+                contactPhone);
     }
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {

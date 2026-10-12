@@ -10,5 +10,11 @@ import java.util.List;
 public interface SupportConversationRepository extends JpaRepository<SupportConversation, String> {
     List<SupportConversation> findByCustomerIdOrderByUpdatedAtDesc(String customerId);
 
+    List<SupportConversation> findByRestaurantIdOrderByUpdatedAtDesc(java.util.UUID restaurantId);
+
+    java.util.Optional<SupportConversation> findByIdAndRestaurantId(String id, java.util.UUID restaurantId);
+
+    List<SupportConversation> findByCategoryOrderByUpdatedAtDesc(String category);
+
     List<SupportConversation> findAllByOrderByUpdatedAtDesc();
 }

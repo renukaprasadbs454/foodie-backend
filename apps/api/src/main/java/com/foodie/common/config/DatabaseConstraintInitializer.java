@@ -36,6 +36,20 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
         }
 
         try {
+            jdbcTemplate.execute("ALTER TABLE \"restaurant\" DROP CONSTRAINT IF EXISTS chk_restaurant_status");
+            jdbcTemplate.queryForList(
+                "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'RESTAURANT' AND CONSTRAINT_TYPE = 'CHECK'",
+                String.class
+            ).forEach(constraintName -> {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE \"restaurant\" DROP CONSTRAINT \"" + constraintName + "\"");
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception e) {
+            log.debug("Could not alter restaurant check constraint: {}", e.getMessage());
+        }
+
+        try {
             jdbcTemplate.queryForList(
                 "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'DELIVERY_ASSIGNMENT' AND CONSTRAINT_TYPE = 'CHECK'",
                 String.class

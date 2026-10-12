@@ -40,6 +40,7 @@ public class AdminSupportTicketController {
     @GetMapping("/{id}/messages")
     @Operation(summary = "Get messages for a conversation")
     public ResponseEntity<ApiResponse<List<SupportMessage>>> getMessages(@PathVariable("id") String id) {
+        supportService.markMessagesReadByAdmin(id);
         return ResponseEntity.ok(ApiResponse.success(supportService.getMessages(id)));
     }
 
@@ -54,6 +55,7 @@ public class AdminSupportTicketController {
 
         // Use a generic admin ID or from security context
         SupportMessage msg = supportService.addMessage(ticketId, "AGENT", "ADMIN_1", senderName, replyMessage);
+        supportService.markMessagesReadByAdmin(ticketId);
 
         return ResponseEntity.ok(ApiResponse.success(msg));
     }
@@ -119,17 +121,12 @@ public class AdminSupportTicketController {
     }
 
     @PatchMapping("/{id}/status")
-    @Operation(summary = "Update support ticket status, e.g. Resolve")
+    @Operation(summary = "Update support ticket status, e.g. Resolve, In Progress, Reopen")
     public ResponseEntity<ApiResponse<SupportConversation>> updateTicketStatus(
             @PathVariable("id") String ticketId,
             @RequestBody Map<String, String> request) {
 
         String status = request.getOrDefault("status", "RESOLVED");
-
-        if ("RESOLVED".equals(status)) {
-            return ResponseEntity.ok(ApiResponse.success(supportService.resolveConversation(ticketId)));
-        }
-
-        return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(ApiResponse.success(supportService.updateConversationStatus(ticketId, status)));
     }
 }

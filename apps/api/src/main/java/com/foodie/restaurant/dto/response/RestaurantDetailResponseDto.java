@@ -29,7 +29,8 @@ public record RestaurantDetailResponseDto(
                 String openTime,
                 String closeTime,
                 List<String> openDays,
-                String phone) {
+                String phone,
+                String contactPhone) {
         public RestaurantDetailResponseDto(
                         UUID restaurantId,
                         String name,
@@ -49,6 +50,6 @@ public record RestaurantDetailResponseDto(
                                 restaurantId, name, description, cuisineTypes, address,
                                 latitude, longitude, logoImageUrl, coverImageUrl, avgRating,
                                 status, com.foodie.common.enums.RestaurantType.BOTH, null, commissionPct,
-                                ownerUserCredentialId, null, null, Boolean.FALSE, null, null, null, null, phone);
+                                ownerUserCredentialId, null, null, Boolean.FALSE, null, null, null, null, phone, phone);
         }
 }

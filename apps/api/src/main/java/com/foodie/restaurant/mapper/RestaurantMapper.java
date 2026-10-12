@@ -41,7 +41,8 @@ public class RestaurantMapper {
                         String coverUrl,
                         boolean privileged,
                         RestaurantLegalDetailResponseDto legalDetails,
-                        List<RestaurantDocumentResponseDto> documents) {
+                        List<RestaurantDocumentResponseDto> documents,
+                        String contactPhone) {
                 RestaurantAddress address = restaurant.getAddress();
                 return new RestaurantDetailResponseDto(
                                 restaurant.getId(),
@@ -76,7 +77,8 @@ public class RestaurantMapper {
                                 restaurant.getOpenTime() != null ? restaurant.getOpenTime().toString() : null,
                                 restaurant.getCloseTime() != null ? restaurant.getCloseTime().toString() : null,
                                 restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null,
-                                null);
+                                contactPhone,
+                                contactPhone);
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {
