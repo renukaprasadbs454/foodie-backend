@@ -54,6 +54,11 @@ public interface AdminOperationsService {
 
         ModerationResponseDto clearReviewFlag(UUID actorCredentialId, UUID reviewId);
 
+        PageResult<com.foodie.admin.dto.response.AdminReviewItemDto> listReviews(
+                        UUID actorCredentialId, String storeName, Integer minRating, int page, int size, String sort);
+
+        com.foodie.admin.dto.response.AdminReviewStatsDto getReviewStats(UUID actorCredentialId);
+
         PageResult<AuditLogResponseDto> listAuditLogs(
                         UUID actorCredentialId,
                         String resourceType,

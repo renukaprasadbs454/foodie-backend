@@ -87,5 +87,37 @@ class ReviewRatingQueryImplTest {
         assertThat(map.get(item2).avgRating()).isEqualTo(BigDecimal.ZERO);
         assertThat(map.get(item2).reviewCount()).isEqualTo(0L);
     }
-}
+    @Test
+    void getRestaurantRating_withReviews() {
+        UUID restId = UUID.randomUUID();
+        when(reviewRepository.averageRestaurantRating(restId)).thenReturn(4.75);
+        when(reviewRepository.countByRestaurantId(restId)).thenReturn(5L);
 
+        ReviewRatingQuery.RestaurantRating result = queryService.getRestaurantRating(restId);
+
+        assertThat(result.avgRating()).isEqualTo(new BigDecimal("4.8"));
+        assertThat(result.reviewCount()).isEqualTo(5L);
+    }
+
+    @Test
+    void getRestaurantRating_noReviews() {
+        UUID restId = UUID.randomUUID();
+        when(reviewRepository.averageRestaurantRating(restId)).thenReturn(0.0);
+        when(reviewRepository.countByRestaurantId(restId)).thenReturn(0L);
+
+        ReviewRatingQuery.RestaurantRating result = queryService.getRestaurantRating(restId);
+
+        assertThat(result.avgRating()).isEqualTo(BigDecimal.ZERO);
+        assertThat(result.reviewCount()).isEqualTo(0L);
+    }
+
+    @Test
+    void countRestaurantReviews_returnsCount() {
+        UUID restId = UUID.randomUUID();
+        when(reviewRepository.countByRestaurantId(restId)).thenReturn(12L);
+
+        long count = queryService.countRestaurantReviews(restId);
+
+        assertThat(count).isEqualTo(12L);
+    }
+}

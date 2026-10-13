@@ -1,5 +1,8 @@
 package com.foodie.restaurant.service.impl;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import com.foodie.shared.contract.ReviewRatingQuery;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.dto.PaginationMeta;
@@ -102,6 +105,43 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final LocationZoneRepository locationZoneRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final BigDecimal defaultCommissionPct;
+    private final ReviewRatingQuery reviewRatingQuery;
+
+    @Autowired
+    public RestaurantServiceImpl(
+            RestaurantRepository restaurantRepository,
+            RestaurantAddressRepository restaurantAddressRepository,
+            RestaurantDocumentRepository restaurantDocumentRepository,
+            RestaurantLegalDetailRepository restaurantLegalDetailRepository,
+            OrderRepository orderRepository,
+            MenuItemRepository menuItemRepository,
+            RestaurantBankDetailsRepository restaurantBankDetailsRepository,
+            RestaurantMapper restaurantMapper,
+            ObjectStorageClient objectStorageClient,
+            RestaurantCacheService restaurantCacheService,
+            ApplicationEventPublisher eventPublisher,
+            ObjectMapper objectMapper,
+            LocationZoneRepository locationZoneRepository,
+            UserCredentialRepository userCredentialRepository,
+            @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct,
+            @Autowired(required = false) ReviewRatingQuery reviewRatingQuery) {
+        this.restaurantRepository = restaurantRepository;
+        this.restaurantAddressRepository = restaurantAddressRepository;
+        this.restaurantDocumentRepository = restaurantDocumentRepository;
+        this.restaurantLegalDetailRepository = restaurantLegalDetailRepository;
+        this.orderRepository = orderRepository;
+        this.menuItemRepository = menuItemRepository;
+        this.restaurantBankDetailsRepository = restaurantBankDetailsRepository;
+        this.restaurantMapper = restaurantMapper;
+        this.objectStorageClient = objectStorageClient;
+        this.restaurantCacheService = restaurantCacheService;
+        this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
+        this.locationZoneRepository = locationZoneRepository;
+        this.userCredentialRepository = userCredentialRepository;
+        this.defaultCommissionPct = defaultCommissionPct;
+        this.reviewRatingQuery = reviewRatingQuery;
+    }
 
     public RestaurantServiceImpl(
             RestaurantRepository restaurantRepository,
@@ -118,22 +158,13 @@ public class RestaurantServiceImpl implements RestaurantService {
             ObjectMapper objectMapper,
             LocationZoneRepository locationZoneRepository,
             UserCredentialRepository userCredentialRepository,
-            @Value("${foodie.restaurant.default-commission-pct:18.00}") BigDecimal defaultCommissionPct) {
-        this.restaurantRepository = restaurantRepository;
-        this.restaurantAddressRepository = restaurantAddressRepository;
-        this.restaurantDocumentRepository = restaurantDocumentRepository;
-        this.restaurantLegalDetailRepository = restaurantLegalDetailRepository;
-        this.orderRepository = orderRepository;
-        this.menuItemRepository = menuItemRepository;
-        this.restaurantBankDetailsRepository = restaurantBankDetailsRepository;
-        this.restaurantMapper = restaurantMapper;
-        this.objectStorageClient = objectStorageClient;
-        this.restaurantCacheService = restaurantCacheService;
-        this.eventPublisher = eventPublisher;
-        this.objectMapper = objectMapper;
-        this.locationZoneRepository = locationZoneRepository;
-        this.userCredentialRepository = userCredentialRepository;
-        this.defaultCommissionPct = defaultCommissionPct;
+            BigDecimal defaultCommissionPct) {
+        this(
+                restaurantRepository, restaurantAddressRepository, restaurantDocumentRepository,
+                restaurantLegalDetailRepository, orderRepository, menuItemRepository,
+                restaurantBankDetailsRepository, restaurantMapper, objectStorageClient,
+                restaurantCacheService, eventPublisher, objectMapper, locationZoneRepository,
+                userCredentialRepository, defaultCommissionPct, null);
     }
 
     @Override
@@ -777,6 +808,16 @@ public class RestaurantServiceImpl implements RestaurantService {
                     .orElse(null);
         }
 
+        BigDecimal dynamicRating = restaurant.getAvgRating();
+        long reviewCount = 0L;
+        if (reviewRatingQuery != null) {
+            ReviewRatingQuery.RestaurantRating ratingInfo = reviewRatingQuery.getRestaurantRating(restaurant.getId());
+            if (ratingInfo != null) {
+                dynamicRating = ratingInfo.avgRating();
+                reviewCount = ratingInfo.reviewCount();
+            }
+        }
+
         return restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
@@ -784,7 +825,9 @@ public class RestaurantServiceImpl implements RestaurantService {
                 privileged,
                 legalDetails,
                 documents,
-                contactPhone);
+                contactPhone,
+                dynamicRating,
+                reviewCount);
     }
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {

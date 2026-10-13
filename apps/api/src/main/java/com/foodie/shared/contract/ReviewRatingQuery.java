@@ -12,9 +12,19 @@ public interface ReviewRatingQuery {
 
     BigDecimal averageRestaurantRating(UUID restaurantId);
 
+    RestaurantRating getRestaurantRating(UUID restaurantId);
+
+    long countRestaurantReviews(UUID restaurantId);
+
     MenuItemRating getMenuItemRating(UUID menuItemId);
 
     Map<UUID, MenuItemRating> getMenuItemRatings(Collection<UUID> menuItemIds);
+
+    record RestaurantRating(BigDecimal avgRating, long reviewCount) {
+        public static RestaurantRating empty() {
+            return new RestaurantRating(BigDecimal.ZERO, 0L);
+        }
+    }
 
     record MenuItemRating(BigDecimal avgRating, long reviewCount) {
         public static MenuItemRating empty() {
@@ -22,4 +32,3 @@ public interface ReviewRatingQuery {
         }
     }
 }
-

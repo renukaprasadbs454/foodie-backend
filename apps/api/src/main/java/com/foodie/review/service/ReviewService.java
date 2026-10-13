@@ -19,6 +19,11 @@ public interface ReviewService {
 
     void clearModerationFlag(UUID reviewId);
 
+    PageResult<com.foodie.admin.dto.response.AdminReviewItemDto> listAllForAdmin(
+            String storeName, Integer minRating, int page, int size, String sort);
+
+    com.foodie.admin.dto.response.AdminReviewStatsDto getReviewStats();
+
     record PageResult<T>(List<T> items, PaginationMeta pagination) {
     }
 }

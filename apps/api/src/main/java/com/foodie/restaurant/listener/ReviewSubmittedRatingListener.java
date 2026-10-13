@@ -1,6 +1,7 @@
 package com.foodie.restaurant.listener;
 
 import com.foodie.menu.service.MenuCacheService;
+import com.foodie.restaurant.service.RestaurantCacheService;
 import com.foodie.shared.contract.RestaurantRatingAggregatePort;
 import com.foodie.shared.contract.ReviewRatingQuery;
 import com.foodie.shared.event.ReviewSubmittedEvent;
@@ -24,16 +25,27 @@ public class ReviewSubmittedRatingListener {
     private final ReviewRatingQuery reviewRatingQuery;
     private final RestaurantRatingAggregatePort restaurantRatingAggregatePort;
     private final MenuCacheService menuCacheService;
+    private final RestaurantCacheService restaurantCacheService;
 
     @Autowired
     public ReviewSubmittedRatingListener(
             ReviewRatingQuery reviewRatingQuery,
             RestaurantRatingAggregatePort restaurantRatingAggregatePort,
-            MenuCacheService menuCacheService
+            @Autowired(required = false) MenuCacheService menuCacheService,
+            @Autowired(required = false) RestaurantCacheService restaurantCacheService
     ) {
         this.reviewRatingQuery = reviewRatingQuery;
         this.restaurantRatingAggregatePort = restaurantRatingAggregatePort;
         this.menuCacheService = menuCacheService;
+        this.restaurantCacheService = restaurantCacheService;
+    }
+
+    public ReviewSubmittedRatingListener(
+            ReviewRatingQuery reviewRatingQuery,
+            RestaurantRatingAggregatePort restaurantRatingAggregatePort,
+            MenuCacheService menuCacheService
+    ) {
+        this(reviewRatingQuery, restaurantRatingAggregatePort, menuCacheService, null);
     }
 
     public ReviewSubmittedRatingListener(
@@ -51,6 +63,10 @@ public class ReviewSubmittedRatingListener {
             restaurantRatingAggregatePort.recalculateAvgRating(event.restaurantId(), avg);
             if (menuCacheService != null) {
                 menuCacheService.evict(event.restaurantId());
+            }
+            if (restaurantCacheService != null) {
+                restaurantCacheService.evictRestaurant(event.restaurantId());
+                restaurantCacheService.evictAllListCaches();
             }
             log.info("Updated restaurant {} avg_rating={}", event.restaurantId(), avg);
         } catch (RuntimeException ex) {

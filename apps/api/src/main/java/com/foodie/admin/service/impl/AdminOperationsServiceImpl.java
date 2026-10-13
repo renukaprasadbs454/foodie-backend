@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.admin.dto.request.FlagReviewRequestDto;
 import com.foodie.admin.dto.request.OverrideOrderStatusRequestDto;
 import com.foodie.admin.dto.request.SuspendRestaurantRequestDto;
+import com.foodie.admin.dto.response.AdminReviewItemDto;
+import com.foodie.admin.dto.response.AdminReviewStatsDto;
 import com.foodie.admin.dto.response.AuditLogResponseDto;
 import com.foodie.admin.dto.response.ModerationResponseDto;
 import com.foodie.admin.entity.AdminUser;
@@ -322,6 +324,22 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
                 Map.of("flagged", true),
                 Map.of("flagged", false));
         return new ModerationResponseDto(reviewId, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<AdminReviewItemDto> listReviews(
+            UUID actorCredentialId, String storeName, Integer minRating, int page, int size, String sort) {
+        requirePermission(actorCredentialId, "REVIEW", "MODERATE");
+        var result = reviewService.listAllForAdmin(storeName, minRating, page, size, sort);
+        return new PageResult<>(result.items(), result.pagination());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminReviewStatsDto getReviewStats(UUID actorCredentialId) {
+        requirePermission(actorCredentialId, "REVIEW", "MODERATE");
+        return reviewService.getReviewStats();
     }
 
     @Override

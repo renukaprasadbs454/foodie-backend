@@ -30,6 +30,31 @@ public class ReviewRatingQueryImpl implements ReviewRatingQuery {
 
     @Override
     @Transactional(readOnly = true)
+    public RestaurantRating getRestaurantRating(UUID restaurantId) {
+        if (restaurantId == null) {
+            return RestaurantRating.empty();
+        }
+        Double avg = reviewRepository.averageRestaurantRating(restaurantId);
+        Long count = reviewRepository.countByRestaurantId(restaurantId);
+        long totalReviews = count == null ? 0L : count;
+        BigDecimal rating = (avg == null || totalReviews == 0)
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(avg).setScale(1, RoundingMode.HALF_UP);
+        return new RestaurantRating(rating, totalReviews);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countRestaurantReviews(UUID restaurantId) {
+        if (restaurantId == null) {
+            return 0L;
+        }
+        Long count = reviewRepository.countByRestaurantId(restaurantId);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public MenuItemRating getMenuItemRating(UUID menuItemId) {
         if (menuItemId == null) {
             return MenuItemRating.empty();

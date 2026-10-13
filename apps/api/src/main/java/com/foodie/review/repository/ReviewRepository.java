@@ -22,6 +22,9 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
     @Query("select coalesce(avg(r.restaurantRating * 1.0), 0.0) from Review r where r.restaurantId = :restaurantId")
     Double findAverageRatingByRestaurantId(@Param("restaurantId") UUID restaurantId);
 
+    @Query("select count(r.id) from Review r where r.restaurantId = :restaurantId")
+    Long countByRestaurantId(@Param("restaurantId") UUID restaurantId);
+
     List<Review> findByDeliveryPartnerIdOrderByCreatedAtDesc(UUID deliveryPartnerId);
 
     @Query("select coalesce(avg(r.deliveryRating), 5.0) from Review r where r.deliveryPartnerId = :deliveryPartnerId and r.deliveryRating is not null")

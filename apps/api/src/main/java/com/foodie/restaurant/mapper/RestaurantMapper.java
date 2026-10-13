@@ -15,6 +15,7 @@ import com.foodie.restaurant.entity.RestaurantAddress;
 import com.foodie.restaurant.entity.RestaurantBankDetails;
 import com.foodie.restaurant.entity.RestaurantDocument;
 import com.foodie.restaurant.entity.RestaurantLegalDetail;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -43,7 +44,22 @@ public class RestaurantMapper {
                         RestaurantLegalDetailResponseDto legalDetails,
                         List<RestaurantDocumentResponseDto> documents,
                         String contactPhone) {
+                return toDetail(restaurant, logoUrl, coverUrl, privileged, legalDetails, documents, contactPhone, restaurant.getAvgRating(), 0L);
+        }
+
+        public RestaurantDetailResponseDto toDetail(
+                        Restaurant restaurant,
+                        String logoUrl,
+                        String coverUrl,
+                        boolean privileged,
+                        RestaurantLegalDetailResponseDto legalDetails,
+                        List<RestaurantDocumentResponseDto> documents,
+                        String contactPhone,
+                        BigDecimal dynamicAvgRating,
+                        Long reviewCount) {
                 RestaurantAddress address = restaurant.getAddress();
+                BigDecimal finalAvgRating = dynamicAvgRating != null ? dynamicAvgRating : restaurant.getAvgRating();
+                Long finalReviewCount = reviewCount != null ? reviewCount : 0L;
                 return new RestaurantDetailResponseDto(
                                 restaurant.getId(),
                                 restaurant.getName(),
@@ -64,7 +80,7 @@ public class RestaurantMapper {
                                 restaurant.getLongitude(),
                                 logoUrl,
                                 coverUrl,
-                                restaurant.getAvgRating(),
+                                finalAvgRating,
                                 restaurant.getStatus().name(),
                                 restaurant.getRestaurantType(),
                                 restaurant.getRejectionReason(),
@@ -78,7 +94,8 @@ public class RestaurantMapper {
                                 restaurant.getCloseTime() != null ? restaurant.getCloseTime().toString() : null,
                                 restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null,
                                 contactPhone,
-                                contactPhone);
+                                contactPhone,
+                                finalReviewCount);
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {
