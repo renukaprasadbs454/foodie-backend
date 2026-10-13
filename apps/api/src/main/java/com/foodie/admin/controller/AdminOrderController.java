@@ -28,6 +28,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.service.AdminZoneService;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/v1/admin/orders")
@@ -39,18 +43,21 @@ public class AdminOrderController {
     private final RestaurantRepository restaurantRepository;
     private final CustomerRepository customerRepository;
     private final UserCredentialRepository userCredentialRepository;
+    private final AdminZoneService adminZoneService;
 
     public AdminOrderController(
             AdminOperationsService adminOperationsService,
             OrderRepository orderRepository,
             RestaurantRepository restaurantRepository,
             CustomerRepository customerRepository,
-            UserCredentialRepository userCredentialRepository) {
+            UserCredentialRepository userCredentialRepository,
+            AdminZoneService adminZoneService) {
         this.adminOperationsService = adminOperationsService;
         this.orderRepository = orderRepository;
         this.restaurantRepository = restaurantRepository;
         this.customerRepository = customerRepository;
         this.userCredentialRepository = userCredentialRepository;
+        this.adminZoneService = adminZoneService;
     }
 
     public record AdminOrderSummaryDto(
@@ -68,21 +75,44 @@ public class AdminOrderController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
-    @Operation(summary = "List all orders from database for admin operations")
-    public ResponseEntity<ApiResponse<List<AdminOrderSummaryDto>>> listOrders() {
+    @Operation(summary = "List all orders from database for admin operations, scoped to active zone if requested")
+    public ResponseEntity<ApiResponse<List<AdminOrderSummaryDto>>> listOrders(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        LocationZone zone = null;
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            zone = adminZoneService.validateZone(activeZoneId);
+        }
+
         List<Order> orders = orderRepository.findAll();
         List<AdminOrderSummaryDto> result = new ArrayList<>();
 
         for (Order order : orders) {
             String restaurantName = "Unknown Store";
             String module = "General Dining";
+            Restaurant matchedRestaurant = null;
             if (order.getRestaurantId() != null) {
                 Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
                 if (r != null) {
+                    matchedRestaurant = r;
                     restaurantName = r.getName();
                     if (r.getCuisineTypes() != null && r.getCuisineTypes().length > 0) {
                         module = String.join(", ", r.getCuisineTypes());
                     }
+                }
+            }
+
+            if (zone != null && matchedRestaurant != null) {
+                Double lat = matchedRestaurant.getLatitude() != null ? matchedRestaurant.getLatitude().doubleValue() : null;
+                Double lng = matchedRestaurant.getLongitude() != null ? matchedRestaurant.getLongitude().doubleValue() : null;
+                String city = matchedRestaurant.getAddress() != null ? matchedRestaurant.getAddress().getCity() : null;
+                if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                    continue;
                 }
             }
 

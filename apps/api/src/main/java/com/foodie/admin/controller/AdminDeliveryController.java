@@ -45,6 +45,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.service.AdminZoneService;
+import org.springframework.web.bind.annotation.RequestHeader;
+
 @RestController
 @RequestMapping({"/api/v1/admin/delivery-partners", "/api/v1/admin/delivery"})
 @Tag(name = "Admin — Delivery & Fleet")
@@ -57,6 +61,7 @@ public class AdminDeliveryController {
     private final com.foodie.admin.repository.AdminUserRepository adminUserRepository;
     private final DeliveryService deliveryService;
     private final DeliveryMapper deliveryMapper;
+    private final AdminZoneService adminZoneService;
 
     public AdminDeliveryController(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -65,7 +70,8 @@ public class AdminDeliveryController {
             UserCredentialRepository userCredentialRepository,
             com.foodie.admin.repository.AdminUserRepository adminUserRepository,
             DeliveryService deliveryService,
-            DeliveryMapper deliveryMapper) {
+            DeliveryMapper deliveryMapper,
+            AdminZoneService adminZoneService) {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryPartnerDocumentRepository = deliveryPartnerDocumentRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
@@ -73,17 +79,24 @@ public class AdminDeliveryController {
         this.adminUserRepository = adminUserRepository;
         this.deliveryService = deliveryService;
         this.deliveryMapper = deliveryMapper;
+        this.adminZoneService = adminZoneService;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List paginated delivery partners with status & search filtering")
+    @Operation(summary = "List paginated delivery partners with status & search filtering, scoped to zone")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnersPageDto>> listDeliveryPartners(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
+
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
 
         KycStatus kycFilter = null;
         if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
@@ -100,14 +113,30 @@ public class AdminDeliveryController {
 
         Page<DeliveryPartner> partnerPage = deliveryPartnerRepository.searchDeliveryPartners(kycFilter, searchFilter, pageRequest);
 
-        List<AdminDeliveryPartnerResponseDto> items = partnerPage.getContent().stream()
+        List<DeliveryPartner> partnerList = partnerPage.getContent();
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            partnerList = partnerList.stream()
+                    .filter(p -> {
+                        if (p.getZoneId() != null && p.getZoneId().equalsIgnoreCase(zone.getId())) {
+                            return true;
+                        }
+                        if (p.getZoneName() != null && p.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
+                            return true;
+                        }
+                        return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(), zone);
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        List<AdminDeliveryPartnerResponseDto> items = partnerList.stream()
                 .map(this::toAdminDto)
                 .collect(Collectors.toList());
 
         AdminDeliveryPartnersPageDto.PaginationDto pagination = new AdminDeliveryPartnersPageDto.PaginationDto(
                 partnerPage.getNumber(),
                 partnerPage.getSize(),
-                partnerPage.getTotalElements(),
+                items.size(),
                 partnerPage.getTotalPages()
         );
 
@@ -116,9 +145,29 @@ public class AdminDeliveryController {
 
     @GetMapping("/stats")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get delivery partner fleet statistics")
-    public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats() {
+    @Operation(summary = "Get delivery partner fleet statistics, scoped to zone if requested")
+    public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam
+    ) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
         List<DeliveryPartner> all = deliveryPartnerRepository.findAll();
+
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            all = all.stream()
+                    .filter(p -> {
+                        if (p.getZoneId() != null && p.getZoneId().equalsIgnoreCase(zone.getId())) {
+                            return true;
+                        }
+                        return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(), zone);
+                    })
+                    .collect(Collectors.toList());
+        }
+
         long totalFleet = all.size();
         long onlineCount = all.stream().filter(DeliveryPartner::isOnline).count();
         long pendingKyc = all.stream().filter(p -> p.getKycStatus() == KycStatus.PENDING).count();
