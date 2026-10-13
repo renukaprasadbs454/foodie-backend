@@ -73,6 +73,21 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "bank_name", length = 100)
     private String bankName;
 
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
+    @Column(name = "zone_name", length = 200)
+    private String zoneName;
+
+    @Column(name = "zone_verified", nullable = false)
+    private boolean zoneVerified = false;
+
     protected DeliveryPartner() {
     }
 
@@ -109,6 +124,10 @@ public class DeliveryPartner extends BaseEntity {
 
     public String getAddressLine1() {
         return addressLine1;
+    }
+
+    public void setAddressLine1(String addressLine1) {
+        this.addressLine1 = addressLine1;
     }
 
     public String getAddressLine2() {
@@ -247,5 +266,61 @@ public class DeliveryPartner extends BaseEntity {
 
     public String getBankName() {
         return bankName;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
+    }
+
+    public String getZoneName() {
+        return zoneName;
+    }
+
+    public void setZoneName(String zoneName) {
+        this.zoneName = zoneName;
+    }
+
+    public boolean isZoneVerified() {
+        return zoneVerified;
+    }
+
+    public void setZoneVerified(boolean zoneVerified) {
+        this.zoneVerified = zoneVerified;
+    }
+
+    public void verifyZone(String zoneId, String zoneName, Double latitude, Double longitude) {
+        this.zoneId = zoneId;
+        this.zoneName = zoneName;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.zoneVerified = true;
+    }
+
+    public void invalidateZone(Double latitude, Double longitude) {
+        this.zoneId = null;
+        this.zoneName = null;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.zoneVerified = false;
     }
 }

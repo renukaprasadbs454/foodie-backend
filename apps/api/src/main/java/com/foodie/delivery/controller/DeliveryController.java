@@ -54,6 +54,22 @@ public class DeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.getOrCreateProfile(principal.userId())));
     }
 
+    @PostMapping(value = {"/verify-zone", "/me/verify-zone"})
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Verify if delivery partner location falls inside an active admin-configured delivery zone")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto>> verifyZone(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.verifyZone(principal.userId(), request)));
+    }
+
+    @GetMapping("/zones")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "List all active delivery zones configured for delivery partners")
+    public ResponseEntity<ApiResponse<List<com.foodie.admin.dto.LocationZoneDto>>> getZones() {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.getActiveDeliveryZones()));
+    }
+
     @PutMapping("/me")
     @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Create or update my delivery partner profile")

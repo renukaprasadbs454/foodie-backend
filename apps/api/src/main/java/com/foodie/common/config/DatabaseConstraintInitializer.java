@@ -86,5 +86,12 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
         try {
             jdbcTemplate.update("UPDATE \"order\" SET status = 'CANCELLED' WHERE status IN ('WAITING_FOR_DELIVERY_PARTNER', 'ACCEPTED', 'PREPARING', 'CONFIRMED')");
         } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100)");
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_name VARCHAR(200)");
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_verified BOOLEAN DEFAULT FALSE");
+        } catch (Exception ignored) {}
     }
 }

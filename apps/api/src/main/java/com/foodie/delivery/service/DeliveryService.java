@@ -81,4 +81,15 @@ public interface DeliveryService {
         DeliveryPartnerReviewsResponseDto getDeliveryPartnerReviews(UUID userCredentialId);
 
         DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId);
+
+        com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyZone(
+                UUID userCredentialId, com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request);
+
+        com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyCoordinates(
+                Double latitude, Double longitude);
+
+        com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyCoordinates(
+                Double latitude, Double longitude, String zoneId);
+
+        List<com.foodie.admin.dto.LocationZoneDto> getActiveDeliveryZones();
 }

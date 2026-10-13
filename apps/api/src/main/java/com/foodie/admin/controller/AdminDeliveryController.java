@@ -237,7 +237,9 @@ public class AdminDeliveryController {
         long completedDeliveries = deliveryAssignmentRepository
                 .countByDeliveryPartnerIdAndStatus(partner.getId(), DeliveryAssignmentStatus.DELIVERED);
 
-        String zone = "Tumkur Central";
+        String zone = (partner.getZoneName() != null && !partner.getZoneName().isBlank())
+                ? partner.getZoneName()
+                : "Tumkur Central";
 
         return new AdminDeliveryPartnerResponseDto(
                 partner.getId(),

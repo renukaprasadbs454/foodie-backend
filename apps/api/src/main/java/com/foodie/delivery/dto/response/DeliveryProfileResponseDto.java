@@ -17,5 +17,10 @@ public record DeliveryProfileResponseDto(
                 boolean isOnline,
                 String profileImageUrl,
                 List<DeliveryDocumentResponseDto> documents,
-                java.math.BigDecimal cashInHand) {
+                java.math.BigDecimal cashInHand,
+                Double latitude,
+                Double longitude,
+                String zoneId,
+                String zoneName,
+                boolean zoneVerified) {
 }

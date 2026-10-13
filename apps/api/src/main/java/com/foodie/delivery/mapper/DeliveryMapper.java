@@ -30,7 +30,12 @@ public class DeliveryMapper {
                                 partner.isOnline(),
                                 profileImageUrl,
                                 documents,
-                                partner.getCashInHand());
+                                partner.getCashInHand(),
+                                partner.getLatitude(),
+                                partner.getLongitude(),
+                                partner.getZoneId(),
+                                partner.getZoneName(),
+                                partner.isZoneVerified());
         }
 
         public DeliveryDocumentResponseDto toDocument(DeliveryPartnerDocument document) {

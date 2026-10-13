@@ -32,6 +32,11 @@ import com.foodie.delivery.mapper.DeliveryMapper;
 import com.foodie.delivery.repository.DeliveryAssignmentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerDocumentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
+import com.foodie.admin.dto.LocationZoneDto;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto;
+import com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto;
 import com.foodie.delivery.service.DeliveryService;
 import com.foodie.delivery.service.biometrics.FaceBiometricsService;
 import com.foodie.delivery.service.PartnerGeoService.GeoPartnerHit;
@@ -84,6 +89,9 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     @org.springframework.beans.factory.annotation.Autowired
     private DeliveryPartnerIncentiveEarningRepository earningRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private LocationZoneRepository locationZoneRepository;
 
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
@@ -152,6 +160,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.cashfreePaymentClient = cashfreePaymentClient;
     }
 
+    public void setLocationZoneRepository(LocationZoneRepository locationZoneRepository) {
+        this.locationZoneRepository = locationZoneRepository;
+    }
+
     @Override
     @Transactional
     public DeliveryProfileResponseDto getOrCreateProfile(UUID userCredentialId) {
@@ -206,6 +218,23 @@ public class DeliveryServiceImpl implements DeliveryService {
                         DEFAULT_FULL_NAME,
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
+
+        if (!partner.isZoneVerified() || partner.getLatitude() == null || partner.getLongitude() == null) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        }
+        DeliveryZoneVerificationResponseDto zoneCheck = (partner.getZoneId() != null && !partner.getZoneId().isBlank())
+                ? verifyCoordinates(partner.getLatitude(), partner.getLongitude(), partner.getZoneId())
+                : verifyCoordinates(partner.getLatitude(), partner.getLongitude());
+        if (!zoneCheck.verified()) {
+            partner.invalidateZone(partner.getLatitude(), partner.getLongitude());
+            deliveryPartnerRepository.save(partner);
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        }
+
         byte[] bytes = readBytes(file, MAX_DOCUMENT_BYTES, "Document must be at most 10 MB.");
         DocumentMagicBytes.DetectedDocument detected = DocumentMagicBytes.detect(
                 header(bytes), file.getContentType());
@@ -234,6 +263,22 @@ public class DeliveryServiceImpl implements DeliveryService {
                         DEFAULT_FULL_NAME,
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
+
+        if (!partner.isZoneVerified() || partner.getLatitude() == null || partner.getLongitude() == null) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        }
+        DeliveryZoneVerificationResponseDto zoneCheck = (partner.getZoneId() != null && !partner.getZoneId().isBlank())
+                ? verifyCoordinates(partner.getLatitude(), partner.getLongitude(), partner.getZoneId())
+                : verifyCoordinates(partner.getLatitude(), partner.getLongitude());
+        if (!zoneCheck.verified()) {
+            partner.invalidateZone(partner.getLatitude(), partner.getLongitude());
+            deliveryPartnerRepository.save(partner);
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        }
         byte[] bytes = readBytes(file, 5 * 1024 * 1024, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
 
@@ -1353,5 +1398,243 @@ public class DeliveryServiceImpl implements DeliveryService {
         double baseLat = (pickupLat != null && pickupLat != 0.0) ? pickupLat : 13.3379;
         double baseLng = (pickupLng != null && pickupLng != 0.0) ? pickupLng : 77.1173;
         return new double[] { baseLat, baseLng };
+    }
+
+    @Override
+    @Transactional
+    public DeliveryZoneVerificationResponseDto verifyZone(UUID userCredentialId, DeliveryZoneVerificationRequestDto request) {
+        DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
+                .orElseGet(() -> deliveryPartnerRepository.save(DeliveryPartner.create(
+                        userCredentialId,
+                        DEFAULT_FULL_NAME,
+                        com.foodie.common.enums.VehicleType.BIKE,
+                        null)));
+
+        if (request == null || request.latitude() == null || request.longitude() == null
+                || Double.isNaN(request.latitude()) || Double.isNaN(request.longitude())
+                || request.latitude() < -90.0 || request.latitude() > 90.0
+                || request.longitude() < -180.0 || request.longitude() > 180.0) {
+            partner.invalidateZone(request != null ? request.latitude() : null, request != null ? request.longitude() : null);
+            deliveryPartnerRepository.save(partner);
+            return new DeliveryZoneVerificationResponseDto(
+                    false, null, null, null,
+                    request != null ? request.latitude() : null, request != null ? request.longitude() : null,
+                    "Invalid coordinates. Please fetch a valid GPS location.");
+        }
+
+        DeliveryZoneVerificationResponseDto result;
+        if (request.zoneId() != null && !request.zoneId().trim().isEmpty()) {
+            result = verifyCoordinates(request.latitude(), request.longitude(), request.zoneId().trim());
+        } else {
+            result = verifyCoordinates(request.latitude(), request.longitude());
+        }
+
+        if (result.verified()) {
+            partner.verifyZone(result.zoneId(), result.zoneName(), request.latitude(), request.longitude());
+            if (request.address() != null && !request.address().isBlank()
+                    && (partner.getAddressLine1() == null || partner.getAddressLine1().isBlank())) {
+                partner.setAddressLine1(request.address().trim());
+            }
+        } else {
+            partner.invalidateZone(request.latitude(), request.longitude());
+        }
+
+        deliveryPartnerRepository.save(partner);
+        return result;
+    }
+
+    @Override
+    public DeliveryZoneVerificationResponseDto verifyCoordinates(Double latitude, Double longitude, String zoneId) {
+        if (latitude == null || longitude == null
+                || Double.isNaN(latitude) || Double.isNaN(longitude)
+                || latitude < -90.0 || latitude > 90.0
+                || longitude < -180.0 || longitude > 180.0) {
+            return new DeliveryZoneVerificationResponseDto(
+                    false, null, null, null, latitude, longitude,
+                    "Invalid coordinates. Please fetch a valid GPS location.");
+        }
+
+        if (zoneId == null || zoneId.trim().isEmpty()) {
+            return verifyCoordinates(latitude, longitude);
+        }
+
+        String cleanZoneId = zoneId.trim();
+        LocationZone zone = locationZoneRepository.findById(cleanZoneId).orElse(null);
+        if (zone == null) {
+            zone = locationZoneRepository.findAll().stream()
+                    .filter(z -> cleanZoneId.equals(z.getId()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (zone == null || !zone.isDeliveryPartnerEnabled()
+                || (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim()))) {
+            return new DeliveryZoneVerificationResponseDto(
+                    false,
+                    null,
+                    null,
+                    null,
+                    latitude,
+                    longitude,
+                    "You are outside the selected delivery zone. Please move into the zone and try again."
+            );
+        }
+
+        double lat = latitude;
+        double lng = longitude;
+        if (isPointInsideZone(lat, lng, zone)) {
+            return new DeliveryZoneVerificationResponseDto(
+                    true,
+                    zone.getId(),
+                    zone.getZoneName(),
+                    zone.getCityName(),
+                    lat,
+                    lng,
+                    "Location Verified — " + zone.getZoneName()
+            );
+        }
+
+        return new DeliveryZoneVerificationResponseDto(
+                false,
+                null,
+                null,
+                null,
+                lat,
+                lng,
+                "You are outside the selected delivery zone. Please move into the zone and try again."
+        );
+    }
+
+    @Override
+    public DeliveryZoneVerificationResponseDto verifyCoordinates(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null
+                || Double.isNaN(latitude) || Double.isNaN(longitude)
+                || latitude < -90.0 || latitude > 90.0
+                || longitude < -180.0 || longitude > 180.0) {
+            return new DeliveryZoneVerificationResponseDto(
+                    false, null, null, null, latitude, longitude,
+                    "Invalid coordinates. Please fetch a valid GPS location.");
+        }
+
+        double lat = latitude;
+        double lng = longitude;
+
+        List<LocationZone> zones = new java.util.ArrayList<>(locationZoneRepository.findAll());
+        // Deterministic sorting (by id ascending) to handle overlapping zones predictably
+        zones.sort(java.util.Comparator.comparing(LocationZone::getId, java.util.Comparator.nullsLast(String::compareTo)));
+
+        for (LocationZone zone : zones) {
+            if (isPointInsideZone(lat, lng, zone)) {
+                return new DeliveryZoneVerificationResponseDto(
+                        true,
+                        zone.getId(),
+                        zone.getZoneName(),
+                        zone.getCityName(),
+                        lat,
+                        lng,
+                        "Location Verified — " + zone.getZoneName()
+                );
+            }
+        }
+
+        return new DeliveryZoneVerificationResponseDto(
+                false,
+                null,
+                null,
+                null,
+                lat,
+                lng,
+                "You are outside the delivery zone. Please move to an active delivery zone and try again."
+        );
+    }
+
+    private boolean isPointInsideZone(double lat, double lng, LocationZone zone) {
+        if (zone == null || !zone.isDeliveryPartnerEnabled()) {
+            return false;
+        }
+        if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) {
+            return false;
+        }
+
+        // 1. Radius check
+        if (zone.getLatitude() != null && zone.getLongitude() != null && zone.getRadiusKm() != null && zone.getRadiusKm() > 0) {
+            double dist = calculateDistanceKm(lat, lng, zone.getLatitude(), zone.getLongitude());
+            if (dist <= zone.getRadiusKm()) {
+                return true;
+            }
+        }
+
+        // 2. Polygon check (if not matched by radius or if radius not set)
+        if (zone.getPolygonCoordinates() != null && !zone.getPolygonCoordinates().trim().isEmpty()) {
+            if (isPointInPolygon(lat, lng, zone.getPolygonCoordinates())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public List<LocationZoneDto> getActiveDeliveryZones() {
+        return locationZoneRepository.findAll().stream()
+                .filter(z -> z.isDeliveryPartnerEnabled() && (z.getStatus() == null || "ACTIVE".equalsIgnoreCase(z.getStatus().trim())))
+                .map(this::mapZoneToDto)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    private LocationZoneDto mapZoneToDto(LocationZone entity) {
+        return new LocationZoneDto(
+                entity.getId(),
+                entity.getZoneName(),
+                entity.getCityName(),
+                entity.getLatitude(),
+                entity.getLongitude(),
+                entity.getRadiusKm(),
+                entity.getPolygonCoordinates(),
+                entity.getActiveDrivers(),
+                entity.getSurgeMultiplier(),
+                entity.getStatus(),
+                entity.isRestaurantEnabled(),
+                entity.isDeliveryPartnerEnabled(),
+                entity.isCustomerOrderingEnabled());
+    }
+
+    private double calculateDistanceKm(double lat1, double lon1, double lat2, double lon2) {
+        final int R = 6371; // Earth radius in km
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    private boolean isPointInPolygon(double lat, double lng, String polygonStr) {
+        try {
+            String[] boundaries = polygonStr.split("\\|");
+            if (boundaries.length < 3) {
+                return false;
+            }
+            double[][] poly = new double[boundaries.length][2];
+            for (int i = 0; i < boundaries.length; i++) {
+                String[] cords = boundaries[i].trim().split(",");
+                poly[i][0] = Double.parseDouble(cords[0].trim());
+                poly[i][1] = Double.parseDouble(cords[1].trim());
+            }
+            boolean inside = false;
+            for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                double xi = poly[i][1], yi = poly[i][0];
+                double xj = poly[j][1], yj = poly[j][0];
+                boolean intersect = ((yi > lat) != (yj > lat))
+                        && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+                if (intersect) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
