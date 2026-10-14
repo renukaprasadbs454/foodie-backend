@@ -34,10 +34,15 @@ public class AnalyticsController {
     @Operation(summary = "Platform dashboard summary for a date range")
     public ResponseEntity<ApiResponse<DashboardSummaryResponseDto>> dashboardSummary(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
         return ResponseEntity.ok(ApiResponse.success(
-                analyticsService.getDashboardSummary(new DateRangeParams(dateFrom, dateTo))));
+                analyticsService.getDashboardSummary(new DateRangeParams(dateFrom, dateTo), activeZoneId)));
     }
 
     @GetMapping("/daily-sales")
@@ -45,10 +50,15 @@ public class AnalyticsController {
     @Operation(summary = "Daily order count and revenue series")
     public ResponseEntity<ApiResponse<List<DailySalesPointDto>>> dailySales(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
         return ResponseEntity.ok(ApiResponse.success(
-                analyticsService.getDailySales(new DateRangeParams(dateFrom, dateTo))));
+                analyticsService.getDailySales(new DateRangeParams(dateFrom, dateTo), activeZoneId)));
     }
 
     @GetMapping("/order-status-metrics")
@@ -56,9 +66,14 @@ public class AnalyticsController {
     @Operation(summary = "Order status mix including REJECTED/CANCELLED")
     public ResponseEntity<ApiResponse<List<OrderStatusMetricDto>>> orderStatusMetrics(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
         return ResponseEntity.ok(ApiResponse.success(
-                analyticsService.getOrderStatusMetrics(new DateRangeParams(dateFrom, dateTo))));
+                analyticsService.getOrderStatusMetrics(new DateRangeParams(dateFrom, dateTo), activeZoneId)));
     }
 }

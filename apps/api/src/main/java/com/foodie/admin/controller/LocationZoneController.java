@@ -87,51 +87,86 @@ public class LocationZoneController {
             cityRepository.saveAndFlush(c3);
         }
 
-        if (zoneRepository.count() == 0) {
-            LocationZone z1 = new LocationZone();
-            z1.setId("dz-tumkur");
-            z1.setZoneName("Tumkur Central");
-            z1.setCityName("Bangalore");
-            z1.setLatitude(13.3379);
-            z1.setLongitude(77.1173);
-            z1.setRadiusKm(15.0);
-            z1.setPolygonCoordinates("13.3379,77.1173 | 13.3450,77.1250 | 13.3300,77.1300");
-            z1.setActiveDrivers(18);
-            z1.setSurgeMultiplier(new BigDecimal("1.00"));
-            z1.setStatus("ACTIVE");
-            z1.setRestaurantEnabled(true);
-            z1.setDeliveryPartnerEnabled(true);
-            z1.setCustomerOrderingEnabled(true);
-            zoneRepository.saveAndFlush(z1);
+        // Ensure canonical approved operating zones exist and are ACTIVE
+        LocationZone bgl = zoneRepository.findById("dz-bangalore").orElse(null);
+        if (bgl == null) {
+            bgl = new LocationZone();
+            bgl.setId("dz-bangalore");
+            bgl.setZoneName("Bangalore Zone");
+            bgl.setCityName("Bangalore");
+            bgl.setLatitude(12.9716);
+            bgl.setLongitude(77.5946);
+            bgl.setRadiusKm(25.0);
+            bgl.setPolygonCoordinates("12.9716,77.5946 | 13.0000,77.6200 | 12.9500,77.5800");
+            bgl.setActiveDrivers(45);
+            bgl.setSurgeMultiplier(new BigDecimal("1.00"));
+            bgl.setStatus("ACTIVE");
+            bgl.setRestaurantEnabled(true);
+            bgl.setDeliveryPartnerEnabled(true);
+            bgl.setCustomerOrderingEnabled(true);
+            zoneRepository.saveAndFlush(bgl);
+        } else if (!"ACTIVE".equalsIgnoreCase(bgl.getStatus()) || !"Bangalore Zone".equals(bgl.getZoneName())) {
+            bgl.setZoneName("Bangalore Zone");
+            bgl.setCityName("Bangalore");
+            bgl.setStatus("ACTIVE");
+            zoneRepository.saveAndFlush(bgl);
+        }
 
-            LocationZone z2 = new LocationZone();
-            z2.setId("dz-indiranagar");
-            z2.setZoneName("Indiranagar Tech Corridor");
-            z2.setCityName("Bangalore");
-            z2.setLatitude(12.9784);
-            z2.setLongitude(77.6408);
-            z2.setRadiusKm(8.0);
-            z2.setPolygonCoordinates("12.9784,77.6408 | 12.9850,77.6480 | 12.9700,77.6520");
-            z2.setActiveDrivers(32);
-            z2.setSurgeMultiplier(new BigDecimal("1.15"));
-            z2.setStatus("ACTIVE");
-            z2.setRestaurantEnabled(true);
-            z2.setDeliveryPartnerEnabled(true);
-            z2.setCustomerOrderingEnabled(true);
-            zoneRepository.saveAndFlush(z2);
+        LocationZone tmk = zoneRepository.findById("dz-tumkur").orElse(null);
+        if (tmk == null) {
+            tmk = new LocationZone();
+            tmk.setId("dz-tumkur");
+            tmk.setZoneName("Tumkur Zone");
+            tmk.setCityName("Tumkur");
+            tmk.setLatitude(13.3379);
+            tmk.setLongitude(77.1173);
+            tmk.setRadiusKm(20.0);
+            tmk.setPolygonCoordinates("13.3379,77.1173 | 13.3500,77.1300 | 13.3200,77.1000");
+            tmk.setActiveDrivers(22);
+            tmk.setSurgeMultiplier(new BigDecimal("1.00"));
+            tmk.setStatus("ACTIVE");
+            tmk.setRestaurantEnabled(true);
+            tmk.setDeliveryPartnerEnabled(true);
+            tmk.setCustomerOrderingEnabled(true);
+            zoneRepository.saveAndFlush(tmk);
+        } else if (!"ACTIVE".equalsIgnoreCase(tmk.getStatus()) || !"Tumkur Zone".equals(tmk.getZoneName())) {
+            tmk.setZoneName("Tumkur Zone");
+            tmk.setCityName("Tumkur");
+            tmk.setStatus("ACTIVE");
+            zoneRepository.saveAndFlush(tmk);
+        }
+
+        // Deactivate duplicate or unwanted entries without deleting historical data
+        List<LocationZone> all = zoneRepository.findAll();
+        for (LocationZone z : all) {
+            if (!"dz-bangalore".equalsIgnoreCase(z.getId()) && !"dz-tumkur".equalsIgnoreCase(z.getId())) {
+                if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
+                    z.setStatus("INACTIVE");
+                    zoneRepository.saveAndFlush(z);
+                }
+            }
         }
 
         if (serviceAreas.isEmpty()) {
             serviceAreas.put("sa-1", new ServiceAreaDto("sa-1", "Indiranagar & Domlur", "Bangalore", "560038", "FULL_COVERAGE", 120));
             serviceAreas.put("sa-2", new ServiceAreaDto("sa-2", "Koramangala 4th Block", "Bangalore", "560034", "FULL_COVERAGE", 145));
-            serviceAreas.put("sa-3", new ServiceAreaDto("sa-3", "Bandra West & Khar", "Mumbai", "400050", "FULL_COVERAGE", 190));
-            serviceAreas.put("sa-4", new ServiceAreaDto("sa-4", "Connaught Place & Janpath", "Delhi-NCR", "110001", "PARTIAL_COVERAGE", 85));
+            serviceAreas.put("sa-3", new ServiceAreaDto("sa-3", "MG Road & Ashok Nagar", "Tumkur", "572101", "FULL_COVERAGE", 65));
+            serviceAreas.put("sa-4", new ServiceAreaDto("sa-4", "Siddaganga Ext & Batwadi", "Tumkur", "572102", "FULL_COVERAGE", 48));
+        }
+
+        if (unserviceableRequests.isEmpty()) {
+            unserviceableRequests.put("req-1", new UnserviceableRequestDto("req-1", "Kengeri Biryani Hub", "Suresh Kumar", "suresh@kengeribiryani.com", "+919876543210", "Kengeri Satellite Town", "Bangalore", 12.9177, 77.4838, "PENDING", Instant.now().minusSeconds(86400)));
+            unserviceableRequests.put("req-2", new UnserviceableRequestDto("req-2", "Pavithra Thatte Idli", "Manjunath T", "manju@pavithraidli.com", "+919876543211", "Kyatsandra Main Road", "Tumkur", 13.3150, 77.1650, "PENDING", Instant.now().minusSeconds(43200)));
         }
     }
 
     @GetMapping("/zones")
     public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
-        List<LocationZoneDto> dtos = zoneRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+        List<LocationZoneDto> dtos = zoneRepository.findAll().stream()
+                .filter(z -> ("dz-bangalore".equalsIgnoreCase(z.getId()) || "dz-tumkur".equalsIgnoreCase(z.getId()))
+                        || ("ACTIVE".equalsIgnoreCase(z.getStatus()) && !z.getZoneName().toLowerCase().contains("zone 1") && !z.getZoneName().toLowerCase().contains("bengaluru zone")))
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 
@@ -268,8 +303,23 @@ public class LocationZoneController {
     }
 
     @GetMapping("/unserviceable-requests")
-    public ResponseEntity<ApiResponse<List<UnserviceableRequestDto>>> getUnserviceableRequests() {
-        return ResponseEntity.ok(ApiResponse.success(new ArrayList<>(unserviceableRequests.values())));
+    public ResponseEntity<ApiResponse<List<UnserviceableRequestDto>>> getUnserviceableRequests(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        List<UnserviceableRequestDto> list = new ArrayList<>(unserviceableRequests.values());
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            String lower = activeZoneId.toLowerCase();
+            if (lower.contains("tumkur")) {
+                list = list.stream().filter(r -> r.getCityName() != null && r.getCityName().equalsIgnoreCase("Tumkur")).collect(Collectors.toList());
+            } else if (lower.contains("bangalore") || lower.contains("bengaluru")) {
+                list = list.stream().filter(r -> r.getCityName() != null && (r.getCityName().equalsIgnoreCase("Bangalore") || r.getCityName().equalsIgnoreCase("Bengaluru"))).collect(Collectors.toList());
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(list));
     }
 
     @PostMapping("/unserviceable-requests")
@@ -335,8 +385,23 @@ public class LocationZoneController {
     }
 
     @GetMapping("/service-areas")
-    public ResponseEntity<ApiResponse<List<ServiceAreaDto>>> getServiceAreas() {
-        return ResponseEntity.ok(ApiResponse.success(new ArrayList<>(serviceAreas.values())));
+    public ResponseEntity<ApiResponse<List<ServiceAreaDto>>> getServiceAreas(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        List<ServiceAreaDto> list = new ArrayList<>(serviceAreas.values());
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            String lower = activeZoneId.toLowerCase();
+            if (lower.contains("tumkur")) {
+                list = list.stream().filter(s -> s.getCityName() != null && s.getCityName().equalsIgnoreCase("Tumkur")).collect(Collectors.toList());
+            } else if (lower.contains("bangalore") || lower.contains("bengaluru")) {
+                list = list.stream().filter(s -> s.getCityName() != null && (s.getCityName().equalsIgnoreCase("Bangalore") || s.getCityName().equalsIgnoreCase("Bengaluru"))).collect(Collectors.toList());
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(list));
     }
 
     @PostMapping("/service-areas")

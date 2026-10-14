@@ -43,12 +43,38 @@ public class AdminCouponController {
                 this.couponRepository = couponRepository;
         }
 
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private com.foodie.admin.service.AdminZoneService adminZoneService;
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
         @GetMapping
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Get all coupons")
-        public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons() {
+        public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons(
+                        @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+                        @org.springframework.web.bind.annotation.RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+                String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                                ? activeZoneHeader.trim()
+                                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+                var list = couponRepository.findAll();
+                if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
+                        com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+                        list = list.stream().filter(c -> {
+                                if (c.getRestaurantId() == null) return true; // platform coupon
+                                var r = restaurantRepository.findById(c.getRestaurantId()).orElse(null);
+                                if (r == null) return false;
+                                return adminZoneService.isLocationInZone(
+                                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                                zone);
+                        }).toList();
+                }
+
                 return ResponseEntity.ok(ApiResponse.success(
-                                couponRepository.findAll().stream()
+                                list.stream()
                                                 .map(CouponMapper::toResponse)
                                                 .collect(Collectors.toList())));
         }

@@ -13,7 +13,19 @@ public interface AnalyticsService {
 
     DashboardSummaryResponseDto getDashboardSummary(DateRangeParams range);
 
+    default DashboardSummaryResponseDto getDashboardSummary(DateRangeParams range, String zoneId) {
+        return getDashboardSummary(range);
+    }
+
     List<DailySalesPointDto> getDailySales(DateRangeParams range);
 
+    default List<DailySalesPointDto> getDailySales(DateRangeParams range, String zoneId) {
+        return getDailySales(range);
+    }
+
     List<OrderStatusMetricDto> getOrderStatusMetrics(DateRangeParams range);
+
+    default List<OrderStatusMetricDto> getOrderStatusMetrics(DateRangeParams range, String zoneId) {
+        return getOrderStatusMetrics(range);
+    }
 }

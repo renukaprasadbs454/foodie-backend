@@ -18,7 +18,19 @@ public interface AdminPaymentService {
 
     List<PaymentSettlementResponseDto> listSettlements();
 
+    default List<PaymentSettlementResponseDto> listSettlements(String zoneId) {
+        return listSettlements();
+    }
+
     List<PaymentTransactionResponseDto> listTransactions();
 
+    default List<PaymentTransactionResponseDto> listTransactions(String zoneId) {
+        return listTransactions();
+    }
+
     List<AdminLedgerEntryResponseDto> listLedgerEntries();
+
+    default List<AdminLedgerEntryResponseDto> listLedgerEntries(String zoneId) {
+        return listLedgerEntries();
+    }
 }

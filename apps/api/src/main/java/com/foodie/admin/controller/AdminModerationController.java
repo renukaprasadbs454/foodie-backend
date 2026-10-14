@@ -34,6 +34,12 @@ public class AdminModerationController {
 
     private final AdminOperationsService adminOperationsService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
     public AdminModerationController(AdminOperationsService adminOperationsService) {
         this.adminOperationsService = adminOperationsService;
     }
@@ -43,23 +49,78 @@ public class AdminModerationController {
     @Operation(summary = "List all platform reviews for admin dashboard")
     public ResponseEntity<ApiResponse<List<AdminReviewItemDto>>> listReviews(
             @AuthenticationPrincipal AuthPrincipal principal,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam,
             @RequestParam(required = false) String storeName,
             @RequestParam(required = false) Integer minRating,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(required = false) String sort
     ) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
         var result = adminOperationsService.listReviews(principal.userId(), storeName, minRating, page, size, sort);
-        return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
+        List<AdminReviewItemDto> items = result.items();
+
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
+            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            items = items.stream().filter(item -> {
+                if (item.restaurantId() != null) {
+                    var r = restaurantRepository.findById(item.restaurantId()).orElse(null);
+                    if (r != null) {
+                        return adminZoneService.isLocationInZone(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                zone);
+                    }
+                }
+                return true;
+            }).collect(java.util.stream.Collectors.toList());
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(items, result.pagination()));
     }
 
     @GetMapping("/stats")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'REVIEW', 'MODERATE')")
     @Operation(summary = "Get review compliance stats")
     public ResponseEntity<ApiResponse<AdminReviewStatsDto>> getStats(
-            @AuthenticationPrincipal AuthPrincipal principal
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
-        return ResponseEntity.ok(ApiResponse.success(adminOperationsService.getReviewStats(principal.userId())));
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        var stats = adminOperationsService.getReviewStats(principal.userId());
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
+            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            var result = adminOperationsService.listReviews(principal.userId(), null, null, 0, 1000, null);
+            long total = 0;
+            long flagged = 0;
+            for (var item : result.items()) {
+                if (item.restaurantId() != null) {
+                    var r = restaurantRepository.findById(item.restaurantId()).orElse(null);
+                    if (r != null && adminZoneService.isLocationInZone(
+                            r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                            r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            zone)) {
+                        total++;
+                        if (item.isReported() || "FLAGGED".equalsIgnoreCase(item.status())) {
+                            flagged++;
+                        }
+                    }
+                }
+            }
+            stats = new AdminReviewStatsDto(total, flagged, stats.auditLogs(), stats.resolvedIssues());
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
     @PostMapping("/{id}/flag")
