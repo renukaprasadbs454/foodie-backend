@@ -4,8 +4,11 @@ import com.foodie.auth.entity.UserCredential;
 import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.common.enums.DeliveryAssignmentStatus;
+import com.foodie.common.enums.DeliveryDocType;
 import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.VehicleType;
+import com.foodie.common.exception.BadRequestException;
+import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto;
 import com.foodie.delivery.dto.response.AdminDeliveryPartnersPageDto;
@@ -154,7 +157,7 @@ public class AdminDeliveryController {
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
 
-        List<DeliveryPartner> all = deliveryPartnerRepository.findAll();
+        List<DeliveryPartner> all = deliveryPartnerRepository.findAllKycReadyPartners();
 
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
             LocationZone zone = adminZoneService.validateZone(activeZoneId);
@@ -163,11 +166,13 @@ public class AdminDeliveryController {
                         if (p.getZoneId() != null && p.getZoneId().equalsIgnoreCase(zone.getId())) {
                             return true;
                         }
+                        if (p.getZoneName() != null && p.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
+                            return true;
+                        }
                         return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(), zone);
                     })
                     .collect(Collectors.toList());
         }
-
         long totalFleet = all.size();
         long onlineCount = all.stream().filter(DeliveryPartner::isOnline).count();
         long pendingKyc = all.stream().filter(p -> p.getKycStatus() == KycStatus.PENDING).count();
@@ -187,6 +192,9 @@ public class AdminDeliveryController {
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> getPartner(@PathVariable UUID id) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        if (!isKycOnboardingComplete(partner)) {
+            throw new ResourceNotFoundException("Delivery partner has not completed KYC onboarding requirements.");
+        }
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
@@ -198,6 +206,11 @@ public class AdminDeliveryController {
             @PathVariable("id") UUID partnerId) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        if (!isKycOnboardingComplete(partner)) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "Cannot approve KYC: delivery partner must select a delivery zone and upload all required documents (Identity, License, Vehicle RC).");
+        }
         partner.verifyKyc();
         deliveryPartnerRepository.save(partner);
         UUID adminUserId = resolveAdminUserId(principal != null ? principal.userId() : null);
@@ -218,6 +231,11 @@ public class AdminDeliveryController {
             @RequestBody(required = false) Map<String, String> body) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        if (!isKycOnboardingComplete(partner)) {
+            throw new BadRequestException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "Cannot reject KYC: delivery partner has not completed KYC onboarding requirements.");
+        }
         String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Documents incomplete or invalid.";
         partner.rejectKyc(reason);
         deliveryPartnerRepository.save(partner);
@@ -228,6 +246,23 @@ public class AdminDeliveryController {
             deliveryPartnerDocumentRepository.save(doc);
         }
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
+    }
+
+    private boolean isKycOnboardingComplete(DeliveryPartner partner) {
+        if (partner == null) {
+            return false;
+        }
+        boolean hasZone = (partner.getZoneId() != null && !partner.getZoneId().isBlank())
+                || (partner.getZoneName() != null && !partner.getZoneName().isBlank())
+                || partner.isZoneVerified();
+        if (!hasZone) {
+            return false;
+        }
+        List<DeliveryPartnerDocument> docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(partner.getId());
+        boolean hasIdentity = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.IDENTITY && d.getS3Key() != null && !d.getS3Key().isBlank());
+        boolean hasLicense = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.LICENSE && d.getS3Key() != null && !d.getS3Key().isBlank());
+        boolean hasVehicleRc = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.VEHICLE_RC && d.getS3Key() != null && !d.getS3Key().isBlank());
+        return hasIdentity && hasLicense && hasVehicleRc;
     }
 
     private UUID resolveAdminUserId(UUID userCredentialId) {
@@ -288,7 +323,7 @@ public class AdminDeliveryController {
 
         String zone = (partner.getZoneName() != null && !partner.getZoneName().isBlank())
                 ? partner.getZoneName()
-                : "Tumkur Central";
+                : (partner.getZoneId() != null && !partner.getZoneId().isBlank() ? partner.getZoneId() : null);
 
         return new AdminDeliveryPartnerResponseDto(
                 partner.getId(),
@@ -311,6 +346,22 @@ public class AdminDeliveryController {
         );
     }
 
+    private void seedPartnerDocuments(DeliveryPartner partner, boolean verified) {
+        DeliveryDocType[] requiredTypes = { DeliveryDocType.IDENTITY, DeliveryDocType.LICENSE, DeliveryDocType.VEHICLE_RC };
+        UUID adminId = adminUserRepository.findAll().stream().findFirst().map(com.foodie.admin.entity.AdminUser::getId).orElse(null);
+        for (DeliveryDocType type : requiredTypes) {
+            String key = "delivery-partners/" + partner.getId() + "/documents/" + type.name() + "/sample-" + type.name().toLowerCase() + ".png";
+            DeliveryPartnerDocument doc = deliveryPartnerDocumentRepository
+                    .findByDeliveryPartnerIdAndDocType(partner.getId(), type)
+                    .orElseGet(() -> deliveryPartnerDocumentRepository.save(
+                            DeliveryPartnerDocument.create(partner, type, key)));
+            if (verified && adminId != null) {
+                doc.verify(adminId);
+                deliveryPartnerDocumentRepository.save(doc);
+            }
+        }
+    }
+
     @EventListener(ApplicationReadyEvent.class)
     public void seedInitialDeliveryPartnersIfEmpty() {
         if (deliveryPartnerRepository.count() == 0) {
@@ -321,29 +372,35 @@ public class AdminDeliveryController {
                     UserCredential.phoneSignup("+919811122233", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
             DeliveryPartner dp1 = DeliveryPartner.create(
                     cred1.getId(), "Vikram Choudhary", VehicleType.BIKE, "KA-04-EK-1024");
+            dp1.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3408, 77.1010);
             dp1.verifyKyc();
             dp1.setOnline(true);
             dp1.addCash(new BigDecimal("350.00"));
-            deliveryPartnerRepository.save(dp1);
+            dp1 = deliveryPartnerRepository.save(dp1);
+            seedPartnerDocuments(dp1, true);
 
             // 2. Arjun Das (Verified)
             UserCredential cred2 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919822233344", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
             DeliveryPartner dp2 = DeliveryPartner.create(
                     cred2.getId(), "Arjun Das", VehicleType.SCOOTER, "KA-06-EV-8821");
+            dp2.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3412, 77.1025);
             dp2.verifyKyc();
             dp2.setOnline(true);
             dp2.addCash(new BigDecimal("120.00"));
-            deliveryPartnerRepository.save(dp2);
+            dp2 = deliveryPartnerRepository.save(dp2);
+            seedPartnerDocuments(dp2, true);
 
-            // 3. Siddharth Rao (Pending KYC)
+            // 3. Siddharth Rao (Pending KYC - completed zone & docs, waiting for admin approval)
             UserCredential cred3 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919833344455", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
             DeliveryPartner dp3 = DeliveryPartner.create(
                     cred3.getId(), "Siddharth Rao", VehicleType.BIKE, "KA-04-MT-4091");
-            deliveryPartnerRepository.save(dp3);
+            dp3.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3395, 77.0990);
+            dp3 = deliveryPartnerRepository.save(dp3);
+            seedPartnerDocuments(dp3, false);
 
-            // 4. Rajesh Kumar (Pending KYC)
+            // 4. Rajesh Kumar (Pending KYC - Incomplete: No zone & No docs yet, must NOT appear in Admin)
             UserCredential cred4 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919844455566", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
             DeliveryPartner dp4 = DeliveryPartner.create(
@@ -351,6 +408,25 @@ public class AdminDeliveryController {
             deliveryPartnerRepository.save(dp4);
 
             System.out.println("Seeded 4 Delivery Partners successfully!");
+        } else {
+            // Ensure seeded demo partners have zone & docs populated so they are valid
+            ensureSamplePartnersConfigured();
+        }
+    }
+
+    private void ensureSamplePartnersConfigured() {
+        for (DeliveryPartner dp : deliveryPartnerRepository.findAll()) {
+            UserCredential cred = userCredentialRepository.findById(dp.getUserCredentialId()).orElse(null);
+            if (cred == null || cred.getPhoneNumber() == null) continue;
+            String phone = cred.getPhoneNumber();
+            if ("+919811122233".equals(phone) || "+919822233344".equals(phone) || "+919833344455".equals(phone)) {
+                if (dp.getZoneName() == null || dp.getZoneName().isBlank()) {
+                    dp.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3408, 77.1010);
+                    deliveryPartnerRepository.save(dp);
+                }
+                boolean isVerified = dp.getKycStatus() == KycStatus.VERIFIED;
+                seedPartnerDocuments(dp, isVerified);
+            }
         }
     }
 }
