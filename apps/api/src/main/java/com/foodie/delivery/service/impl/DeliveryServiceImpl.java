@@ -462,26 +462,30 @@ public class DeliveryServiceImpl implements DeliveryService {
                 Double distance = null;
                 RestaurantPickupQuery.PickupLocation pickupForEarning = restaurantPickupQuery
                         .findByRestaurantId(orderForEarning.restaurantId()).orElse(null);
-                if (pickupForEarning != null && pickupForEarning.latitude() != null
-                        && pickupForEarning.longitude() != null) {
-                    Double distToCust = 0.0;
-                    if (orderForEarning.addressId() != null) {
-                        var addrOpt = addressRepository.findById(orderForEarning.addressId());
-                        if (addrOpt.isPresent() && addrOpt.get().getLatitude() != null
-                                && addrOpt.get().getLongitude() != null) {
-                            double lat1 = pickupForEarning.latitude().doubleValue();
-                            double lon1 = pickupForEarning.longitude().doubleValue();
-                            double lat2 = addrOpt.get().getLatitude().doubleValue();
-                            double lon2 = addrOpt.get().getLongitude().doubleValue();
-                            double dLat = Math.toRadians(lat2 - lat1);
-                            double dLon = Math.toRadians(lon2 - lon1);
-                            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
-                                    * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                            distToCust = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                        }
+                double pLat = (pickupForEarning != null && pickupForEarning.latitude() != null && pickupForEarning.latitude().doubleValue() != 0.0)
+                        ? pickupForEarning.latitude().doubleValue() : 13.3379;
+                double pLng = (pickupForEarning != null && pickupForEarning.longitude() != null && pickupForEarning.longitude().doubleValue() != 0.0)
+                        ? pickupForEarning.longitude().doubleValue() : 77.1173;
+
+                double dLat = pLat + 0.02;
+                double dLng = pLng + 0.015;
+                if (orderForEarning.addressId() != null) {
+                    var addrOpt = addressRepository.findById(orderForEarning.addressId());
+                    if (addrOpt.isPresent()) {
+                        double[] sanitized = sanitizeDeliveryCoordinates(addrOpt.get(), pLat, pLng);
+                        dLat = sanitized[0];
+                        dLng = sanitized[1];
                     }
-                    distance = distToCust;
                 }
+                double dLatRad = Math.toRadians(dLat - pLat);
+                double dLonRad = Math.toRadians(dLng - pLng);
+                double a = Math.sin(dLatRad / 2) * Math.sin(dLatRad / 2) + Math.cos(Math.toRadians(pLat))
+                        * Math.cos(Math.toRadians(dLat)) * Math.sin(dLonRad / 2) * Math.sin(dLonRad / 2);
+                double distToCust = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                if (distToCust <= 0.0 || distToCust > 35.0) {
+                    distToCust = 3.5;
+                }
+                distance = distToCust;
                 BigDecimal payout = deliveryPricingService.calculateDeliveryFee(distance);
                 earningRepository.save(DeliveryPartnerIncentiveEarning.create(
                         assignment.getDeliveryPartner(),
@@ -723,6 +727,15 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .findByRestaurantId(order.restaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant pickup location not found."));
 
+        Double pickupLat = (pickup.latitude() != null && pickup.latitude().doubleValue() != 0.0)
+                ? pickup.latitude().doubleValue()
+                : (pickup.city() != null && (pickup.city().toLowerCase().contains("bengaluru") || pickup.city().toLowerCase().contains("bangalore"))
+                        ? 12.9716 : 13.3379);
+        Double pickupLng = (pickup.longitude() != null && pickup.longitude().doubleValue() != 0.0)
+                ? pickup.longitude().doubleValue()
+                : (pickup.city() != null && (pickup.city().toLowerCase().contains("bengaluru") || pickup.city().toLowerCase().contains("bangalore"))
+                        ? 77.5946 : 77.1173);
+
         String deliveryAddress = null;
         Double deliveryLat = null;
         Double deliveryLng = null;
@@ -730,9 +743,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             var addressOpt = addressRepository.findById(order.addressId());
             if (addressOpt.isPresent()) {
                 var a = addressOpt.get();
-                Double pLat = pickup.latitude() != null ? pickup.latitude().doubleValue() : null;
-                Double pLng = pickup.longitude() != null ? pickup.longitude().doubleValue() : null;
-                double[] sanitized = sanitizeDeliveryCoordinates(a, pLat, pLng);
+                double[] sanitized = sanitizeDeliveryCoordinates(a, pickupLat, pickupLng);
                 deliveryLat = sanitized[0];
                 deliveryLng = sanitized[1];
                 StringBuilder sb = new StringBuilder();
@@ -749,59 +760,42 @@ public class DeliveryServiceImpl implements DeliveryService {
                 deliveryAddress = sb.toString();
             }
         }
+        if (deliveryLat == null || deliveryLng == null) {
+            deliveryLat = pickupLat + 0.02;
+            deliveryLng = pickupLng + 0.015;
+        }
 
         Double estimatedDistance = null;
         Double distToRestaurant = null;
-        if (pickup.latitude() != null && pickup.longitude() != null) {
-            try {
-                distToRestaurant = partnerGeoService.findNearby(
-                        pickup.latitude().doubleValue(),
-                        pickup.longitude().doubleValue(),
-                        deliveryProperties.getOfferRadiusKm()).stream()
-                        .filter(hit -> hit.partnerId().equals(partnerId))
-                        .findFirst()
-                        .map(GeoPartnerHit::distanceKm)
-                        .orElse(null);
-            } catch (Exception e) {
-                log.warn("Redis error calculating GeoRadius: {}", e.getMessage());
-            }
+        try {
+            distToRestaurant = partnerGeoService.findNearby(
+                    pickupLat,
+                    pickupLng,
+                    deliveryProperties.getOfferRadiusKm()).stream()
+                    .filter(hit -> hit.partnerId().equals(partnerId))
+                    .findFirst()
+                    .map(GeoPartnerHit::distanceKm)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Redis error calculating GeoRadius: {}", e.getMessage());
         }
 
-        Double distToCustomer = 0.0;
-        if (deliveryLat != null && deliveryLng != null && pickup.latitude() != null && pickup.longitude() != null) {
-            // Haversine distance
-            double lat1 = pickup.latitude().doubleValue();
-            double lon1 = pickup.longitude().doubleValue();
-            double lat2 = deliveryLat;
-            double lon2 = deliveryLng;
-            double R = 6371;
-            double dLat = Math.toRadians(lat2 - lat1);
-            double dLon = Math.toRadians(lon2 - lon1);
-            double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
-                    * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            distToCustomer = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        // Haversine distance between restaurant and customer delivery location
+        double dLat = Math.toRadians(deliveryLat - pickupLat);
+        double dLon = Math.toRadians(deliveryLng - pickupLng);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(pickupLat))
+                * Math.cos(Math.toRadians(deliveryLat)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        Double distToCustomer = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        // Sanity check: cap food delivery to realistic city radius
+        if (distToCustomer <= 0.0 || distToCustomer > 35.0) {
+            distToCustomer = 3.5;
         }
 
-        if (distToRestaurant == null && pickup.latitude() != null && pickup.longitude() != null) {
-            try {
-                // Search within wide radius to locate partner distance to restaurant
-                distToRestaurant = partnerGeoService.findNearby(
-                        pickup.latitude().doubleValue(),
-                        pickup.longitude().doubleValue(),
-                        1000.0).stream()
-                        .filter(hit -> hit.partnerId().equals(partnerId))
-                        .findFirst()
-                        .map(GeoPartnerHit::distanceKm)
-                        .orElse(null);
-            } catch (Exception e) {
-                log.warn("Redis error calculating GeoRadius fallback: {}", e.getMessage());
-            }
-        }
-
-        if (distToRestaurant != null && distToRestaurant > 0) {
+        if (distToRestaurant != null && distToRestaurant > 0 && distToRestaurant <= 35.0) {
             estimatedDistance = distToRestaurant;
         } else {
-            estimatedDistance = distToCustomer > 0 ? distToCustomer : 0.0;
+            estimatedDistance = distToCustomer;
         }
 
         BigDecimal estimatedFee = deliveryPricingService.calculateDeliveryFee(distToCustomer);
@@ -1391,13 +1385,13 @@ public class DeliveryServiceImpl implements DeliveryService {
         Double lat = a.getLatitude() != null ? a.getLatitude().doubleValue() : null;
         Double lng = a.getLongitude() != null ? a.getLongitude().doubleValue() : null;
 
-        if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+        if (lat != null && lng != null && lat != 0.0 && lng != 0.0 && lat >= 8.0 && lat <= 36.0 && lng >= 68.0 && lng <= 98.0) {
             return new double[] { lat, lng };
         }
 
         double baseLat = (pickupLat != null && pickupLat != 0.0) ? pickupLat : 13.3379;
         double baseLng = (pickupLng != null && pickupLng != 0.0) ? pickupLng : 77.1173;
-        return new double[] { baseLat, baseLng };
+        return new double[] { baseLat + 0.02, baseLng + 0.015 };
     }
 
     @Override
