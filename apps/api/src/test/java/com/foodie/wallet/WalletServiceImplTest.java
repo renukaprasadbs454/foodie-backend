@@ -318,7 +318,7 @@ class WalletServiceImplTest {
         }
 
         @Test
-        void getBalance_initializesWith2000ForNewPartner() {
+        void getBalance_initializesWithZeroForNewPartner() {
                 when(deliveryPartnerLookup.findPartnerIdByUserCredentialId(credentialId))
                                 .thenReturn(Optional.of(partnerId));
                 when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
@@ -328,7 +328,7 @@ class WalletServiceImplTest {
 
                 WalletBalanceResponseDto balance = service.getBalance(credentialId, UserType.DELIVERY_PARTNER);
 
-                assertThat(balance.balance()).isEqualByComparingTo("2000.00");
+                assertThat(balance.balance()).isEqualByComparingTo("0.00");
                 verify(ledgerEntryRepository, never()).save(any(LedgerEntry.class));
         }
 

@@ -121,11 +121,6 @@ public class WalletServiceImpl implements WalletService {
         UUID ownerId = resolveOwnerId(userCredentialId, userType);
         OwnerType ownerTypeEnum = resolveOwnerType(userType);
         WalletAccount account = getOrCreate(ownerTypeEnum, ownerId);
-        if (ownerTypeEnum == OwnerType.DELIVERY_PARTNER && account.getBalance().compareTo(BigDecimal.ZERO) == 0
-                && ledgerEntryRepository.findByWalletAccountId(account.getId(), PageRequest.of(0, 1)).isEmpty()) {
-            account.setBalance(new BigDecimal("2000.00"));
-            account = walletAccountRepository.save(account);
-        }
         BigDecimal processingWithdrawals = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         if (account.getId() != null) {
             BigDecimal pendingSum = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
@@ -672,13 +667,7 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletAccount findOrDefault(OwnerType ownerType, UUID ownerId) {
         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                .orElseGet(() -> {
-                    WalletAccount account = WalletAccount.open(ownerType, ownerId);
-                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                        account.setBalance(new BigDecimal("2000.00"));
-                    }
-                    return account;
-                });
+                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
     }
 
     private WalletAccount getOrCreate(OwnerType ownerType, UUID ownerId) {
@@ -686,19 +675,10 @@ public class WalletServiceImpl implements WalletService {
                 .orElseGet(() -> {
                     try {
                         WalletAccount account = WalletAccount.open(ownerType, ownerId);
-                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                            account.setBalance(new BigDecimal("2000.00"));
-                        }
                         return walletAccountRepository.save(account);
                     } catch (Exception ex) {
                         return walletAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                                .orElseGet(() -> {
-                                    WalletAccount fallback = WalletAccount.open(ownerType, ownerId);
-                                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                                        fallback.setBalance(new BigDecimal("2000.00"));
-                                    }
-                                    return fallback;
-                                });
+                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
                     }
                 });
     }
@@ -708,19 +688,10 @@ public class WalletServiceImpl implements WalletService {
                 .orElseGet(() -> {
                     try {
                         WalletAccount account = WalletAccount.open(ownerType, ownerId);
-                        if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                            account.setBalance(new BigDecimal("2000.00"));
-                        }
                         return walletAccountRepository.save(account);
                     } catch (Exception ex) {
                         return walletAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
-                                .orElseGet(() -> {
-                                    WalletAccount fallback = WalletAccount.open(ownerType, ownerId);
-                                    if (ownerType == OwnerType.DELIVERY_PARTNER) {
-                                        fallback.setBalance(new BigDecimal("2000.00"));
-                                    }
-                                    return fallback;
-                                });
+                                .orElseGet(() -> WalletAccount.open(ownerType, ownerId));
                     }
                 });
     }
