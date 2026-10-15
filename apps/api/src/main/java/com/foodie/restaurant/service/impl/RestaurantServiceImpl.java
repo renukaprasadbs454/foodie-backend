@@ -107,6 +107,9 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final BigDecimal defaultCommissionPct;
     private final ReviewRatingQuery reviewRatingQuery;
 
+    @Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     @Autowired
     public RestaurantServiceImpl(
             RestaurantRepository restaurantRepository,
@@ -733,7 +736,54 @@ public class RestaurantServiceImpl implements RestaurantService {
                     ErrorCode.ILLEGAL_STATUS_TRANSITION,
                     "Only SUSPENDED restaurants can be deleted.");
         }
+
+        if (jdbcTemplate != null) {
+            try {
+                // 1. Decouple support conversations from this restaurant (preserve audit/messages)
+                jdbcTemplate.update("UPDATE support_conversation SET restaurant_id = NULL WHERE restaurant_id = ?", restaurantId);
+            } catch (Exception e) {
+                log.warn("Error unlinking support conversations for restaurant {}: {}", restaurantId, e.getMessage());
+            }
+
+            try {
+                // 2. Clear customer carts referencing this restaurant
+                jdbcTemplate.update("UPDATE cart SET restaurant_id = NULL WHERE restaurant_id = ?", restaurantId);
+            } catch (Exception e) {
+                log.warn("Error unlinking carts for restaurant {}: {}", restaurantId, e.getMessage());
+            }
+
+            try {
+                // 3. Remove reviews associated with this restaurant
+                jdbcTemplate.update("DELETE FROM review WHERE restaurant_id = ?", restaurantId);
+            } catch (Exception e) {
+                log.warn("Error deleting reviews for restaurant {}: {}", restaurantId, e.getMessage());
+            }
+
+            try {
+                // 4. Remove restaurant-specific coupons
+                jdbcTemplate.update("DELETE FROM coupon WHERE restaurant_id = ?", restaurantId);
+            } catch (Exception e) {
+                log.warn("Error deleting coupons for restaurant {}: {}", restaurantId, e.getMessage());
+            }
+
+            try {
+                // 5. Remove settlement records if any exist
+                jdbcTemplate.update("DELETE FROM restaurant_settlement WHERE restaurant_id = ?", restaurantId);
+            } catch (Exception e) {
+                log.warn("Error deleting settlements for restaurant {}: {}", restaurantId, e.getMessage());
+            }
+        }
+
+        UUID addressId = restaurant.getAddress() != null ? restaurant.getAddress().getId() : null;
         restaurantRepository.delete(restaurant);
+        if (addressId != null) {
+            try {
+                restaurantAddressRepository.deleteById(addressId);
+            } catch (Exception e) {
+                log.warn("Error deleting orphaned restaurant address {}: {}", addressId, e.getMessage());
+            }
+        }
+
         restaurantCacheService.evictRestaurant(restaurantId);
         restaurantCacheService.evictAllListCaches();
         log.info("Restaurant {} permanently deleted by admin {}", restaurantId, adminId);
