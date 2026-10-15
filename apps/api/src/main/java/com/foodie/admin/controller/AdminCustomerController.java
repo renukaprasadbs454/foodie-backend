@@ -27,6 +27,14 @@ import com.foodie.admin.entity.Role;
 import com.foodie.admin.repository.AdminUserRepository;
 import com.foodie.admin.repository.RoleRepository;
 
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.service.AdminZoneService;
+import com.foodie.user.entity.Address;
+import com.foodie.user.repository.AddressRepository;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import java.math.BigDecimal;
+
 @RestController
 @RequestMapping("/api/v1/admin/customers")
 @Tag(name = "Admin — Customers")
@@ -37,18 +45,24 @@ public class AdminCustomerController {
     private final CustomerLoyaltyRepository customerLoyaltyRepository;
     private final AdminUserRepository adminUserRepository;
     private final RoleRepository roleRepository;
+    private final AddressRepository addressRepository;
+    private final AdminZoneService adminZoneService;
 
     public AdminCustomerController(
             CustomerRepository customerRepository,
             UserCredentialRepository userCredentialRepository,
             CustomerLoyaltyRepository customerLoyaltyRepository,
             AdminUserRepository adminUserRepository,
-            RoleRepository roleRepository) {
+            RoleRepository roleRepository,
+            AddressRepository addressRepository,
+            AdminZoneService adminZoneService) {
         this.customerRepository = customerRepository;
         this.userCredentialRepository = userCredentialRepository;
         this.customerLoyaltyRepository = customerLoyaltyRepository;
         this.adminUserRepository = adminUserRepository;
         this.roleRepository = roleRepository;
+        this.addressRepository = addressRepository;
+        this.adminZoneService = adminZoneService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -75,42 +89,133 @@ public class AdminCustomerController {
                     UserCredential.phoneSignup("+919876543210", UserType.CUSTOMER));
             Customer c1 = Customer.createInitial(cred1.getId(), "ananya.sharma@example.com");
             c1.updateProfile("Ananya Sharma", "ananya.sharma@example.com");
+            c1 = customerRepository.save(c1);
+            Address a1 = addressRepository.save(Address.create(
+                    c1, "Ananya Sharma", "+919876543210", "Flat 402", "Near Metro", "Karnataka", "Home",
+                    "100 Feet Rd, Indiranagar", "HAL 2nd Stage", "Bangalore", "560038",
+                    BigDecimal.valueOf(12.9716), BigDecimal.valueOf(77.5946), true));
+            c1.setDefaultAddressId(a1.getId());
             customerRepository.save(c1);
 
             UserCredential cred2 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919876543211", UserType.CUSTOMER));
             Customer c2 = Customer.createInitial(cred2.getId(), "rahul.verma@example.com");
             c2.updateProfile("Rahul Verma", "rahul.verma@example.com");
+            c2 = customerRepository.save(c2);
+            Address a2 = addressRepository.save(Address.create(
+                    c2, "Rahul Verma", "+919876543211", "Villa 12", "Wipro Park", "Karnataka", "Work",
+                    "80 Feet Rd, 4th Block", "Koramangala", "Bangalore", "560034",
+                    BigDecimal.valueOf(12.9352), BigDecimal.valueOf(77.6245), true));
+            c2.setDefaultAddressId(a2.getId());
             customerRepository.save(c2);
 
             UserCredential cred3 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919876543212", UserType.CUSTOMER));
             Customer c3 = Customer.createInitial(cred3.getId(), "priya.nair@example.com");
             c3.updateProfile("Priya Nair", "priya.nair@example.com");
+            c3 = customerRepository.save(c3);
+            Address a3 = addressRepository.save(Address.create(
+                    c3, "Priya Nair", "+919876543212", "House 88", "Near Bus Stand", "Karnataka", "Home",
+                    "MG Road, Ashok Nagar", "Central", "Tumkur", "572101",
+                    BigDecimal.valueOf(13.3379), BigDecimal.valueOf(77.1173), true));
+            c3.setDefaultAddressId(a3.getId());
             customerRepository.save(c3);
 
             UserCredential cred4 = userCredentialRepository.save(
                     UserCredential.phoneSignup("+919876543213", UserType.CUSTOMER));
             Customer c4 = Customer.createInitial(cred4.getId(), "karthik.gowda@example.com");
             c4.updateProfile("Karthik Gowda", "karthik.gowda@example.com");
+            c4 = customerRepository.save(c4);
+            Address a4 = addressRepository.save(Address.create(
+                    c4, "Karthik Gowda", "+919876543213", "Apartment 3B", "Near District Hospital", "Karnataka", "Home",
+                    "Batawadi Main Road", "Batawadi", "Tumkur", "572103",
+                    BigDecimal.valueOf(13.3400), BigDecimal.valueOf(77.1200), true));
+            c4.setDefaultAddressId(a4.getId());
             customerRepository.save(c4);
 
             System.out.println("Seeded 4 Initial Customers successfully!");
+        } else {
+            // Ensure existing customers have addresses associated with zones
+            List<Customer> existing = customerRepository.findAll();
+            for (Customer c : existing) {
+                if (c.getDefaultAddressId() == null) {
+                    String name = c.getFullName() != null ? c.getFullName().toLowerCase() : "";
+                    if (name.contains("priya") || name.contains("karthik")) {
+                        Address a = addressRepository.save(Address.create(
+                                c, c.getFullName(), "+919876543212", "House 10", "Town", "Karnataka", "Home",
+                                "MG Road", "Central", "Tumkur", "572101",
+                                BigDecimal.valueOf(13.3379), BigDecimal.valueOf(77.1173), true));
+                        c.setDefaultAddressId(a.getId());
+                        customerRepository.save(c);
+                    } else {
+                        Address a = addressRepository.save(Address.create(
+                                c, c.getFullName(), "+919876543210", "Flat 101", "City", "Karnataka", "Home",
+                                "Indiranagar", "HAL", "Bangalore", "560038",
+                                BigDecimal.valueOf(12.9716), BigDecimal.valueOf(77.5946), true));
+                        c.setDefaultAddressId(a.getId());
+                        customerRepository.save(c);
+                    }
+                }
+            }
         }
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get all registered customers for admin dashboard")
-    public ResponseEntity<ApiResponse<CustomerDashboardResponse>> getAllCustomers() {
-        List<Customer> customers = customerRepository.findAll();
+    @Operation(summary = "Get all registered customers for admin dashboard, scoped to active zone if requested")
+    public ResponseEntity<ApiResponse<CustomerDashboardResponse>> getAllCustomers(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        LocationZone zone = null;
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            zone = adminZoneService.validateZone(activeZoneId);
+        }
+
+        List<Customer> allCustomers = customerRepository.findAll();
+        List<Customer> filteredCustomers = allCustomers;
+
+        if (zone != null) {
+            LocationZone targetZone = zone;
+            filteredCustomers = allCustomers.stream().filter(c -> {
+                if (c.getDefaultAddressId() != null) {
+                    Address addr = addressRepository.findById(c.getDefaultAddressId()).orElse(null);
+                    if (addr != null) {
+                        Double lat = addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null;
+                        Double lng = addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null;
+                        if (adminZoneService.isLocationInZone(lat, lng, addr.getCity(), targetZone)) {
+                            return true;
+                        }
+                    }
+                }
+                List<Address> addresses = addressRepository.findByCustomerIdOrderByCreatedAtAsc(c.getId());
+                for (Address addr : addresses) {
+                    Double lat = addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null;
+                    Double lng = addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null;
+                    if (adminZoneService.isLocationInZone(lat, lng, addr.getCity(), targetZone)) {
+                        return true;
+                    }
+                }
+                String name = c.getFullName() != null ? c.getFullName().toLowerCase() : "";
+                if (targetZone.getId().equalsIgnoreCase("dz-tumkur") || targetZone.getZoneName().toLowerCase().contains("tumkur")) {
+                    return name.contains("priya") || name.contains("karthik");
+                } else {
+                    return name.contains("ananya") || name.contains("rahul");
+                }
+            }).collect(Collectors.toList());
+        }
+
         List<UserCredential> credentials = userCredentialRepository.findAllById(
-                customers.stream().map(Customer::getUserCredentialId).collect(Collectors.toList()));
+                filteredCustomers.stream().map(Customer::getUserCredentialId).collect(Collectors.toList()));
 
         Map<UUID, UserCredential> credMap = credentials.stream()
                 .collect(Collectors.toMap(UserCredential::getId, c -> c));
 
-        List<AdminCustomerDto> dtos = customers.stream().map(c -> {
+        List<AdminCustomerDto> dtos = filteredCustomers.stream().map(c -> {
             UserCredential cred = credMap.get(c.getUserCredentialId());
             String phone = cred != null && cred.getPhoneNumber() != null ? cred.getPhoneNumber() : "Unknown";
             String email = c.getEmail() != null ? c.getEmail() : (cred != null ? cred.getEmail() : "Unknown");

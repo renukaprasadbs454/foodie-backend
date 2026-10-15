@@ -346,6 +346,9 @@ public class AdminDeliveryController {
         );
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     private void seedPartnerDocuments(DeliveryPartner partner, boolean verified) {
         DeliveryDocType[] requiredTypes = { DeliveryDocType.IDENTITY, DeliveryDocType.LICENSE, DeliveryDocType.VEHICLE_RC };
         UUID adminId = adminUserRepository.findAll().stream().findFirst().map(com.foodie.admin.entity.AdminUser::getId).orElse(null);
@@ -364,68 +367,101 @@ public class AdminDeliveryController {
 
     @EventListener(ApplicationReadyEvent.class)
     public void seedInitialDeliveryPartnersIfEmpty() {
-        if (deliveryPartnerRepository.count() == 0) {
-            System.out.println("Seeding Initial Delivery Partners in Database...");
+        try {
+            if (jdbcTemplate != null) {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"latitude\" DOUBLE PRECISION");
+                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"longitude\" DOUBLE PRECISION");
+                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_id\" VARCHAR(100)");
+                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_name\" VARCHAR(200)");
+                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_verified\" BOOLEAN DEFAULT FALSE");
+                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
+                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
+                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100)");
+                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_name VARCHAR(200)");
+                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_verified BOOLEAN DEFAULT FALSE");
+                } catch (Exception ignored) {}
+            }
+            if (deliveryPartnerRepository.count() == 0) {
+                System.out.println("Seeding Initial Delivery Partners in Database...");
 
-            // 1. Vikram Choudhary (Verified)
-            UserCredential cred1 = userCredentialRepository.save(
-                    UserCredential.phoneSignup("+919811122233", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
-            DeliveryPartner dp1 = DeliveryPartner.create(
-                    cred1.getId(), "Vikram Choudhary", VehicleType.BIKE, "KA-04-EK-1024");
-            dp1.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3408, 77.1010);
-            dp1.verifyKyc();
-            dp1.setOnline(true);
-            dp1.addCash(new BigDecimal("350.00"));
-            dp1 = deliveryPartnerRepository.save(dp1);
-            seedPartnerDocuments(dp1, true);
+                // 1. Vikram Choudhary (Verified - Bangalore)
+                UserCredential cred1 = userCredentialRepository.save(
+                        UserCredential.phoneSignup("+919811122233", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
+                DeliveryPartner dp1 = DeliveryPartner.create(
+                        cred1.getId(), "Vikram Choudhary", VehicleType.BIKE, "KA-04-EK-1024");
+                dp1.updateAddress("100 Feet Rd, Indiranagar", "Hal 2nd Stage", "Bangalore", "Karnataka", "560038");
+                dp1.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+                dp1.verifyKyc();
+                dp1.setOnline(true);
+                dp1.addCash(new BigDecimal("350.00"));
+                dp1 = deliveryPartnerRepository.save(dp1);
+                seedPartnerDocuments(dp1, true);
 
-            // 2. Arjun Das (Verified)
-            UserCredential cred2 = userCredentialRepository.save(
-                    UserCredential.phoneSignup("+919822233344", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
-            DeliveryPartner dp2 = DeliveryPartner.create(
-                    cred2.getId(), "Arjun Das", VehicleType.SCOOTER, "KA-06-EV-8821");
-            dp2.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3412, 77.1025);
-            dp2.verifyKyc();
-            dp2.setOnline(true);
-            dp2.addCash(new BigDecimal("120.00"));
-            dp2 = deliveryPartnerRepository.save(dp2);
-            seedPartnerDocuments(dp2, true);
+                // 2. Arjun Das (Verified - Tumkur)
+                UserCredential cred2 = userCredentialRepository.save(
+                        UserCredential.phoneSignup("+919822233344", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
+                DeliveryPartner dp2 = DeliveryPartner.create(
+                        cred2.getId(), "Arjun Das", VehicleType.SCOOTER, "KA-06-EV-8821");
+                dp2.updateAddress("MG Road, Ashok Nagar", "Near City Bus Stand", "Tumkur", "Karnataka", "572101");
+                dp2.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+                dp2.verifyKyc();
+                dp2.setOnline(true);
+                dp2.addCash(new BigDecimal("120.00"));
+                dp2 = deliveryPartnerRepository.save(dp2);
+                seedPartnerDocuments(dp2, true);
 
-            // 3. Siddharth Rao (Pending KYC - completed zone & docs, waiting for admin approval)
-            UserCredential cred3 = userCredentialRepository.save(
-                    UserCredential.phoneSignup("+919833344455", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
-            DeliveryPartner dp3 = DeliveryPartner.create(
-                    cred3.getId(), "Siddharth Rao", VehicleType.BIKE, "KA-04-MT-4091");
-            dp3.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3395, 77.0990);
-            dp3 = deliveryPartnerRepository.save(dp3);
-            seedPartnerDocuments(dp3, false);
+                // 3. Siddharth Rao (Pending KYC - Tumkur, completed zone & docs, waiting for admin approval)
+                UserCredential cred3 = userCredentialRepository.save(
+                        UserCredential.phoneSignup("+919833344455", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
+                DeliveryPartner dp3 = DeliveryPartner.create(
+                        cred3.getId(), "Siddharth Rao", VehicleType.BIKE, "KA-04-MT-4091");
+                dp3.updateAddress("Batawadi Main Road", "Behind District Hospital", "Tumkur", "Karnataka", "572103");
+                dp3.verifyZone("dz-tumkur", "Tumkur Zone", 13.3400, 77.1200);
+                dp3 = deliveryPartnerRepository.save(dp3);
+                seedPartnerDocuments(dp3, false);
 
-            // 4. Rajesh Kumar (Pending KYC - Incomplete: No zone & No docs yet, must NOT appear in Admin)
-            UserCredential cred4 = userCredentialRepository.save(
-                    UserCredential.phoneSignup("+919844455566", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
-            DeliveryPartner dp4 = DeliveryPartner.create(
-                    cred4.getId(), "Rajesh Kumar", VehicleType.CYCLE, "KA-01-SC-3319");
-            deliveryPartnerRepository.save(dp4);
+                // 4. Rajesh Kumar (Pending KYC - Bangalore, Incomplete: No docs yet, must NOT appear in Admin)
+                UserCredential cred4 = userCredentialRepository.save(
+                        UserCredential.phoneSignup("+919844455566", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
+                DeliveryPartner dp4 = DeliveryPartner.create(
+                        cred4.getId(), "Rajesh Kumar", VehicleType.CYCLE, "KA-01-SC-3319");
+                dp4.updateAddress("80 Feet Rd, 4th Block Koramangala", "Koramangala", "Bangalore", "Karnataka", "560034");
+                dp4.verifyZone("dz-bangalore", "Bangalore Zone", 12.9352, 77.6245);
+                deliveryPartnerRepository.save(dp4);
 
-            System.out.println("Seeded 4 Delivery Partners successfully!");
-        } else {
-            // Ensure seeded demo partners have zone & docs populated so they are valid
-            ensureSamplePartnersConfigured();
+                System.out.println("Seeded 4 Delivery Partners successfully!");
+            } else {
+                ensureExistingPartnersConfigured();
+            }
+        } catch (Exception e) {
+            System.err.println("Warning: delivery partner seeding encountered error: " + e.getMessage());
         }
     }
 
-    private void ensureSamplePartnersConfigured() {
-        for (DeliveryPartner dp : deliveryPartnerRepository.findAll()) {
-            UserCredential cred = userCredentialRepository.findById(dp.getUserCredentialId()).orElse(null);
-            if (cred == null || cred.getPhoneNumber() == null) continue;
-            String phone = cred.getPhoneNumber();
-            if ("+919811122233".equals(phone) || "+919822233344".equals(phone) || "+919833344455".equals(phone)) {
-                if (dp.getZoneName() == null || dp.getZoneName().isBlank()) {
-                    dp.verifyZone("dz-tumkur-central", "Tumkur Central", 13.3408, 77.1010);
+    private void ensureExistingPartnersConfigured() {
+        List<DeliveryPartner> existing = deliveryPartnerRepository.findAll();
+        for (DeliveryPartner dp : existing) {
+            if (dp.getZoneId() == null || dp.getZoneId().isBlank()) {
+                String name = dp.getFullName() != null ? dp.getFullName().toLowerCase() : "";
+                if (name.contains("arjun") || name.contains("siddharth")) {
+                    dp.updateAddress("MG Road", "Central", "Tumkur", "Karnataka", "572101");
+                    dp.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+                    deliveryPartnerRepository.save(dp);
+                } else {
+                    dp.updateAddress("Indiranagar", "Hal 2nd Stage", "Bangalore", "Karnataka", "560038");
+                    dp.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
                     deliveryPartnerRepository.save(dp);
                 }
-                boolean isVerified = dp.getKycStatus() == KycStatus.VERIFIED;
-                seedPartnerDocuments(dp, isVerified);
+            }
+
+            UserCredential cred = userCredentialRepository.findById(dp.getUserCredentialId()).orElse(null);
+            if (cred != null && cred.getPhoneNumber() != null) {
+                String phone = cred.getPhoneNumber();
+                if ("+919811122233".equals(phone) || "+919822233344".equals(phone) || "+919833344455".equals(phone)) {
+                    boolean isVerified = dp.getKycStatus() == KycStatus.VERIFIED;
+                    seedPartnerDocuments(dp, isVerified);
+                }
             }
         }
     }

@@ -104,152 +104,228 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                                 deliveryShare);
         }
 
-        @Override
-        public List<PaymentSettlementResponseDto> listSettlements() {
-                List<Order> orders = orderRepository.findAll();
-                List<PaymentSettlementResponseDto> result = new ArrayList<>();
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
 
-                for (Order order : orders) {
-                        PaymentSplitBreakdownDto split = calculateSplit(order.getSubtotal(), order.getDeliveryFee());
+    @Override
+    public List<PaymentSettlementResponseDto> listSettlements() {
+        return listSettlements(null);
+    }
 
-                        String restaurantName = "Unknown Restaurant";
-                        if (order.getRestaurantId() != null) {
-                                Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
-                                if (r != null)
-                                        restaurantName = r.getName();
-                        }
-
-                        String driverName = "No Delivery Partner";
-                        if (order.getDeliveryPartnerId() != null) {
-                                DeliveryPartner dp = deliveryPartnerRepository.findById(order.getDeliveryPartnerId())
-                                                .orElse(null);
-                                if (dp != null)
-                                        driverName = dp.getFullName();
-                        }
-
-                        String customerName = "Customer";
-                        if (order.getCustomerId() != null) {
-                                customerName = "Customer " + order.getCustomerId().toString().substring(0, 4);
-                        }
-
-                        result.add(new PaymentSettlementResponseDto(
-                                        order.getId(),
-                                        order.getId(),
-                                        order.getOrderNumber(),
-                                        customerName,
-                                        "RAZORPAY",
-                                        split.totalPaid(),
-                                        split.foodSubtotal(),
-                                        split.deliveryFee(),
-                                        split.adminTotalRevenue(),
-                                        split.restaurantNetShare(),
-                                        restaurantName,
-                                        split.deliveryPartnerNetShare(),
-                                        driverName,
-                                        "FUNDS_DISTRIBUTED",
-                                        order.getPlacedAt()));
-                }
-
-                // Sort descending by placedAt
-                result.sort((a, b) -> {
-                        if (a.settledAt() == null && b.settledAt() == null) return 0;
-                        if (a.settledAt() == null) return 1;
-                        if (b.settledAt() == null) return -1;
-                        return b.settledAt().compareTo(a.settledAt());
-                });
-
-                return result;
+    @Override
+    public List<PaymentSettlementResponseDto> listSettlements(String zoneId) {
+        List<Order> orders = orderRepository.findAll();
+        List<PaymentSettlementResponseDto> result = new ArrayList<>();
+        com.foodie.admin.entity.LocationZone zone = null;
+        if (zoneId != null && !zoneId.isBlank() && !zoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
+            zone = adminZoneService.validateZone(zoneId);
         }
 
-        @Override
-        public List<PaymentTransactionResponseDto> listTransactions() {
-                List<Payment> payments = paymentRepository.findAll();
-                List<PaymentTransactionResponseDto> result = new ArrayList<>();
-
-                for (Payment payment : payments) {
-                        UUID userId = null;
-                        if (payment.getOrderId() != null) {
-                                Order order = orderRepository.findById(payment.getOrderId()).orElse(null);
-                                if (order != null) {
-                                        userId = order.getCustomerId();
-                                }
-                        }
-
-                        String paymentMethod = "RAZORPAY_UPI";
-                        if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
-                                if (payment.getAmount() == null || payment.getAmount().compareTo(BigDecimal.ZERO) == 0) {
-                                        paymentMethod = "FOODIE_WALLET";
-                                } else {
-                                        paymentMethod = "SPLIT_WALLET_GATEWAY";
-                                }
-                        }
-
-                        String gatewayTxId = payment.getCashfreeOrderId() != null
-                                        ? payment.getCashfreeOrderId()
-                                        : (payment.getPaymentSessionId() != null
-                                                        ? payment.getPaymentSessionId()
-                                                        : (payment.getId() != null ? payment.getId().toString() : "N/A"));
-
-                        String gatewayName = payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("WALLET_")
-                                        ? "FOODIE_WALLET"
-                                        : "RAZORPAY";
-
-                        result.add(new PaymentTransactionResponseDto(
-                                        payment.getId(),
-                                        payment.getOrderId(),
-                                        userId,
-                                        payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO,
-                                        "INR",
-                                        paymentMethod,
-                                        payment.getStatus() != null ? payment.getStatus().name() : "CAPTURED",
-                                        gatewayTxId,
-                                        gatewayName,
-                                        payment.getCreatedAt(),
-                                        payment.getUpdatedAt()));
+        for (Order order : orders) {
+            if (zone != null && order.getRestaurantId() != null) {
+                Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
+                if (r != null) {
+                    if (!adminZoneService.isLocationInZone(
+                            r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                            r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            zone)) {
+                        continue;
+                    }
                 }
+            }
 
-                result.sort((a, b) -> {
-                        if (a.createdAt() == null && b.createdAt() == null) return 0;
-                        if (a.createdAt() == null) return 1;
-                        if (b.createdAt() == null) return -1;
-                        return b.createdAt().compareTo(a.createdAt());
-                });
+            PaymentSplitBreakdownDto split = calculateSplit(order.getSubtotal(), order.getDeliveryFee());
 
-                return result;
+            String restaurantName = "Unknown Restaurant";
+            if (order.getRestaurantId() != null) {
+                Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
+                if (r != null)
+                    restaurantName = r.getName();
+            }
+
+            String driverName = "No Delivery Partner";
+            if (order.getDeliveryPartnerId() != null) {
+                DeliveryPartner dp = deliveryPartnerRepository.findById(order.getDeliveryPartnerId())
+                        .orElse(null);
+                if (dp != null)
+                    driverName = dp.getFullName();
+            }
+
+            String customerName = "Customer";
+            if (order.getCustomerId() != null) {
+                customerName = "Customer " + order.getCustomerId().toString().substring(0, 4);
+            }
+
+            result.add(new PaymentSettlementResponseDto(
+                    order.getId(),
+                    order.getId(),
+                    order.getOrderNumber(),
+                    customerName,
+                    "RAZORPAY",
+                    split.totalPaid(),
+                    split.foodSubtotal(),
+                    split.deliveryFee(),
+                    split.adminTotalRevenue(),
+                    split.restaurantNetShare(),
+                    restaurantName,
+                    split.deliveryPartnerNetShare(),
+                    driverName,
+                    "FUNDS_DISTRIBUTED",
+                    order.getPlacedAt()));
         }
 
-        @Override
-        public List<AdminLedgerEntryResponseDto> listLedgerEntries() {
-                List<LedgerEntry> entries = ledgerEntryRepository.findAll();
-                List<AdminLedgerEntryResponseDto> result = new ArrayList<>();
+        result.sort((a, b) -> {
+            if (a.settledAt() == null && b.settledAt() == null) return 0;
+            if (a.settledAt() == null) return 1;
+            if (b.settledAt() == null) return -1;
+            return b.settledAt().compareTo(a.settledAt());
+        });
 
-                for (LedgerEntry entry : entries) {
-                        BigDecimal balanceAfter = BigDecimal.ZERO;
-                        if (entry.getWalletAccountId() != null) {
-                                WalletAccount account = walletAccountRepository.findById(entry.getWalletAccountId()).orElse(null);
-                                if (account != null && account.getBalance() != null) {
-                                        balanceAfter = account.getBalance();
-                                }
-                        }
+        return result;
+    }
 
-                        result.add(new AdminLedgerEntryResponseDto(
-                                        entry.getId(),
-                                        entry.getWalletAccountId(),
-                                        entry.getAmount() != null ? entry.getAmount() : BigDecimal.ZERO,
-                                        entry.getEntryType(),
-                                        entry.getReferenceType(),
-                                        entry.getReferenceId(),
-                                        balanceAfter,
-                                        entry.getCreatedAt()));
-                }
+    @Override
+    public List<PaymentTransactionResponseDto> listTransactions() {
+        return listTransactions(null);
+    }
 
-                result.sort((a, b) -> {
-                        if (a.createdAt() == null && b.createdAt() == null) return 0;
-                        if (a.createdAt() == null) return 1;
-                        if (b.createdAt() == null) return -1;
-                        return b.createdAt().compareTo(a.createdAt());
-                });
-
-                return result;
+    @Override
+    public List<PaymentTransactionResponseDto> listTransactions(String zoneId) {
+        List<Payment> payments = paymentRepository.findAll();
+        List<PaymentTransactionResponseDto> result = new ArrayList<>();
+        com.foodie.admin.entity.LocationZone zone = null;
+        if (zoneId != null && !zoneId.isBlank() && !zoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
+            zone = adminZoneService.validateZone(zoneId);
         }
+
+        for (Payment payment : payments) {
+            UUID userId = null;
+            if (payment.getOrderId() != null) {
+                Order order = orderRepository.findById(payment.getOrderId()).orElse(null);
+                if (order != null) {
+                    userId = order.getCustomerId();
+                    if (zone != null && order.getRestaurantId() != null) {
+                        Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
+                        if (r != null && !adminZoneService.isLocationInZone(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                zone)) {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            String paymentMethod = "RAZORPAY_UPI";
+            if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
+                if (payment.getAmount() == null || payment.getAmount().compareTo(BigDecimal.ZERO) == 0) {
+                    paymentMethod = "FOODIE_WALLET";
+                } else {
+                    paymentMethod = "SPLIT_WALLET_GATEWAY";
+                }
+            }
+
+            String gatewayTxId = payment.getCashfreeOrderId() != null
+                    ? payment.getCashfreeOrderId()
+                    : (payment.getPaymentSessionId() != null
+                            ? payment.getPaymentSessionId()
+                            : (payment.getId() != null ? payment.getId().toString() : "N/A"));
+
+            String gatewayName = payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("WALLET_")
+                    ? "FOODIE_WALLET"
+                    : "RAZORPAY";
+
+            result.add(new PaymentTransactionResponseDto(
+                    payment.getId(),
+                    payment.getOrderId(),
+                    userId,
+                    payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO,
+                    "INR",
+                    paymentMethod,
+                    payment.getStatus() != null ? payment.getStatus().name() : "CAPTURED",
+                    gatewayTxId,
+                    gatewayName,
+                    payment.getCreatedAt(),
+                    payment.getUpdatedAt()));
+        }
+
+        result.sort((a, b) -> {
+            if (a.createdAt() == null && b.createdAt() == null) return 0;
+            if (a.createdAt() == null) return 1;
+            if (b.createdAt() == null) return -1;
+            return b.createdAt().compareTo(a.createdAt());
+        });
+
+        return result;
+    }
+
+    @Override
+    public List<AdminLedgerEntryResponseDto> listLedgerEntries() {
+        return listLedgerEntries(null);
+    }
+
+    @Override
+    public List<AdminLedgerEntryResponseDto> listLedgerEntries(String zoneId) {
+        List<LedgerEntry> entries = ledgerEntryRepository.findAll();
+        List<AdminLedgerEntryResponseDto> result = new ArrayList<>();
+        com.foodie.admin.entity.LocationZone zone = null;
+        if (zoneId != null && !zoneId.isBlank() && !zoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
+            zone = adminZoneService.validateZone(zoneId);
+        }
+
+        for (LedgerEntry entry : entries) {
+            if (zone != null && entry.getWalletAccountId() != null) {
+                WalletAccount account = walletAccountRepository.findById(entry.getWalletAccountId()).orElse(null);
+                if (account != null) {
+                    if (account.getOwnerType() == com.foodie.common.enums.OwnerType.RESTAURANT) {
+                        Restaurant r = restaurantRepository.findById(account.getOwnerId()).orElse(null);
+                        if (r != null && !adminZoneService.isLocationInZone(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                zone)) {
+                            continue;
+                        }
+                    } else if (account.getOwnerType() == com.foodie.common.enums.OwnerType.DELIVERY_PARTNER) {
+                        DeliveryPartner dp = deliveryPartnerRepository.findById(account.getOwnerId()).orElse(null);
+                        if (dp != null) {
+                            boolean inZone = (dp.getZoneId() != null && dp.getZoneId().equalsIgnoreCase(zone.getId()))
+                                    || (dp.getZoneName() != null && dp.getZoneName().equalsIgnoreCase(zone.getZoneName()))
+                                    || adminZoneService.isLocationInZone(dp.getLatitude(), dp.getLongitude(), dp.getCity(), zone);
+                            if (!inZone) continue;
+                        }
+                    }
+                }
+            }
+
+            BigDecimal balanceAfter = BigDecimal.ZERO;
+            if (entry.getWalletAccountId() != null) {
+                WalletAccount account = walletAccountRepository.findById(entry.getWalletAccountId()).orElse(null);
+                if (account != null && account.getBalance() != null) {
+                    balanceAfter = account.getBalance();
+                }
+            }
+
+            result.add(new AdminLedgerEntryResponseDto(
+                    entry.getId(),
+                    entry.getWalletAccountId(),
+                    entry.getAmount() != null ? entry.getAmount() : BigDecimal.ZERO,
+                    entry.getEntryType(),
+                    entry.getReferenceType(),
+                    entry.getReferenceId(),
+                    balanceAfter,
+                    entry.getCreatedAt()));
+        }
+
+        result.sort((a, b) -> {
+            if (a.createdAt() == null && b.createdAt() == null) return 0;
+            if (a.createdAt() == null) return 1;
+            if (b.createdAt() == null) return -1;
+            return b.createdAt().compareTo(a.createdAt());
+        });
+
+        return result;
+    }
 }

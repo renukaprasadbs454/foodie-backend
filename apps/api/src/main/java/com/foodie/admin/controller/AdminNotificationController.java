@@ -44,6 +44,8 @@ public class AdminNotificationController {
     @Operation(summary = "Get admin broadcast notification history")
     public ResponseEntity<ApiResponse<List<NotificationBroadcastResponseDto>>> getHistory(
             @RequestParam(required = false) String audience,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {

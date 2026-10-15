@@ -22,11 +22,57 @@ public class AdminSupportTicketController {
     @Autowired
     private SupportService supportService;
 
+    @Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+
+    @Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
+    @Autowired(required = false)
+    private com.foodie.user.repository.AddressRepository addressRepository;
+
     @GetMapping
     @Operation(summary = "Get all support tickets")
     // @PreAuthorize("hasRole('ADMIN')") - assuming standard security
-    public ResponseEntity<ApiResponse<List<SupportConversation>>> getAllTickets() {
-        return ResponseEntity.ok(ApiResponse.success(supportService.getAllAdminConversations()));
+    public ResponseEntity<ApiResponse<List<SupportConversation>>> getAllTickets(
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        var conversations = supportService.getAllAdminConversations();
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
+            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            conversations = conversations.stream().filter(conv -> {
+                if (conv.getRestaurantId() != null && restaurantRepository != null) {
+                    var r = restaurantRepository.findById(conv.getRestaurantId()).orElse(null);
+                    if (r != null) {
+                        return adminZoneService.isLocationInZone(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                zone);
+                    }
+                }
+                if (conv.getCustomerId() != null && addressRepository != null) {
+                    try {
+                        java.util.UUID custId = java.util.UUID.fromString(conv.getCustomerId());
+                        var addrs = addressRepository.findByCustomerIdOrderByCreatedAtAsc(custId);
+                        for (var addr : addrs) {
+                            Double lat = addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null;
+                            Double lng = addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null;
+                            if (adminZoneService.isLocationInZone(lat, lng, addr.getCity(), zone)) {
+                                return true;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                return true;
+            }).toList();
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(conversations));
     }
 
     @GetMapping("/{id}")

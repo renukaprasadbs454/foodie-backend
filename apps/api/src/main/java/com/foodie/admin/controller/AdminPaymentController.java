@@ -62,25 +62,47 @@ public class AdminPaymentController {
         this.walletService = walletService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+
     @GetMapping("/settlements")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List payment settlements with admin escrow & split breakdown")
-    public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements() {
-        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements()));
+    public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements(
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements(activeZoneId)));
     }
 
     @GetMapping("/transactions")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List all customer payment transactions with gateway details")
-    public ResponseEntity<ApiResponse<List<PaymentTransactionResponseDto>>> listTransactions() {
-        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listTransactions()));
+    public ResponseEntity<ApiResponse<List<PaymentTransactionResponseDto>>> listTransactions(
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listTransactions(activeZoneId)));
     }
 
     @GetMapping("/ledger")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List authoritative double-entry financial ledger entries")
-    public ResponseEntity<ApiResponse<List<AdminLedgerEntryResponseDto>>> listLedgerEntries() {
-        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listLedgerEntries()));
+    public ResponseEntity<ApiResponse<List<AdminLedgerEntryResponseDto>>> listLedgerEntries(
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listLedgerEntries(activeZoneId)));
     }
 
     @GetMapping("/restaurant-settlements")
@@ -88,9 +110,28 @@ public class AdminPaymentController {
     @Operation(summary = "List restaurant settlements for admin review")
     public ResponseEntity<ApiResponse<List<com.foodie.restaurant.dto.response.RestaurantSettlementResponseDto>>> listRestaurantSettlements(
             @RequestParam(required = false) java.util.UUID restaurantId,
-            @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(ApiResponse.success(
-                restaurantSettlementService.getAllSettlementsForAdmin(restaurantId, status)));
+            @RequestParam(required = false) String status,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        var settlements = restaurantSettlementService.getAllSettlementsForAdmin(restaurantId, status);
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
+            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            settlements = settlements.stream().filter(s -> {
+                if (s.restaurantId() == null) return false;
+                var r = restaurantRepository.findById(s.restaurantId()).orElse(null);
+                if (r == null) return false;
+                return adminZoneService.isLocationInZone(
+                        r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                        r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                        r.getAddress() != null ? r.getAddress().getCity() : null,
+                        zone);
+            }).toList();
+        }
+        return ResponseEntity.ok(ApiResponse.success(settlements));
     }
 
     @PostMapping("/restaurant-settlements/disburse")
@@ -104,9 +145,20 @@ public class AdminPaymentController {
 
     @GetMapping("/payouts")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
-    @Operation(summary = "List payouts optionally filtered by partner type")
+    @Operation(summary = "List payouts optionally filtered by partner type and active zone")
     public ResponseEntity<ApiResponse<List<AdminPayoutResponseDto>>> listPayouts(
-            @RequestParam(required = false) OwnerType ownerType) {
+            @RequestParam(required = false) OwnerType ownerType,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        com.foodie.admin.entity.LocationZone zone = null;
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
+            zone = adminZoneService.validateZone(activeZoneId);
+        }
+
         List<Payout> payouts;
         if (ownerType != null) {
             payouts = payoutRepository.findByOwnerType(ownerType);
@@ -114,6 +166,7 @@ public class AdminPaymentController {
             payouts = payoutRepository.findAllByOrderByCreatedAtDesc();
         }
 
+        final com.foodie.admin.entity.LocationZone targetZone = zone;
         List<AdminPayoutResponseDto> dtos = payouts.stream().map(p -> {
             String ownerName = p.getAccountHolderName();
             String partnerPhone = "";
@@ -127,10 +180,29 @@ public class AdminPaymentController {
             if (acc != null) {
                 partnerId = acc.getOwnerId();
                 if (acc.getOwnerType() == OwnerType.RESTAURANT) {
+                    if (targetZone != null && restaurantRepository != null) {
+                        var r = restaurantRepository.findById(acc.getOwnerId()).orElse(null);
+                        if (r != null && !adminZoneService.isLocationInZone(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                targetZone)) {
+                            return null;
+                        }
+                    }
                     ownerName = restaurantSummaryProvider.findByRestaurantId(acc.getOwnerId())
                             .map(RestaurantSummaryProvider.RestaurantSummary::name)
                             .orElse(ownerName);
                 } else if (acc.getOwnerType() == OwnerType.DELIVERY_PARTNER) {
+                    if (targetZone != null && deliveryPartnerRepository != null) {
+                        var dp = deliveryPartnerRepository.findById(acc.getOwnerId()).orElse(null);
+                        if (dp != null) {
+                            boolean inZone = (dp.getZoneId() != null && dp.getZoneId().equalsIgnoreCase(targetZone.getId()))
+                                    || (dp.getZoneName() != null && dp.getZoneName().equalsIgnoreCase(targetZone.getZoneName()))
+                                    || adminZoneService.isLocationInZone(dp.getLatitude(), dp.getLongitude(), dp.getCity(), targetZone);
+                            if (!inZone) return null;
+                        }
+                    }
                     var summary = deliveryPartnerLookup.findPartnerSummaryById(acc.getOwnerId());
                     if (summary.isPresent()) {
                         ownerName = summary.get().fullName();
@@ -179,7 +251,7 @@ public class AdminPaymentController {
                     p.getUpdatedAt(),
                     ownerName,
                     partnerPhone);
-        }).toList();
+        }).filter(java.util.Objects::nonNull).toList();
 
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
