@@ -35,6 +35,9 @@ public class AdminModerationController {
     private final AdminOperationsService adminOperationsService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.admin.service.AdminZoneService adminZoneService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -48,6 +51,7 @@ public class AdminModerationController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'REVIEW', 'MODERATE')")
     @Operation(summary = "List all platform reviews for admin dashboard")
     public ResponseEntity<ApiResponse<List<AdminReviewItemDto>>> listReviews(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam,
@@ -57,9 +61,13 @@ public class AdminModerationController {
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(required = false) String sort
     ) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         var result = adminOperationsService.listReviews(principal.userId(), storeName, minRating, page, size, sort);
         List<AdminReviewItemDto> items = result.items();
@@ -73,7 +81,7 @@ public class AdminModerationController {
                         return adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 zone);
                     }
                 }
@@ -88,13 +96,18 @@ public class AdminModerationController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.can(authentication, 'REVIEW', 'MODERATE')")
     @Operation(summary = "Get review compliance stats")
     public ResponseEntity<ApiResponse<AdminReviewStatsDto>> getStats(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         var stats = adminOperationsService.getReviewStats(principal.userId());
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
@@ -108,7 +121,7 @@ public class AdminModerationController {
                     if (r != null && adminZoneService.isLocationInZone(
                             r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                             r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            null,
                             zone)) {
                         total++;
                         if (item.isReported() || "FLAGGED".equalsIgnoreCase(item.status())) {

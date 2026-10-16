@@ -51,7 +51,9 @@ public class AdminUserController {
                         request.fullName(),
                         request.phoneNumber(),
                         request.email(),
-                        request.role()
+                        request.role(),
+                        request.password(),
+                        request.assignedZoneId()
                 ),
                 new AdminService.ActorContext(principal.userId())
         );

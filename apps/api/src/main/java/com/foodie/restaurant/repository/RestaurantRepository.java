@@ -12,6 +12,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
 
+     @Override
+     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"address"})
+     Optional<Restaurant> findById(UUID id);
+
      boolean existsByOwnerUserCredentialId(UUID ownerUserCredentialId);
 
      Optional<Restaurant> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
@@ -74,10 +78,12 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
                @Param("lng") Double lng,
                Pageable pageable);
 
+     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"address"})
      Page<Restaurant> findByStatus(
                com.foodie.common.enums.RestaurantStatus status,
                Pageable pageable);
 
+     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"address"})
      Page<Restaurant> findByStatusNot(
                com.foodie.common.enums.RestaurantStatus status,
                Pageable pageable);

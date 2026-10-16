@@ -113,6 +113,7 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<PaymentSettlementResponseDto> listSettlements(String zoneId) {
         List<Order> orders = orderRepository.findAll();
         List<PaymentSettlementResponseDto> result = new ArrayList<>();
@@ -122,16 +123,17 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
         }
 
         for (Order order : orders) {
-            if (zone != null && order.getRestaurantId() != null) {
+            if (zone != null) {
+                if (order.getRestaurantId() == null) {
+                    continue;
+                }
                 Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
-                if (r != null) {
-                    if (!adminZoneService.isLocationInZone(
-                            r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
-                            r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                            r.getAddress() != null ? r.getAddress().getCity() : null,
-                            zone)) {
-                        continue;
-                    }
+                if (r == null || !adminZoneService.isLocationInZone(
+                        r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                        r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                        null,
+                        zone)) {
+                    continue;
                 }
             }
 
@@ -191,6 +193,7 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<PaymentTransactionResponseDto> listTransactions(String zoneId) {
         List<Payment> payments = paymentRepository.findAll();
         List<PaymentTransactionResponseDto> result = new ArrayList<>();
@@ -210,7 +213,7 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                         if (r != null && !adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 zone)) {
                             continue;
                         }
@@ -267,6 +270,7 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<AdminLedgerEntryResponseDto> listLedgerEntries(String zoneId) {
         List<LedgerEntry> entries = ledgerEntryRepository.findAll();
         List<AdminLedgerEntryResponseDto> result = new ArrayList<>();
@@ -284,7 +288,7 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                         if (r != null && !adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 zone)) {
                             continue;
                         }

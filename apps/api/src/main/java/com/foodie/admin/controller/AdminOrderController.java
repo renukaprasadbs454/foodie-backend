@@ -60,6 +60,9 @@ public class AdminOrderController {
         this.adminZoneService = adminZoneService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
     public record AdminOrderSummaryDto(
             String id,
             String orderCode,
@@ -74,15 +77,21 @@ public class AdminOrderController {
             String createdAt) {}
 
     @GetMapping
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
     @Operation(summary = "List all orders from database for admin operations, scoped to active zone if requested")
     public ResponseEntity<ApiResponse<List<AdminOrderSummaryDto>>> listOrders(
+            org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
 
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         LocationZone zone = null;
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
@@ -107,11 +116,13 @@ public class AdminOrderController {
                 }
             }
 
-            if (zone != null && matchedRestaurant != null) {
+            if (zone != null) {
+                if (matchedRestaurant == null) {
+                    continue;
+                }
                 Double lat = matchedRestaurant.getLatitude() != null ? matchedRestaurant.getLatitude().doubleValue() : null;
                 Double lng = matchedRestaurant.getLongitude() != null ? matchedRestaurant.getLongitude().doubleValue() : null;
-                String city = matchedRestaurant.getAddress() != null ? matchedRestaurant.getAddress().getCity() : null;
-                if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                if (!adminZoneService.isLocationInZone(lat, lng, null, zone)) {
                     continue;
                 }
             }
@@ -165,10 +176,29 @@ public class AdminOrderController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Emergency order status override (state-machine graph still enforced)")
     public ResponseEntity<ApiResponse<OrderResponseDto>> overrideStatus(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable("id") UUID orderId,
             @Valid @RequestBody OverrideOrderStatusRequestDto request
     ) {
+        if (adminAccess != null && authentication != null) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                Order order = orderRepository.findById(orderId).orElse(null);
+                if (order != null && order.getRestaurantId() != null) {
+                    Restaurant r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
+                    if (r != null) {
+                        LocationZone zone = adminZoneService.validateZone(admin.getAssignedZoneId());
+                        Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
+                        Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
+                        if (!adminZoneService.isLocationInZone(lat, lng, null, zone)) {
+                            throw new com.foodie.common.exception.ForbiddenException("Cannot modify orders outside your assigned zone.");
+                        }
+                    }
+                }
+            }
+        }
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.overrideOrderStatus(principal.userId(), orderId, request)));
     }

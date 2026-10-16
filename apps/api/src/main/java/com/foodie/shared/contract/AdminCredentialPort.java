@@ -13,4 +13,10 @@ public interface AdminCredentialPort {
      * or returns the existing ADMIN credential id for the phone.
      */
     UUID ensureAdminCredential(String phoneNumber, String email);
+
+    /**
+     * Creates or updates an active {@code user_credential} with {@code userType=ADMIN}
+     * and a securely BCrypt-hashed password for administrative login.
+     */
+    UUID ensureAdminCredentialWithPassword(String phoneNumber, String email, String password);
 }

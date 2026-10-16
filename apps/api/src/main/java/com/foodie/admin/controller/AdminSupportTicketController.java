@@ -31,15 +31,71 @@ public class AdminSupportTicketController {
     @Autowired(required = false)
     private com.foodie.user.repository.AddressRepository addressRepository;
 
+    @Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
+    private void assertTicketInZone(org.springframework.security.core.Authentication authentication, SupportConversation conv, String activeZoneHeader) {
+        String effectiveZone = activeZoneHeader;
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof com.foodie.security.principal.AuthPrincipal) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                effectiveZone = admin.getAssignedZoneId();
+            }
+        }
+        if (effectiveZone == null || effectiveZone.isBlank() || effectiveZone.equalsIgnoreCase("ALL")) {
+            return;
+        }
+        if (adminZoneService == null) return;
+        com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(effectiveZone.trim());
+        if (conv.getRestaurantId() != null && restaurantRepository != null) {
+            var r = restaurantRepository.findById(conv.getRestaurantId()).orElse(null);
+            if (r != null) {
+                if (!adminZoneService.isLocationInZone(
+                        r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                        r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                        null,
+                        zone)) {
+                    throw new com.foodie.common.exception.ForbiddenException("Support ticket belongs to restaurant outside your assigned operating zone: " + zone.getZoneName());
+                }
+                return;
+            }
+        }
+        if (conv.getCustomerId() != null && addressRepository != null) {
+            try {
+                java.util.UUID custId = java.util.UUID.fromString(conv.getCustomerId());
+                var addrs = addressRepository.findByCustomerIdOrderByCreatedAtAsc(custId);
+                boolean custInZone = false;
+                for (var addr : addrs) {
+                    Double lat = addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null;
+                    Double lng = addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null;
+                    if (adminZoneService.isLocationInZone(lat, lng, addr.getCity(), zone)) {
+                        custInZone = true;
+                        break;
+                    }
+                }
+                if (!custInZone && !addrs.isEmpty()) {
+                    throw new com.foodie.common.exception.ForbiddenException("Support ticket belongs to customer outside your assigned operating zone: " + zone.getZoneName());
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
     @GetMapping
     @Operation(summary = "Get all support tickets")
     // @PreAuthorize("hasRole('ADMIN')") - assuming standard security
     public ResponseEntity<ApiResponse<List<SupportConversation>>> getAllTickets(
+            org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         var conversations = supportService.getAllAdminConversations();
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
@@ -51,7 +107,7 @@ public class AdminSupportTicketController {
                         return adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 zone);
                     }
                 }
@@ -77,15 +133,26 @@ public class AdminSupportTicketController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get support ticket by ID")
-    public ResponseEntity<ApiResponse<SupportConversation>> getTicketById(@PathVariable("id") String id) {
+    public ResponseEntity<ApiResponse<SupportConversation>> getTicketById(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") String id) {
         return supportService.getConversation(id)
-                .map(conv -> ResponseEntity.ok(ApiResponse.success(conv)))
+                .map(conv -> {
+                    assertTicketInZone(authentication, conv, activeZoneHeader);
+                    return ResponseEntity.ok(ApiResponse.success(conv));
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}/messages")
     @Operation(summary = "Get messages for a conversation")
-    public ResponseEntity<ApiResponse<List<SupportMessage>>> getMessages(@PathVariable("id") String id) {
+    public ResponseEntity<ApiResponse<List<SupportMessage>>> getMessages(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") String id) {
+        var opt = supportService.getConversation(id);
+        opt.ifPresent(conv -> assertTicketInZone(authentication, conv, activeZoneHeader));
         supportService.markMessagesReadByAdmin(id);
         return ResponseEntity.ok(ApiResponse.success(supportService.getMessages(id)));
     }
@@ -93,8 +160,13 @@ public class AdminSupportTicketController {
     @PostMapping("/{id}/reply")
     @Operation(summary = "Reply to customer support ticket")
     public ResponseEntity<ApiResponse<SupportMessage>> replyToTicket(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") String ticketId,
             @RequestBody Map<String, String> request) {
+
+        var opt = supportService.getConversation(ticketId);
+        opt.ifPresent(conv -> assertTicketInZone(authentication, conv, activeZoneHeader));
 
         String replyMessage = request.getOrDefault("message", "");
         String senderName = request.getOrDefault("senderName", "Admin Support");

@@ -64,6 +64,40 @@ public class AdminAccess {
                 admin.getRole().getId(), resource, action);
     }
 
+    public boolean canAccessZone(Authentication authentication, String zoneId) {
+        AdminUser admin = requireAdmin(authentication);
+        if (admin.getRole().getName() == AdminRoleName.SUPER_ADMIN) {
+            return true;
+        }
+        if (admin.getAssignedZoneId() == null || admin.getAssignedZoneId().isBlank()) {
+            return true;
+        }
+        if (zoneId == null || zoneId.isBlank()) {
+            return false;
+        }
+        return admin.getAssignedZoneId().equalsIgnoreCase(zoneId.trim());
+    }
+
+    public String resolveAuthorizedZone(Authentication authentication, String requestedZoneId) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof AuthPrincipal)) {
+            return requestedZoneId;
+        }
+        AdminUser admin = requireAdmin(authentication);
+        if (admin.getRole().getName() == AdminRoleName.SUPER_ADMIN) {
+            return requestedZoneId;
+        }
+        if (admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+            if (requestedZoneId != null && !requestedZoneId.isBlank()) {
+                if (requestedZoneId.equalsIgnoreCase("ALL") || !admin.getAssignedZoneId().equalsIgnoreCase(requestedZoneId.trim())) {
+                    throw new ForbiddenException("Unauthorized cross-zone access attempt: Your account is restricted to zone '" + admin.getAssignedZoneId() + "'.");
+                }
+            }
+            return admin.getAssignedZoneId();
+        }
+        return requestedZoneId;
+    }
+
     public AdminUser requireAdmin(Authentication authentication) {
         AuthPrincipal principal = principal(authentication);
         if (principal.userType() != UserType.ADMIN) {

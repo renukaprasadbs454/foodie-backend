@@ -44,6 +44,8 @@ public class AdminCouponController {
         }
 
         @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private com.foodie.admin.security.AdminAccess adminAccess;
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
         private com.foodie.admin.service.AdminZoneService adminZoneService;
         @org.springframework.beans.factory.annotation.Autowired(required = false)
         private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
@@ -52,11 +54,16 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Get all coupons")
         public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getAllCoupons(
+                        org.springframework.security.core.Authentication authentication,
                         @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @org.springframework.web.bind.annotation.RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-                String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                                 ? activeZoneHeader.trim()
                                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+                String activeZoneId = adminAccess != null
+                                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                                : requestedZoneId;
 
                 var list = couponRepository.findAll();
                 if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
@@ -68,7 +75,7 @@ public class AdminCouponController {
                                 return adminZoneService.isLocationInZone(
                                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                                null,
                                                 zone);
                         }).toList();
                 }

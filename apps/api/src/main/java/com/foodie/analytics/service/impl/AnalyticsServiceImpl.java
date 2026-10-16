@@ -105,7 +105,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                     .filter(r -> adminZoneService.isLocationInZone(
                             r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                             r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            null,
                             zone))
                     .count();
         }
@@ -152,7 +152,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                         return adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 zone);
                     })
                     .toList();
@@ -209,7 +209,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                     return adminZoneService.isLocationInZone(
                             r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                             r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            null,
                             zone);
                 })
                 .toList();
@@ -270,7 +270,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                     return adminZoneService.isLocationInZone(
                             r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                             r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                            r.getAddress() != null ? r.getAddress().getCity() : null,
+                            null,
                             zone);
                 })
                 .toList();

@@ -68,16 +68,22 @@ public class AdminPaymentController {
     private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
 
     @GetMapping("/settlements")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List payment settlements with admin escrow & split breakdown")
     public ResponseEntity<ApiResponse<List<PaymentSettlementResponseDto>>> listSettlements(
+            org.springframework.security.core.Authentication authentication,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listSettlements(activeZoneId)));
     }
 
@@ -85,11 +91,15 @@ public class AdminPaymentController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List all customer payment transactions with gateway details")
     public ResponseEntity<ApiResponse<List<PaymentTransactionResponseDto>>> listTransactions(
+            org.springframework.security.core.Authentication authentication,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listTransactions(activeZoneId)));
     }
 
@@ -97,11 +107,15 @@ public class AdminPaymentController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List authoritative double-entry financial ledger entries")
     public ResponseEntity<ApiResponse<List<AdminLedgerEntryResponseDto>>> listLedgerEntries(
+            org.springframework.security.core.Authentication authentication,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listLedgerEntries(activeZoneId)));
     }
 
@@ -109,14 +123,18 @@ public class AdminPaymentController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List restaurant settlements for admin review")
     public ResponseEntity<ApiResponse<List<com.foodie.restaurant.dto.response.RestaurantSettlementResponseDto>>> listRestaurantSettlements(
+            org.springframework.security.core.Authentication authentication,
             @RequestParam(required = false) java.util.UUID restaurantId,
             @RequestParam(required = false) String status,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
         var settlements = restaurantSettlementService.getAllSettlementsForAdmin(restaurantId, status);
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
             com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
@@ -127,7 +145,7 @@ public class AdminPaymentController {
                 return adminZoneService.isLocationInZone(
                         r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                         r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                        r.getAddress() != null ? r.getAddress().getCity() : null,
+                        null,
                         zone);
             }).toList();
         }
@@ -147,12 +165,16 @@ public class AdminPaymentController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List payouts optionally filtered by partner type and active zone")
     public ResponseEntity<ApiResponse<List<AdminPayoutResponseDto>>> listPayouts(
+            org.springframework.security.core.Authentication authentication,
             @RequestParam(required = false) OwnerType ownerType,
             @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         com.foodie.admin.entity.LocationZone zone = null;
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null) {
@@ -185,7 +207,7 @@ public class AdminPaymentController {
                         if (r != null && !adminZoneService.isLocationInZone(
                                 r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
                                 r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                r.getAddress() != null ? r.getAddress().getCity() : null,
+                                null,
                                 targetZone)) {
                             return null;
                         }

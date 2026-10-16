@@ -19,6 +19,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.foodie.admin.entity.AdminUser;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.repository.AdminUserRepository;
+import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.auth.dto.response.AdminRoleOptionDto;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,10 +41,148 @@ public class AuthController {
 
     private final AuthService authService;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final LocationZoneRepository locationZoneRepository;
+    private final AdminUserRepository adminUserRepository;
 
-    public AuthController(AuthService authService, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthController(
+            AuthService authService,
+            org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+            LocationZoneRepository locationZoneRepository,
+            AdminUserRepository adminUserRepository
+    ) {
         this.authService = authService;
         this.jdbcTemplate = jdbcTemplate;
+        this.locationZoneRepository = locationZoneRepository;
+        this.adminUserRepository = adminUserRepository;
+    }
+
+    public AuthController(AuthService authService, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+        this(authService, jdbcTemplate, null, null);
+    }
+
+    private String formatZoneAdminLabel(String zoneName) {
+        if (zoneName == null || zoneName.isBlank()) {
+            return "Zone Admin";
+        }
+        String clean = zoneName.trim();
+        String lower = clean.toLowerCase();
+        if (lower.endsWith("zone admin") || lower.endsWith("admin")) {
+            return clean;
+        }
+        if (lower.endsWith("zone")) {
+            return clean + " Admin";
+        }
+        return clean + " Zone Admin";
+    }
+
+    @GetMapping({"/admin-roles", "/roles"})
+    @Operation(summary = "Get dynamic admin roles and zone admin accounts for admin login role dropdown")
+    public ResponseEntity<ApiResponse<List<AdminRoleOptionDto>>> getAdminRoles() {
+        List<AdminRoleOptionDto> options = new ArrayList<>();
+
+        // 1. Super Admin (Default Global Admin)
+        options.add(new AdminRoleOptionDto(
+                "SUPER_ADMIN",
+                "SUPER_ADMIN",
+                "Super Admin",
+                null,
+                null,
+                "admin@foodie.local"
+        ));
+
+        // 2. Dynamic Zone Admins from database & provisioned admin accounts
+        List<LocationZone> zones = (locationZoneRepository != null)
+                ? locationZoneRepository.findAll()
+                : List.of();
+
+        List<AdminUser> adminUsers = (adminUserRepository != null)
+                ? adminUserRepository.findAll()
+                : List.of();
+
+        Map<String, AdminUser> zoneAdminMap = new HashMap<>();
+        for (AdminUser u : adminUsers) {
+            if (u.getAssignedZoneId() != null && !u.getAssignedZoneId().isBlank()) {
+                zoneAdminMap.putIfAbsent(u.getAssignedZoneId().trim().toLowerCase(), u);
+            }
+        }
+
+        // Map canonical zones + any active created zones
+        List<LocationZone> activeZones = new ArrayList<>();
+        boolean hasBangalore = false;
+        boolean hasTumkur = false;
+
+        for (LocationZone z : zones) {
+            if (z.getId() == null) continue;
+            String zIdLower = z.getId().toLowerCase();
+            if ("dz-bangalore".equals(zIdLower)) hasBangalore = true;
+            if ("dz-tumkur".equals(zIdLower)) hasTumkur = true;
+
+            if ("ACTIVE".equalsIgnoreCase(z.getStatus()) || "dz-bangalore".equals(zIdLower) || "dz-tumkur".equals(zIdLower)) {
+                activeZones.add(z);
+            }
+        }
+
+        if (!hasBangalore) {
+            LocationZone bgl = new LocationZone();
+            bgl.setId("dz-bangalore");
+            bgl.setZoneName("Bangalore Zone");
+            bgl.setStatus("ACTIVE");
+            activeZones.add(bgl);
+        }
+
+        if (!hasTumkur) {
+            LocationZone tmk = new LocationZone();
+            tmk.setId("dz-tumkur");
+            tmk.setZoneName("Tumkur Zone");
+            tmk.setStatus("ACTIVE");
+            activeZones.add(tmk);
+        }
+
+        // Sort zones: Bangalore first, then Tumkur, then newly created alphabetically
+        activeZones.sort((a, b) -> {
+            if ("dz-bangalore".equalsIgnoreCase(a.getId())) return -1;
+            if ("dz-bangalore".equalsIgnoreCase(b.getId())) return 1;
+            if ("dz-tumkur".equalsIgnoreCase(a.getId())) return -1;
+            if ("dz-tumkur".equalsIgnoreCase(b.getId())) return 1;
+            String nameA = a.getZoneName() != null ? a.getZoneName() : a.getId();
+            String nameB = b.getZoneName() != null ? b.getZoneName() : b.getId();
+            return nameA.compareToIgnoreCase(nameB);
+        });
+
+        for (LocationZone z : activeZones) {
+            String zId = z.getId();
+            String zName = z.getZoneName() != null ? z.getZoneName() : zId;
+            AdminUser assignedUser = zoneAdminMap.get(zId.toLowerCase());
+            String role = (assignedUser != null && assignedUser.getRole() != null)
+                    ? assignedUser.getRole().getName().name()
+                    : "OPS";
+            String email = null;
+            if ("dz-bangalore".equalsIgnoreCase(zId)) {
+                email = "ops@foodie.local";
+            } else if ("dz-tumkur".equalsIgnoreCase(zId)) {
+                email = "finance@foodie.local";
+            }
+
+            options.add(new AdminRoleOptionDto(
+                    "ZONE_ADMIN_" + zId,
+                    role,
+                    formatZoneAdminLabel(zName),
+                    zId,
+                    zName,
+                    email
+            ));
+        }
+
+        // 3. Existing system roles
+        options.add(new AdminRoleOptionDto("AUDITOR", "AUDITOR", "Compliance Auditor", null, null, "auditor@foodie.local"));
+        options.add(new AdminRoleOptionDto("FINANCE_ADMIN", "FINANCE_ADMIN", "Finance Admin", null, null, "finance@foodie.local"));
+        options.add(new AdminRoleOptionDto("OPERATIONS_ADMIN", "OPERATIONS_ADMIN", "Operations Admin", null, null, "ops@foodie.local"));
+        options.add(new AdminRoleOptionDto("RESTAURANT_MANAGER", "RESTAURANT_MANAGER", "Restaurant Manager", null, null, "manager@foodie.local"));
+        options.add(new AdminRoleOptionDto("SUPPORT_AGENT", "SUPPORT_AGENT", "Support Agent", null, null, "support@foodie.local"));
+        options.add(new AdminRoleOptionDto("DARKSTORE_ADMIN", "DARKSTORE_ADMIN", "Darkstore Admin", null, null, "darkstore@foodie.local"));
+
+        return ResponseEntity.ok(ApiResponse.success(options));
     }
 
     @org.springframework.web.bind.annotation.GetMapping("/dev/approve")

@@ -85,10 +85,41 @@ public class AdminDeliveryController {
         this.adminZoneService = adminZoneService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
+    private void assertPartnerInZone(org.springframework.security.core.Authentication authentication, DeliveryPartner partner, String activeZoneHeader) {
+        String effectiveZone = activeZoneHeader;
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof com.foodie.security.principal.AuthPrincipal) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                effectiveZone = admin.getAssignedZoneId();
+            }
+        }
+        if (effectiveZone == null || effectiveZone.isBlank() || effectiveZone.equalsIgnoreCase("ALL")) {
+            return;
+        }
+        LocationZone zone = adminZoneService.validateZone(effectiveZone.trim());
+        boolean inZone = false;
+        if (partner.getZoneId() != null && partner.getZoneId().equalsIgnoreCase(zone.getId())) {
+            inZone = true;
+        } else if (partner.getZoneName() != null && partner.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
+            inZone = true;
+        } else if (adminZoneService.isLocationInZone(partner.getLatitude(), partner.getLongitude(), partner.getCity(), zone)) {
+            inZone = true;
+        }
+        if (!inZone) {
+            throw new com.foodie.common.exception.ForbiddenException("Delivery partner is outside your assigned operating zone: " + zone.getZoneName());
+        }
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "List paginated delivery partners with status & search filtering, scoped to zone")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnersPageDto>> listDeliveryPartners(
+            org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam,
             @RequestParam(required = false) String status,
@@ -97,9 +128,13 @@ public class AdminDeliveryController {
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
 
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         KycStatus kycFilter = null;
         if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
@@ -150,12 +185,17 @@ public class AdminDeliveryController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get delivery partner fleet statistics, scoped to zone if requested")
     public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats(
+            org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam
     ) {
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         List<DeliveryPartner> all = deliveryPartnerRepository.findAllKycReadyPartners();
 
@@ -186,15 +226,28 @@ public class AdminDeliveryController {
                 new AdminDeliveryStatsDto(totalFleet, onlineCount, pendingKyc, verified, rejected, totalCash)));
     }
 
+    public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats(
+            String activeZoneHeader, String zoneIdParam) {
+        return getStats(null, activeZoneHeader, zoneIdParam);
+    }
+
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> getPartner(UUID id) {
+        return getPartner(null, null, id);
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get single delivery partner details")
-    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> getPartner(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> getPartner(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable UUID id) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
         if (!isKycOnboardingComplete(partner)) {
             throw new ResourceNotFoundException("Delivery partner has not completed KYC onboarding requirements.");
         }
+        assertPartnerInZone(authentication, partner, activeZoneHeader);
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
@@ -202,7 +255,9 @@ public class AdminDeliveryController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Approve delivery partner KYC")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> approveKyc(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID partnerId) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
@@ -211,6 +266,7 @@ public class AdminDeliveryController {
                     ErrorCode.VALIDATION_FAILED,
                     "Cannot approve KYC: delivery partner must select a delivery zone and upload all required documents (Identity, License, Vehicle RC).");
         }
+        assertPartnerInZone(authentication, partner, activeZoneHeader);
         partner.verifyKyc();
         deliveryPartnerRepository.save(partner);
         UUID adminUserId = resolveAdminUserId(principal != null ? principal.userId() : null);
@@ -222,11 +278,23 @@ public class AdminDeliveryController {
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> approveKyc(
+            AuthPrincipal principal, UUID partnerId) {
+        return approveKyc(null, principal, null, partnerId);
+    }
+
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> rejectKyc(
+            AuthPrincipal principal, UUID partnerId, Map<String, String> body) {
+        return rejectKyc(null, principal, null, partnerId, body);
+    }
+
     @RequestMapping(value = {"/{id}/kyc-reject", "/{id}/reject-kyc"}, method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST})
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Reject delivery partner KYC")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> rejectKyc(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID partnerId,
             @RequestBody(required = false) Map<String, String> body) {
         DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
@@ -236,6 +304,7 @@ public class AdminDeliveryController {
                     ErrorCode.VALIDATION_FAILED,
                     "Cannot reject KYC: delivery partner has not completed KYC onboarding requirements.");
         }
+        assertPartnerInZone(authentication, partner, activeZoneHeader);
         String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Documents incomplete or invalid.";
         partner.rejectKyc(reason);
         deliveryPartnerRepository.save(partner);
@@ -277,8 +346,31 @@ public class AdminDeliveryController {
     @GetMapping("/live-locations")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get live GPS locations and status of all online delivery partners")
-    public ResponseEntity<ApiResponse<List<LivePartnerLocationDto>>> getLiveFleetLocations() {
-        return ResponseEntity.ok(ApiResponse.success(deliveryService.getLiveFleetLocations()));
+    public ResponseEntity<ApiResponse<List<LivePartnerLocationDto>>> getLiveFleetLocations(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
+
+        List<LivePartnerLocationDto> list = deliveryService.getLiveFleetLocations();
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            LocationZone zone = adminZoneService.validateZone(activeZoneId);
+            list = list.stream()
+                    .filter(loc -> {
+                        Double lat = loc.latitude() != null ? loc.latitude().doubleValue() : null;
+                        Double lng = loc.longitude() != null ? loc.longitude().doubleValue() : null;
+                        return adminZoneService.isLocationInZone(lat, lng, null, zone);
+                    })
+                    .collect(Collectors.toList());
+        }
+        return ResponseEntity.ok(ApiResponse.success(list));
     }
 
     @GetMapping("/cash-deposits")

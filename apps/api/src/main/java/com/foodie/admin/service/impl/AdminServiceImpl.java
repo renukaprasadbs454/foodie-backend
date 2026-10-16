@@ -64,11 +64,13 @@ public class AdminServiceImpl implements AdminService {
         }
         Role role = roleRepository.findByName(cmd.role())
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found."));
-        UUID credentialId = adminCredentialPort.ensureAdminCredential(cmd.phoneNumber(), cmd.email());
+        UUID credentialId = (cmd.password() != null && !cmd.password().isBlank())
+                ? adminCredentialPort.ensureAdminCredentialWithPassword(cmd.phoneNumber(), cmd.email(), cmd.password())
+                : adminCredentialPort.ensureAdminCredential(cmd.phoneNumber(), cmd.email());
         if (adminUserRepository.existsByUserCredentialId(credentialId)) {
             throw new ConflictException(ErrorCode.CONFLICT, "Admin profile already exists for this credential.");
         }
-        AdminUser created = AdminUser.create(credentialId, role, cmd.fullName().trim());
+        AdminUser created = AdminUser.create(credentialId, role, cmd.fullName().trim(), cmd.assignedZoneId());
         try {
             created = adminUserRepository.save(created);
         } catch (DataIntegrityViolationException ex) {
@@ -83,7 +85,8 @@ public class AdminServiceImpl implements AdminService {
                 Map.of(
                         "adminUserId", created.getId(),
                         "role", role.getName().name(),
-                        "fullName", created.getFullName()
+                        "fullName", created.getFullName(),
+                        "assignedZoneId", created.getAssignedZoneId() != null ? created.getAssignedZoneId() : "NONE"
                 )
         );
         return toView(created);
@@ -140,7 +143,8 @@ public class AdminServiceImpl implements AdminService {
                 view.userCredentialId(),
                 view.fullName(),
                 view.role(),
-                view.profileImageKey()
+                view.profileImageKey(),
+                view.assignedZoneId()
         );
     }
 
@@ -150,7 +154,8 @@ public class AdminServiceImpl implements AdminService {
                 admin.getUserCredentialId(),
                 admin.getFullName(),
                 admin.getRole().getName(),
-                admin.getProfileImageKey()
+                admin.getProfileImageKey(),
+                admin.getAssignedZoneId()
         );
     }
 

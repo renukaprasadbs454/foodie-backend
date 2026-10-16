@@ -42,10 +42,14 @@ public class AdminRestaurantController {
         this.adminZoneService = adminZoneService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "List restaurants for admin, scoped to active zone if requested")
     public ResponseEntity<ApiResponse<AdminOperationsService.PageResult<RestaurantDetailResponseDto>>> list(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam,
@@ -54,9 +58,13 @@ public class AdminRestaurantController {
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "sort", defaultValue = "createdAt") String sort) {
 
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         var result = adminOperationsService.listRestaurants(principal.userId(), status, page, size, sort);
 
@@ -78,11 +86,20 @@ public class AdminRestaurantController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
-    private void assertRestaurantInActiveZone(UUID restaurantId, String activeZoneHeader, UUID actorCredentialId) {
-        if (activeZoneHeader == null || activeZoneHeader.isBlank() || activeZoneHeader.equalsIgnoreCase("ALL")) {
+    private void assertRestaurantInActiveZone(org.springframework.security.core.Authentication authentication, UUID restaurantId, String activeZoneHeader, UUID actorCredentialId) {
+        String effectiveZone = activeZoneHeader;
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof com.foodie.security.principal.AuthPrincipal) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                effectiveZone = admin.getAssignedZoneId();
+            }
+        }
+        if (effectiveZone == null || effectiveZone.isBlank() || effectiveZone.equalsIgnoreCase("ALL")) {
             return;
         }
-        LocationZone zone = adminZoneService.validateZone(activeZoneHeader.trim());
+        LocationZone zone = adminZoneService.validateZone(effectiveZone.trim());
         var res = adminOperationsService.listRestaurants(actorCredentialId, null, 0, 1000, "createdAt");
         var matched = res.items().stream()
                 .filter(r -> r.restaurantId().equals(restaurantId))
@@ -102,10 +119,11 @@ public class AdminRestaurantController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Approve a PENDING restaurant")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> approve(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID restaurantId) {
-        assertRestaurantInActiveZone(restaurantId, activeZoneHeader, principal.userId());
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.approveRestaurant(principal.userId(), restaurantId)));
     }
@@ -114,10 +132,12 @@ public class AdminRestaurantController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Suspend a restaurant")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> suspend(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID restaurantId,
             @Valid @RequestBody SuspendRestaurantRequestDto request) {
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.suspendRestaurant(principal.userId(), restaurantId, request)));
     }
@@ -136,11 +156,12 @@ public class AdminRestaurantController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Reject a PENDING restaurant onboarding submission")
     public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> reject(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID restaurantId,
             @Valid @RequestBody SuspendRestaurantRequestDto request) {
-        assertRestaurantInActiveZone(restaurantId, activeZoneHeader, principal.userId());
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.rejectRestaurant(principal.userId(), restaurantId, request.reason())));
     }
@@ -149,10 +170,11 @@ public class AdminRestaurantController {
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Permanently delete a SUSPENDED restaurant")
     public ResponseEntity<ApiResponse<Void>> delete(
+            org.springframework.security.core.Authentication authentication,
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @PathVariable("id") UUID restaurantId) {
-        assertRestaurantInActiveZone(restaurantId, activeZoneHeader, principal.userId());
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
         adminOperationsService.deleteRestaurant(principal.userId(), restaurantId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }

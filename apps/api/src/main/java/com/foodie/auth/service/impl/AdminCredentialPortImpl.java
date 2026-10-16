@@ -8,6 +8,7 @@ import com.foodie.common.exception.ErrorCode;
 import com.foodie.shared.contract.AdminCredentialPort;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,20 +16,36 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminCredentialPortImpl implements AdminCredentialPort {
 
     private final UserCredentialRepository userCredentialRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public AdminCredentialPortImpl(UserCredentialRepository userCredentialRepository) {
+    public AdminCredentialPortImpl(
+            UserCredentialRepository userCredentialRepository,
+            PasswordEncoder passwordEncoder
+    ) {
         this.userCredentialRepository = userCredentialRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     @Transactional
     public UUID ensureAdminCredential(String phoneNumber, String email) {
+        return ensureAdminCredentialWithPassword(phoneNumber, email, null);
+    }
+
+    @Override
+    @Transactional
+    public UUID ensureAdminCredentialWithPassword(String phoneNumber, String email, String password) {
         var existingForPhone = userCredentialRepository.findAllByPhoneNumber(phoneNumber);
         Optional<UserCredential> existingAdmin = existingForPhone.stream()
                 .filter(c -> c.getUserType() == UserType.ADMIN)
                 .findFirst();
         if (existingAdmin.isPresent()) {
-            return existingAdmin.get().getId();
+            UserCredential cred = existingAdmin.get();
+            if (password != null && !password.isBlank()) {
+                cred.updatePasswordHash(passwordEncoder.encode(password));
+                userCredentialRepository.save(cred);
+            }
+            return cred.getId();
         }
         boolean usedByNonAdmin = existingForPhone.stream()
                 .anyMatch(c -> c.getUserType() != UserType.ADMIN);
@@ -38,8 +55,13 @@ public class AdminCredentialPortImpl implements AdminCredentialPort {
                     "Phone number is already registered to a non-admin account."
             );
         }
-        return userCredentialRepository
-                .save(UserCredential.adminProvision(phoneNumber, email))
-                .getId();
+
+        UserCredential newCred;
+        if (password != null && !password.isBlank()) {
+            newCred = UserCredential.adminProvisionWithPassword(phoneNumber, email, passwordEncoder.encode(password));
+        } else {
+            newCred = UserCredential.adminProvision(phoneNumber, email);
+        }
+        return userCredentialRepository.save(newCred).getId();
     }
 }

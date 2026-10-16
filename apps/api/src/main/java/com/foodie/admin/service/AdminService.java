@@ -13,8 +13,18 @@ public interface AdminService {
             String fullName,
             String phoneNumber,
             String email,
-            AdminRoleName role
+            AdminRoleName role,
+            String password,
+            String assignedZoneId
     ) {
+        public CreateAdminUserCommand(
+                String fullName,
+                String phoneNumber,
+                String email,
+                AdminRoleName role
+        ) {
+            this(fullName, phoneNumber, email, role, null, null);
+        }
     }
 
     record ActorContext(UUID actorUserCredentialId) {
@@ -25,8 +35,18 @@ public interface AdminService {
             UUID userCredentialId,
             String fullName,
             AdminRoleName role,
-            String profileImageKey
+            String profileImageKey,
+            String assignedZoneId
     ) {
+        public AdminUserView(
+                UUID adminUserId,
+                UUID userCredentialId,
+                String fullName,
+                AdminRoleName role,
+                String profileImageKey
+        ) {
+            this(adminUserId, userCredentialId, fullName, role, profileImageKey, null);
+        }
     }
 
     AdminUserView createAdminUser(CreateAdminUserCommand cmd, ActorContext creator);

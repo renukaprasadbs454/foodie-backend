@@ -160,16 +160,24 @@ public class AdminCustomerController {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get all registered customers for admin dashboard, scoped to active zone if requested")
     public ResponseEntity<ApiResponse<CustomerDashboardResponse>> getAllCustomers(
+            org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
             @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
 
-        String activeZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
 
         LocationZone zone = null;
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {

@@ -123,8 +123,47 @@ public class AdminZoneServiceImpl implements AdminZoneService {
                 tmk.getActiveDrivers() > 0 ? tmk.getActiveDrivers() : 22
         ));
 
-        // Keep alphabetical order: Bangalore Zone, then Tumkur Zone
+        // Dynamic active zones created by Super Admin
+        for (LocationZone z : allZones) {
+            if (z.getId() == null) continue;
+            if (BANGALORE_ZONE_ID.equalsIgnoreCase(z.getId()) || TUMKUR_ZONE_ID.equalsIgnoreCase(z.getId())) {
+                continue;
+            }
+            if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
+                result.add(new ActiveOperatingZoneDto(
+                        z.getId(),
+                        z.getZoneName() != null ? z.getZoneName() : z.getId(),
+                        z.getCityName() != null ? z.getCityName() : "Karnataka",
+                        z.getLatitude() != null ? z.getLatitude() : 12.9716,
+                        z.getLongitude() != null ? z.getLongitude() : 77.5946,
+                        z.getRadiusKm() != null ? z.getRadiusKm() : 15.0,
+                        "ACTIVE",
+                        z.isRestaurantEnabled(),
+                        z.isDeliveryPartnerEnabled(),
+                        z.isCustomerOrderingEnabled(),
+                        z.getActiveDrivers() > 0 ? z.getActiveDrivers() : 10
+                ));
+            }
+        }
+
+        // Keep alphabetical order: Bangalore Zone, then Tumkur Zone, then newly created
         result.sort(Comparator.comparing(ActiveOperatingZoneDto::zoneName, String.CASE_INSENSITIVE_ORDER));
+
+        if (userCredentialId != null) {
+            AdminUser admin = adminUserRepository.findByUserCredentialId(userCredentialId)
+                    .or(() -> adminUserRepository.findById(userCredentialId))
+                    .orElse(null);
+            if (admin != null && admin.getRole() != null
+                    && admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
+                if (admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                    String assigned = admin.getAssignedZoneId().trim();
+                    return result.stream()
+                            .filter(z -> assigned.equalsIgnoreCase(z.id()) || assigned.equalsIgnoreCase(z.zoneName()))
+                            .toList();
+                }
+            }
+        }
+
         return result;
     }
 
@@ -190,6 +229,14 @@ public class AdminZoneServiceImpl implements AdminZoneService {
             }
             if (adminUser.getRole() != null) {
                 roleName = adminUser.getRole().getName().name();
+                if (adminUser.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
+                    if (adminUser.getAssignedZoneId() != null && !adminUser.getAssignedZoneId().isBlank()) {
+                        String assigned = adminUser.getAssignedZoneId().trim();
+                        if (!assigned.equalsIgnoreCase(zone.getId()) && !assigned.equalsIgnoreCase(zone.getZoneName())) {
+                            throw new ForbiddenException("Unauthorized cross-zone selection: account is restricted to " + assigned);
+                        }
+                    }
+                }
             }
         }
 
