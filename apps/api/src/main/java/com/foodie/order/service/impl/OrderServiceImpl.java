@@ -332,14 +332,17 @@ public class OrderServiceImpl implements OrderService {
             eventPublisher.publishEvent(OrderPlacedEvent.of(order.getId(), customerId, cart.restaurantId()));
 
             CustomerContact contact = resolveCustomerContact(order.getId());
+            if (contact == null) {
+                contact = new CustomerContact("Customer", "", "");
+            }
             OrderResponseDto response = orderMapper.toDetail(
                     order,
                     orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
                     orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
                     itemNames,
-                    contact.name(),
-                    contact.phone(),
-                    contact.address());
+                    contact.name() != null ? contact.name() : "Customer",
+                    contact.phone() != null ? contact.phone() : "",
+                    contact.address() != null ? contact.address() : "");
             idempotencyService.store(idempotencyKey, payloadHash, response);
             return response;
         } catch (Exception fatal) {
@@ -579,12 +582,13 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public CustomerContact getCustomerContact(UUID orderId) {
-        return resolveCustomerContact(orderId);
+        CustomerContact c = resolveCustomerContact(orderId);
+        return c != null ? c : new CustomerContact("Customer", "", "");
     }
 
     @Override
     public CustomerContact getCustomerContactByCustomerId(UUID customerId) {
-        if (customerId == null) {
+        if (customerId == null || jdbcTemplate == null) {
             return new CustomerContact("Customer", "", "");
         }
         try {
@@ -596,7 +600,7 @@ public class OrderServiceImpl implements OrderService {
                 LEFT JOIN user_credential uc ON c.user_credential_id = uc.id
                 WHERE c.id = ?
             """;
-            return jdbcTemplate.query(sql, rs -> {
+            CustomerContact res = jdbcTemplate.query(sql, rs -> {
                 if (rs.next()) {
                     String name = rs.getString("c_name");
                     String phone = rs.getString("c_phone");
@@ -604,14 +608,15 @@ public class OrderServiceImpl implements OrderService {
                 }
                 return new CustomerContact("Customer", "", "");
             }, customerId);
-        } catch (Exception e) {
+            return res != null ? res : new CustomerContact("Customer", "", "");
+        } catch (Throwable e) {
             log.warn("Failed to get customer contact for customerId {}: {}", customerId, e.getMessage());
             return new CustomerContact("Customer", "", "");
         }
     }
 
     public CustomerContact resolveCustomerContact(UUID orderId) {
-        if (orderId == null) {
+        if (orderId == null || jdbcTemplate == null) {
             return new CustomerContact("Customer", "", "");
         }
         try {
@@ -626,7 +631,7 @@ public class OrderServiceImpl implements OrderService {
                 LEFT JOIN user_credential uc ON c.user_credential_id = uc.id
                 WHERE o.id = ?
             """;
-            return jdbcTemplate.query(sql, rs -> {
+            CustomerContact res = jdbcTemplate.query(sql, rs -> {
                 if (rs.next()) {
                     String name = rs.getString("c_name");
                     String phone = rs.getString("c_phone");
@@ -639,7 +644,8 @@ public class OrderServiceImpl implements OrderService {
                 }
                 return new CustomerContact("Customer", "", "");
             }, orderId);
-        } catch (Exception e) {
+            return res != null ? res : new CustomerContact("Customer", "", "");
+        } catch (Throwable e) {
             log.warn("Failed to resolve customer contact for order {}: {}", orderId, e.getMessage());
             return new CustomerContact("Customer", "", "");
         }
@@ -656,20 +662,30 @@ public class OrderServiceImpl implements OrderService {
                             .orElse("Menu item"));
         }
         CustomerContact contact = resolveCustomerContact(order.getId());
+        if (contact == null) {
+            contact = new CustomerContact("Customer", "", "");
+        }
         return orderMapper.toDetail(
                 order,
                 items,
                 orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()),
                 names,
-                contact.name(),
-                contact.phone(),
-                contact.address());
+                contact.name() != null ? contact.name() : "Customer",
+                contact.phone() != null ? contact.phone() : "",
+                contact.address() != null ? contact.address() : "");
     }
 
     private PageResult<OrderSummaryResponseDto> toPage(Page<Order> result) {
         List<OrderSummaryResponseDto> items = result.getContent().stream().map(order -> {
             CustomerContact contact = resolveCustomerContact(order.getId());
-            return orderMapper.toSummary(order, contact.name(), contact.phone(), contact.address());
+            if (contact == null) {
+                contact = new CustomerContact("Customer", "", "");
+            }
+            return orderMapper.toSummary(
+                    order,
+                    contact.name() != null ? contact.name() : "Customer",
+                    contact.phone() != null ? contact.phone() : "",
+                    contact.address() != null ? contact.address() : "");
         }).toList();
         PaginationMeta meta = new PaginationMeta(
                 result.getNumber(),

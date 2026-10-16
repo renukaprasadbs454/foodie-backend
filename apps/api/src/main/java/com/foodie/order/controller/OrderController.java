@@ -104,13 +104,16 @@ public class OrderController {
     public ResponseEntity<ApiResponse<java.util.Map<String, String>>> getOrderCustomer(
             @PathVariable UUID id) {
         var contact = orderService.getCustomerContact(id);
+        if (contact == null) {
+            contact = new OrderService.CustomerContact("Customer", "", "");
+        }
         java.util.Map<String, String> data = new java.util.HashMap<>();
-        data.put("name", contact.name());
-        data.put("phone", contact.phone());
-        data.put("address", contact.address());
-        data.put("customerName", contact.name());
-        data.put("customerPhone", contact.phone());
-        data.put("deliveryAddress", contact.address());
+        data.put("name", contact.name() != null ? contact.name() : "Customer");
+        data.put("phone", contact.phone() != null ? contact.phone() : "");
+        data.put("address", contact.address() != null ? contact.address() : "");
+        data.put("customerName", contact.name() != null ? contact.name() : "Customer");
+        data.put("customerPhone", contact.phone() != null ? contact.phone() : "");
+        data.put("deliveryAddress", contact.address() != null ? contact.address() : "");
         return ResponseEntity.ok(ApiResponse.success(data));
     }
 
@@ -120,11 +123,14 @@ public class OrderController {
     public ResponseEntity<ApiResponse<java.util.Map<String, String>>> getCustomerInfo(
             @PathVariable UUID customerId) {
         var contact = orderService.getCustomerContactByCustomerId(customerId);
+        if (contact == null) {
+            contact = new OrderService.CustomerContact("Customer", "", "");
+        }
         java.util.Map<String, String> data = new java.util.HashMap<>();
-        data.put("name", contact.name());
-        data.put("phone", contact.phone());
-        data.put("customerName", contact.name());
-        data.put("customerPhone", contact.phone());
+        data.put("name", contact.name() != null ? contact.name() : "Customer");
+        data.put("phone", contact.phone() != null ? contact.phone() : "");
+        data.put("customerName", contact.name() != null ? contact.name() : "Customer");
+        data.put("customerPhone", contact.phone() != null ? contact.phone() : "");
         return ResponseEntity.ok(ApiResponse.success(data));
     }
 
