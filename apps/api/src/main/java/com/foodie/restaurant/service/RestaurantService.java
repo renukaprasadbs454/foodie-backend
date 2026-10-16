@@ -41,6 +41,19 @@ public interface RestaurantService {
                         int size,
                         String sort);
 
+        PageResult<RestaurantSummaryResponseDto> search(
+                        String search,
+                        String cuisineType,
+                        Double minRating,
+                        Double lat,
+                        Double lng,
+                        String zoneId,
+                        int page,
+                        int size,
+                        String sort);
+
+        com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto detectCustomerZone(Double lat, Double lng);
+
         PageResult<RestaurantDetailResponseDto> listForAdmin(
                         String status,
                         int page,

@@ -181,9 +181,43 @@ public class RestaurantServiceImpl implements RestaurantService {
             int page,
             int size,
             String sort) {
+        return search(search, cuisineType, minRating, lat, lng, null, page, size, sort);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<RestaurantSummaryResponseDto> search(
+            String search,
+            String cuisineType,
+            Double minRating,
+            Double lat,
+            Double lng,
+            String zoneId,
+            int page,
+            int size,
+            String sort) {
         validateCuisineFilter(cuisineType);
+        if (sort != null && !sort.isBlank() && !"nearby".equalsIgnoreCase(sort)) {
+            resolveSort(sort);
+        }
         BigDecimal minRatingDecimal = minRating != null ? BigDecimal.valueOf(minRating) : null;
-        String cacheKey = RestaurantCacheService.geoBucket(lat, lng)
+
+        // Resolve active admin operating zone
+        LocationZone targetZone = null;
+        if (zoneId != null && !zoneId.isBlank()) {
+            targetZone = locationZoneRepository.findById(zoneId.trim()).orElse(null);
+        } else if (lat != null && lng != null) {
+            targetZone = findActiveZoneForCoordinates(lat, lng);
+            if (targetZone == null) {
+                // Customer coordinates fall outside all active admin operating zones!
+                log.info("Customer location ({}, {}) falls outside all active admin operating zones. Returning empty restaurants feed.", lat, lng);
+                PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+                return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+            }
+        }
+
+        String zoneKey = targetZone != null ? targetZone.getId() : "all";
+        String cacheKey = zoneKey + "|" + RestaurantCacheService.geoBucket(lat, lng)
                 + "|" + nullToEmpty(search)
                 + "|" + nullToEmpty(cuisineType)
                 + "|" + (minRating != null ? minRating : "")
@@ -198,28 +232,85 @@ public class RestaurantServiceImpl implements RestaurantService {
             }
         }
 
-        Pageable pageable;
-        Page<Restaurant> result;
         boolean onlyTop = "topPosition".equalsIgnoreCase(sort);
 
-        if (lat != null && lng != null) {
-            pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
-            result = restaurantRepository.searchApprovedGeo(
-                    emptyToNull(search), emptyToNull(cuisineType), minRatingDecimal, onlyTop, lat, lng, pageable);
-        } else {
-            pageable = PageRequest.of(Math.max(page, 0), clampSize(size), resolveSort(sort));
-            result = restaurantRepository.searchApproved(emptyToNull(search), emptyToNull(cuisineType),
-                    minRatingDecimal, onlyTop, pageable);
+        // Fetch all approved restaurants and filter strictly by active admin operating zone
+        List<Restaurant> approvedList = restaurantRepository.findAllByStatus(com.foodie.common.enums.RestaurantStatus.APPROVED);
+
+        final LocationZone finalTargetZone = targetZone;
+        java.util.stream.Stream<Restaurant> stream = approvedList.stream();
+
+        // 1. Zone filter - strictly isolate to the matched admin operating zone
+        if (finalTargetZone != null) {
+            stream = stream.filter(r -> isRestaurantInZone(r, finalTargetZone));
         }
 
-        List<RestaurantSummaryResponseDto> items = result.getContent().stream()
+        // 2. Search filter
+        if (search != null && !search.isBlank()) {
+            String lowerSearch = search.trim().toLowerCase();
+            stream = stream.filter(r -> (r.getName() != null && r.getName().toLowerCase().contains(lowerSearch))
+                    || (r.getDescription() != null && r.getDescription().toLowerCase().contains(lowerSearch)));
+        }
+
+        // 3. Cuisine filter
+        if (cuisineType != null && !cuisineType.isBlank()) {
+            String lowerCuisine = cuisineType.trim().toLowerCase();
+            stream = stream.filter(r -> {
+                if (r.getCuisineTypes() == null) return false;
+                for (String c : r.getCuisineTypes()) {
+                    if (c != null && c.toLowerCase().contains(lowerCuisine)) return true;
+                }
+                return false;
+            });
+        }
+
+        // 4. Rating filter
+        if (minRatingDecimal != null) {
+            stream = stream.filter(r -> r.getAvgRating() != null && r.getAvgRating().compareTo(minRatingDecimal) >= 0);
+        }
+
+        // 5. Top position filter
+        if (onlyTop) {
+            stream = stream.filter(r -> r.getTopPosition() != null);
+        }
+
+        List<Restaurant> filtered = new java.util.ArrayList<>(stream.toList());
+
+        // Sort results
+        if ("avgRating".equalsIgnoreCase(sort)) {
+            filtered.sort(java.util.Comparator.comparing(Restaurant::getAvgRating, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+        } else if ("topPosition".equalsIgnoreCase(sort)) {
+            filtered.sort(java.util.Comparator.comparing(Restaurant::getTopPosition, java.util.Comparator.nullsLast(Integer::compareTo)));
+        } else if (lat != null && lng != null) {
+            // Sort by proximity to customer coordinates
+            double cLat = lat;
+            double cLng = lng;
+            filtered.sort(java.util.Comparator.comparingDouble(r -> {
+                if (r.getLatitude() != null && r.getLongitude() != null) {
+                    return calculateDistance(cLat, cLng, r.getLatitude().doubleValue(), r.getLongitude().doubleValue());
+                }
+                return 999999.0;
+            }));
+        } else {
+            // Default: topPosition first, then avgRating descending
+            filtered.sort(java.util.Comparator
+                    .comparing(Restaurant::getTopPosition, java.util.Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing(Restaurant::getAvgRating, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+        }
+
+        int totalElements = filtered.size();
+        int pageSize = clampSize(size);
+        int pageIndex = Math.max(page, 0);
+        int totalPages = pageSize > 0 ? (int) Math.ceil((double) totalElements / pageSize) : 0;
+
+        int fromIndex = Math.min(pageIndex * pageSize, totalElements);
+        int toIndex = Math.min(fromIndex + pageSize, totalElements);
+        List<Restaurant> paged = filtered.subList(fromIndex, toIndex);
+
+        List<RestaurantSummaryResponseDto> items = paged.stream()
                 .map(r -> restaurantMapper.toSummary(r, signedOrNull(r.getLogoImageKey())))
                 .toList();
-        PaginationMeta pagination = new PaginationMeta(
-                result.getNumber(),
-                result.getSize(),
-                result.getTotalElements(),
-                result.getTotalPages());
+        PaginationMeta pagination = new PaginationMeta(pageIndex, pageSize, totalElements, totalPages);
         PageResult<RestaurantSummaryResponseDto> pageResult = new PageResult<>(items, pagination);
         try {
             restaurantCacheService.putListJson(
@@ -989,6 +1080,170 @@ public class RestaurantServiceImpl implements RestaurantService {
             if (isMatch)
                 return true;
         }
+        return false;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto detectCustomerZone(Double lat, Double lng) {
+        List<LocationZone> allZones = getOrInitActiveZones();
+        List<String> availableZoneNames = allZones.stream()
+                .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
+                .map(LocationZone::getZoneName)
+                .toList();
+
+        if (lat == null || lng == null) {
+            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                    false, null, null, null, null, null, 0, availableZoneNames,
+                    "Customer coordinates required for zone detection.");
+        }
+
+        LocationZone matchedZone = findActiveZoneForCoordinates(lat, lng);
+        if (matchedZone == null) {
+            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                    false,
+                    null,
+                    null,
+                    null,
+                    lat,
+                    lng,
+                    0,
+                    availableZoneNames,
+                    "You are currently outside our active operating zones. We deliver in: " + String.join(", ", availableZoneNames)
+            );
+        }
+
+        List<Restaurant> approved = restaurantRepository.findAllByStatus(com.foodie.common.enums.RestaurantStatus.APPROVED);
+        long count = approved.stream().filter(r -> isRestaurantInZone(r, matchedZone)).count();
+
+        return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                true,
+                matchedZone.getId(),
+                matchedZone.getZoneName(),
+                matchedZone.getCityName(),
+                lat,
+                lng,
+                count,
+                availableZoneNames,
+                "Operating Zone Identified: " + matchedZone.getZoneName()
+        );
+    }
+
+    private List<LocationZone> getOrInitActiveZones() {
+        List<LocationZone> zones = locationZoneRepository.findAll();
+        if (zones.isEmpty()) {
+            LocationZone bgl = new LocationZone();
+            bgl.setId("dz-bangalore");
+            bgl.setZoneName("Bangalore Zone");
+            bgl.setCityName("Bangalore");
+            bgl.setLatitude(12.9716);
+            bgl.setLongitude(77.5946);
+            bgl.setRadiusKm(25.0);
+            bgl.setStatus("ACTIVE");
+            bgl.setRestaurantEnabled(true);
+            bgl.setDeliveryPartnerEnabled(true);
+            bgl.setCustomerOrderingEnabled(true);
+            locationZoneRepository.saveAndFlush(bgl);
+
+            LocationZone tmk = new LocationZone();
+            tmk.setId("dz-tumkur");
+            tmk.setZoneName("Tumkur Zone");
+            tmk.setCityName("Tumkur");
+            tmk.setLatitude(13.3379);
+            tmk.setLongitude(77.1173);
+            tmk.setRadiusKm(20.0);
+            tmk.setStatus("ACTIVE");
+            tmk.setRestaurantEnabled(true);
+            tmk.setDeliveryPartnerEnabled(true);
+            tmk.setCustomerOrderingEnabled(true);
+            locationZoneRepository.saveAndFlush(tmk);
+
+            zones = locationZoneRepository.findAll();
+        }
+        return zones;
+    }
+
+    private LocationZone findActiveZoneForCoordinates(Double lat, Double lng) {
+        if (lat == null || lng == null) return null;
+        List<LocationZone> allZones = getOrInitActiveZones();
+        LocationZone bestZone = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (LocationZone zone : allZones) {
+            if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) {
+                continue;
+            }
+            if (!zone.isCustomerOrderingEnabled()) {
+                continue;
+            }
+            if (isPointInsideZone(lat, lng, zone)) {
+                if (zone.getLatitude() != null && zone.getLongitude() != null) {
+                    double d = calculateDistance(lat, lng, zone.getLatitude(), zone.getLongitude());
+                    if (d < minDistance) {
+                        minDistance = d;
+                        bestZone = zone;
+                    }
+                } else if (bestZone == null) {
+                    bestZone = zone;
+                }
+            }
+        }
+        return bestZone;
+    }
+
+    private boolean isPointInsideZone(double lat, double lng, LocationZone zone) {
+        if (zone == null) return false;
+        if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) return false;
+        if (!zone.isCustomerOrderingEnabled() && !zone.isRestaurantEnabled()) return false;
+
+        // Radius check
+        if (zone.getLatitude() != null && zone.getLongitude() != null && zone.getRadiusKm() != null && zone.getRadiusKm() > 0) {
+            double dist = calculateDistance(lat, lng, zone.getLatitude(), zone.getLongitude());
+            if (dist <= zone.getRadiusKm()) {
+                return true;
+            }
+        }
+        // Polygon check
+        if (zone.getPolygonCoordinates() != null && !zone.getPolygonCoordinates().isBlank()) {
+            if (isPointInPolygon(lat, lng, zone.getPolygonCoordinates())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isRestaurantInZone(Restaurant r, LocationZone zone) {
+        if (r == null || zone == null) return false;
+
+        // 1. By restaurant coordinates
+        if (r.getLatitude() != null && r.getLongitude() != null) {
+            double lat = r.getLatitude().doubleValue();
+            double lng = r.getLongitude().doubleValue();
+            if (isPointInsideZone(lat, lng, zone)) {
+                return true;
+            }
+        }
+
+        // 2. By restaurant address coordinates
+        if (r.getAddress() != null && r.getAddress().getLatitude() != null && r.getAddress().getLongitude() != null) {
+            double lat = r.getAddress().getLatitude().doubleValue();
+            double lng = r.getAddress().getLongitude().doubleValue();
+            if (isPointInsideZone(lat, lng, zone)) {
+                return true;
+            }
+        }
+
+        // 3. Fallback by city match
+        if (zone.getCityName() != null && !zone.getCityName().isBlank()) {
+            String zoneCity = zone.getCityName().trim().toLowerCase();
+            if (r.getAddress() != null && r.getAddress().getCity() != null) {
+                String restCity = r.getAddress().getCity().trim().toLowerCase();
+                if (restCity.contains(zoneCity) || zoneCity.contains(restCity)) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
