@@ -20,6 +20,17 @@ public class OrderMapper {
                         List<OrderItem> items,
                         List<OrderStatusEvent> events,
                         Map<UUID, String> itemNames) {
+                return toDetail(order, items, events, itemNames, null, null, null);
+        }
+
+        public OrderResponseDto toDetail(
+                        Order order,
+                        List<OrderItem> items,
+                        List<OrderStatusEvent> events,
+                        Map<UUID, String> itemNames,
+                        String customerName,
+                        String customerPhone,
+                        String deliveryAddress) {
                 List<OrderItemResponseDto> itemDtos = items.stream()
                                 .map(item -> new OrderItemResponseDto(
                                                 item.getMenuItemId(),
@@ -57,10 +68,17 @@ public class OrderMapper {
                                 order.getAssignmentScheduledAt(),
                                 order.getDeliveryPartnerId(),
                                 itemDtos,
-                                eventDtos);
+                                eventDtos,
+                                customerName,
+                                customerPhone,
+                                deliveryAddress);
         }
 
         public OrderSummaryResponseDto toSummary(Order order) {
+                return toSummary(order, null, null, null);
+        }
+
+        public OrderSummaryResponseDto toSummary(Order order, String customerName, String customerPhone, String deliveryAddress) {
                 return new OrderSummaryResponseDto(
                                 order.getId(),
                                 order.getOrderNumber(),
@@ -70,6 +88,9 @@ public class OrderMapper {
                                 order.getPlacedAt(),
                                 order.getFoodReadyAt(),
                                 order.getAssignmentScheduledAt(),
-                                order.getDeliveryPartnerId());
+                                order.getDeliveryPartnerId(),
+                                customerName,
+                                customerPhone,
+                                deliveryAddress);
         }
 }

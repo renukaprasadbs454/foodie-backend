@@ -14,6 +14,22 @@ public record OrderSummaryResponseDto(
         Instant placedAt,
         Instant foodReadyAt,
         Instant assignmentScheduledAt,
-        UUID deliveryPartnerId
+        UUID deliveryPartnerId,
+        String customerName,
+        String customerPhone,
+        String deliveryAddress
 ) {
+        public OrderSummaryResponseDto(
+                UUID orderId,
+                String orderNumber,
+                OrderStatus status,
+                UUID restaurantId,
+                BigDecimal totalAmount,
+                Instant placedAt,
+                Instant foodReadyAt,
+                Instant assignmentScheduledAt,
+                UUID deliveryPartnerId
+        ) {
+                this(orderId, orderNumber, status, restaurantId, totalAmount, placedAt, foodReadyAt, assignmentScheduledAt, deliveryPartnerId, null, null, null);
+        }
 }

@@ -24,5 +24,32 @@ public record OrderResponseDto(
                 Instant assignmentScheduledAt,
                 UUID deliveryPartnerId,
                 List<OrderItemResponseDto> items,
-                List<OrderStatusEventResponseDto> orderStatusEvents) {
+                List<OrderStatusEventResponseDto> orderStatusEvents,
+                String customerName,
+                String customerPhone,
+                String deliveryAddress) {
+
+        public OrderResponseDto(
+                        UUID orderId,
+                        String orderNumber,
+                        OrderStatus status,
+                        UUID customerId,
+                        UUID restaurantId,
+                        UUID addressId,
+                        BigDecimal subtotal,
+                        BigDecimal deliveryFee,
+                        BigDecimal discountAmount,
+                        BigDecimal taxAmount,
+                        BigDecimal totalAmount,
+                        Instant placedAt,
+                        Integer preparationTime,
+                        Instant foodReadyAt,
+                        Instant assignmentScheduledAt,
+                        UUID deliveryPartnerId,
+                        List<OrderItemResponseDto> items,
+                        List<OrderStatusEventResponseDto> orderStatusEvents) {
+                this(orderId, orderNumber, status, customerId, restaurantId, addressId, subtotal, deliveryFee,
+                                discountAmount, taxAmount, totalAmount, placedAt, preparationTime, foodReadyAt,
+                                assignmentScheduledAt, deliveryPartnerId, items, orderStatusEvents, null, null, null);
+        }
 }

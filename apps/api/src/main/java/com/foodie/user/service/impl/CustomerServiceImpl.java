@@ -261,4 +261,27 @@ public class CustomerServiceImpl implements CustomerService {
                 .map(UserCredential::getPhoneNumber)
                 .orElse(null);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CustomerProfileResponseDto getCustomerProfile(UUID anyUserIdOrCustomerId) {
+        Customer customer = customerRepository.findById(anyUserIdOrCustomerId)
+                .or(() -> customerRepository.findByUserCredentialId(anyUserIdOrCustomerId))
+                .orElse(null);
+        if (customer != null) {
+            UserCredential credential = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+            return customerMapper.toProfile(customer, credential != null ? credential.getPhoneNumber() : "");
+        }
+        UserCredential credential = userCredentialRepository.findById(anyUserIdOrCustomerId).orElse(null);
+        if (credential != null) {
+            return new CustomerProfileResponseDto(
+                    credential.getId(),
+                    credential.getEmail() != null ? credential.getEmail() : "Customer",
+                    credential.getEmail(),
+                    credential.getPhoneNumber() != null ? credential.getPhoneNumber() : "",
+                    null);
+        }
+        throw new ResourceNotFoundException("Customer profile not found for ID: " + anyUserIdOrCustomerId);
+    }
+
 }

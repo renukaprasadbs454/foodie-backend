@@ -52,4 +52,12 @@ public interface OrderService {
 
         record ActorContext(OrderActorType actorType, UUID actorId) {
         }
+
+        record CustomerContact(String name, String phone, String address) {
+        }
+
+        CustomerContact getCustomerContact(UUID orderId);
+
+        CustomerContact getCustomerContactByCustomerId(UUID customerId);
+
 }

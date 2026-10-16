@@ -34,7 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/users")
 @Tag(name = "User")
-@PreAuthorize("hasRole('CUSTOMER')")
+@PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
 public class UserController {
 
     private final CustomerService customerService;
@@ -126,4 +126,14 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(customerService.uploadProfileImage(principal.userId(), file)));
     }
+
+    @GetMapping("/{userId}")
+    @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
+    @Operation(summary = "Get customer profile by userId or customerId")
+    public ResponseEntity<ApiResponse<CustomerProfileResponseDto>> getUserById(
+            @PathVariable UUID userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.getCustomerProfile(userId)));
+    }
+
 }

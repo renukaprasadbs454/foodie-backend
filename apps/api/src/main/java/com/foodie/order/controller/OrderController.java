@@ -97,6 +97,37 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 
+
+    @GetMapping("/{id}/customer")
+    @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
+    @Operation(summary = "Get customer contact details for order")
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> getOrderCustomer(
+            @PathVariable UUID id) {
+        var contact = orderService.getCustomerContact(id);
+        java.util.Map<String, String> data = new java.util.HashMap<>();
+        data.put("name", contact.name());
+        data.put("phone", contact.phone());
+        data.put("address", contact.address());
+        data.put("customerName", contact.name());
+        data.put("customerPhone", contact.phone());
+        data.put("deliveryAddress", contact.address());
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    @GetMapping("/customer/{customerId}")
+    @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
+    @Operation(summary = "Get customer contact details by customerId")
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> getCustomerInfo(
+            @PathVariable UUID customerId) {
+        var contact = orderService.getCustomerContactByCustomerId(customerId);
+        java.util.Map<String, String> data = new java.util.HashMap<>();
+        data.put("name", contact.name());
+        data.put("phone", contact.phone());
+        data.put("customerName", contact.name());
+        data.put("customerPhone", contact.phone());
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
     @Operation(summary = "Get order by id (visibility scoped by role)")

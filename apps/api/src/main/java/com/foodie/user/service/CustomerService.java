@@ -15,6 +15,8 @@ public interface CustomerService {
 
     CustomerProfileResponseDto getMyProfile(UUID userCredentialId);
 
+    CustomerProfileResponseDto getCustomerProfile(UUID anyUserIdOrCustomerId);
+
     CustomerProfileResponseDto updateMyProfile(UUID userCredentialId, UpdateProfileRequestDto request);
 
     void changePassword(UUID userCredentialId, ChangePasswordRequestDto request);
