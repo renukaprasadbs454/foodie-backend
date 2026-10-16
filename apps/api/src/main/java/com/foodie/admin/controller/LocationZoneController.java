@@ -136,10 +136,10 @@ public class LocationZoneController {
             zoneRepository.saveAndFlush(tmk);
         }
 
-        // Deactivate duplicate or unwanted entries without deleting historical data
+        // Deactivate duplicate legacy entries ("zone 1") without deleting historical data
         List<LocationZone> all = zoneRepository.findAll();
         for (LocationZone z : all) {
-            if (!"dz-bangalore".equalsIgnoreCase(z.getId()) && !"dz-tumkur".equalsIgnoreCase(z.getId())) {
+            if (z.getZoneName() != null && z.getZoneName().toLowerCase().contains("zone 1")) {
                 if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
                     z.setStatus("INACTIVE");
                     zoneRepository.saveAndFlush(z);
@@ -162,9 +162,28 @@ public class LocationZoneController {
 
     @GetMapping("/zones")
     public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
+        LocationZone bgl = zoneRepository.findById("dz-bangalore").orElse(null);
+        if (bgl == null) {
+            bgl = new LocationZone();
+            bgl.setId("dz-bangalore");
+            bgl.setZoneName("Bangalore Zone");
+            bgl.setCityName("Bangalore");
+            bgl.setLatitude(12.9716);
+            bgl.setLongitude(77.5946);
+            bgl.setRadiusKm(25.0);
+            bgl.setPolygonCoordinates("12.9716,77.5946 | 13.0000,77.6200 | 12.9500,77.5800");
+            bgl.setActiveDrivers(45);
+            bgl.setSurgeMultiplier(new BigDecimal("1.00"));
+            bgl.setStatus("ACTIVE");
+            bgl.setRestaurantEnabled(true);
+            bgl.setDeliveryPartnerEnabled(true);
+            bgl.setCustomerOrderingEnabled(true);
+            zoneRepository.saveAndFlush(bgl);
+        }
+
         List<LocationZoneDto> dtos = zoneRepository.findAll().stream()
                 .filter(z -> ("dz-bangalore".equalsIgnoreCase(z.getId()) || "dz-tumkur".equalsIgnoreCase(z.getId()))
-                        || ("ACTIVE".equalsIgnoreCase(z.getStatus()) && !z.getZoneName().toLowerCase().contains("zone 1") && !z.getZoneName().toLowerCase().contains("bengaluru zone")))
+                        || ("ACTIVE".equalsIgnoreCase(z.getStatus()) && !z.getZoneName().toLowerCase().contains("zone 1")))
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
@@ -186,7 +205,7 @@ public class LocationZoneController {
         zoneRepository.saveAndFlush(entity);
 
         if (dto.getCityName() != null) {
-            cityRepository.findByCityNameIgnoreCase(dto.getCityName()).ifPresent(city -> {
+            cityRepository.findFirstCityByCityNameIgnoreCase(dto.getCityName()).ifPresent(city -> {
                 city.setActiveZonesCount(city.getActiveZonesCount() + 1);
                 cityRepository.saveAndFlush(city);
             });
@@ -244,7 +263,7 @@ public class LocationZoneController {
 
         zoneRepository.deleteById(zoneId);
         if (zone.getCityName() != null) {
-            cityRepository.findByCityNameIgnoreCase(zone.getCityName()).ifPresent(city -> {
+            cityRepository.findFirstCityByCityNameIgnoreCase(zone.getCityName()).ifPresent(city -> {
                 if (city.getActiveZonesCount() > 0) {
                     city.setActiveZonesCount(city.getActiveZonesCount() - 1);
                     cityRepository.saveAndFlush(city);
