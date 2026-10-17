@@ -63,4 +63,15 @@ public class DeliveryIncentiveController {
                 incentiveService.getIncentiveEarnings(principal.userId())
         ));
     }
+
+    @GetMapping("/earnings-summary")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @Operation(summary = "Get delivery partner earnings summary with separate delivery and incentive breakdown")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.DeliveryIncentivesEarningsSummaryDto>> getEarningsSummary(
+            @AuthenticationPrincipal AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                incentiveService.getEarningsSummary(principal.userId())
+        ));
+    }
 }

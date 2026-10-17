@@ -31,4 +31,23 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
                         @Param("from") Instant from,
                         @Param("to") Instant to,
                         Pageable pageable);
+
+        @Query("""
+                        select coalesce(sum(e.amount), 0)
+                        from LedgerEntry e
+                        where e.walletAccountId = :walletAccountId
+                          and e.entryType = com.foodie.common.enums.LedgerEntryType.CREDIT
+                          and e.referenceType in (com.foodie.common.enums.LedgerReferenceType.DELIVERY_ASSIGNMENT)
+                        """)
+        java.math.BigDecimal sumDeliveryCreditsByWalletAccountId(@Param("walletAccountId") UUID walletAccountId);
+
+        @Query("""
+                        select coalesce(sum(e.amount), 0)
+                        from LedgerEntry e
+                        where e.walletAccountId = :walletAccountId
+                          and e.entryType = com.foodie.common.enums.LedgerEntryType.CREDIT
+                          and e.referenceType = com.foodie.common.enums.LedgerReferenceType.INCENTIVE
+                        """)
+        java.math.BigDecimal sumIncentiveCreditsByWalletAccountId(@Param("walletAccountId") UUID walletAccountId);
+
 }

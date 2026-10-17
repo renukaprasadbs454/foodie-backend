@@ -20,7 +20,7 @@ public class OrderMapper {
                         List<OrderItem> items,
                         List<OrderStatusEvent> events,
                         Map<UUID, String> itemNames) {
-                return toDetail(order, items, events, itemNames, null, null, null);
+                return toDetail(order, items, events, itemNames, null, null, null, null, null, null);
         }
 
         public OrderResponseDto toDetail(
@@ -31,6 +31,20 @@ public class OrderMapper {
                         String customerName,
                         String customerPhone,
                         String deliveryAddress) {
+                return toDetail(order, items, events, itemNames, customerName, customerPhone, deliveryAddress, null, null, null);
+        }
+
+        public OrderResponseDto toDetail(
+                        Order order,
+                        List<OrderItem> items,
+                        List<OrderStatusEvent> events,
+                        Map<UUID, String> itemNames,
+                        String customerName,
+                        String customerPhone,
+                        String deliveryAddress,
+                        String paymentMethod,
+                        String paymentStatus,
+                        String transactionId) {
                 List<OrderItemResponseDto> itemDtos = items.stream()
                                 .map(item -> new OrderItemResponseDto(
                                                 item.getMenuItemId(),
@@ -71,14 +85,28 @@ public class OrderMapper {
                                 eventDtos,
                                 customerName,
                                 customerPhone,
-                                deliveryAddress);
+                                deliveryAddress,
+                                paymentMethod,
+                                paymentStatus,
+                                transactionId);
         }
 
         public OrderSummaryResponseDto toSummary(Order order) {
-                return toSummary(order, null, null, null);
+                return toSummary(order, null, null, null, null, null, null);
         }
 
         public OrderSummaryResponseDto toSummary(Order order, String customerName, String customerPhone, String deliveryAddress) {
+                return toSummary(order, customerName, customerPhone, deliveryAddress, null, null, null);
+        }
+
+        public OrderSummaryResponseDto toSummary(
+                        Order order,
+                        String customerName,
+                        String customerPhone,
+                        String deliveryAddress,
+                        String paymentMethod,
+                        String paymentStatus,
+                        String transactionId) {
                 return new OrderSummaryResponseDto(
                                 order.getId(),
                                 order.getOrderNumber(),
@@ -91,6 +119,9 @@ public class OrderMapper {
                                 order.getDeliveryPartnerId(),
                                 customerName,
                                 customerPhone,
-                                deliveryAddress);
+                                deliveryAddress,
+                                paymentMethod,
+                                paymentStatus,
+                                transactionId);
         }
 }

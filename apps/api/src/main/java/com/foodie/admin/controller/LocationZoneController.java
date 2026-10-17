@@ -94,6 +94,26 @@ public class LocationZoneController {
             c3.setActiveMerchantsCount(145);
             c3.setStatus("ACTIVE");
             cityRepository.saveAndFlush(c3);
+
+            City c4 = new City();
+            c4.setId("cty-tumkur");
+            c4.setCityName("Tumakuru");
+            c4.setState("Karnataka");
+            c4.setActiveZonesCount(1);
+            c4.setActiveMerchantsCount(48);
+            c4.setStatus("ACTIVE");
+            cityRepository.saveAndFlush(c4);
+        }
+
+        if (!cityRepository.existsById("cty-tumkur") && cityRepository.findFirstCityByCityNameIgnoreCase("Tumakuru").isEmpty() && cityRepository.findFirstCityByCityNameIgnoreCase("Tumkur").isEmpty()) {
+            City cTmk = new City();
+            cTmk.setId("cty-tumkur");
+            cTmk.setCityName("Tumakuru");
+            cTmk.setState("Karnataka");
+            cTmk.setActiveZonesCount(1);
+            cTmk.setActiveMerchantsCount(48);
+            cTmk.setStatus("ACTIVE");
+            cityRepository.saveAndFlush(cTmk);
         }
 
         // Ensure canonical approved operating zones exist and are ACTIVE

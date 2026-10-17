@@ -29,4 +29,9 @@ public interface DeliveryIncentiveService {
      * Get historical incentive earnings for the delivery partner.
      */
     List<IncentiveEarningHistoryDto> getIncentiveEarnings(UUID userCredentialId);
+
+    /**
+     * Get structured earnings summary separating regular delivery earnings and incentive earnings.
+     */
+    com.foodie.delivery.dto.response.DeliveryIncentivesEarningsSummaryDto getEarningsSummary(UUID userCredentialId);
 }

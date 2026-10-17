@@ -38,4 +38,7 @@ public interface DeliveryPartnerIncentiveEarningRepository extends JpaRepository
             @Param("ruleId") String ruleId,
             @Param("fromDate") LocalDate fromDate,
             @Param("toDate") LocalDate toDate);
+
+    @Query("SELECT COALESCE(SUM(e.amount), 0) FROM DeliveryPartnerIncentiveEarning e WHERE e.deliveryPartner.id = :partnerId")
+    java.math.BigDecimal sumAmountByDeliveryPartnerId(@Param("partnerId") UUID partnerId);
 }

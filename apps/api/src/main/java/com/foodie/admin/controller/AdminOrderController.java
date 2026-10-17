@@ -6,6 +6,8 @@ import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.order.dto.response.OrderResponseDto;
 import com.foodie.order.entity.Order;
+import com.foodie.common.enums.OrderStatus;
+import com.foodie.payment.repository.PaymentRepository;
 import com.foodie.order.repository.OrderRepository;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.repository.RestaurantRepository;
@@ -62,6 +64,9 @@ public class AdminOrderController {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.admin.security.AdminAccess adminAccess;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PaymentRepository paymentRepository;
 
     public record AdminOrderSummaryDto(
             String id,
@@ -161,7 +166,9 @@ public class AdminOrderController {
                     module,
                     "Multi-dish order",
                     order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO,
-                    "DIGITAL",
+                    (order.getStatus() == OrderStatus.DELIVERED || (paymentRepository != null && paymentRepository.findByOrderId(order.getId()).isPresent()))
+                            ? (paymentRepository != null ? paymentRepository.findByOrderId(order.getId()).map(p -> p.getStatus() == com.foodie.common.enums.PaymentStatus.CAPTURED ? "ONLINE" : "COD").orElse("COD") : "COD")
+                            : "COD",
                     statusStr,
                     order.getCreatedAt() != null ? order.getCreatedAt().toString() : "Just now"
             ));

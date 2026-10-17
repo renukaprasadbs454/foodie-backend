@@ -98,6 +98,24 @@ public class OrderController {
     }
 
 
+    
+    @GetMapping("/{id}/payment")
+    @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
+    @Operation(summary = "Get live payment details for order")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getOrderPayment(
+            @PathVariable String id) {
+        var paymentInfo = orderService.getPaymentInfoForOrder(id);
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("orderId", id);
+        data.put("paymentMethod", paymentInfo.method());
+        data.put("paymentMode", paymentInfo.method());
+        data.put("paymentStatus", paymentInfo.status());
+        data.put("transactionId", paymentInfo.transactionId());
+        data.put("isCOD", paymentInfo.isCOD());
+        data.put("isCod", paymentInfo.isCOD());
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
     @GetMapping("/{id}/customer")
     @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','DELIVERY_PARTNER','ADMIN')")
     @Operation(summary = "Get customer contact details for order")
