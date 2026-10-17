@@ -12,6 +12,12 @@ import java.util.UUID;
 
 public interface OrderService {
 
+    record OrderPaymentInfo(String method, String status, String transactionId, boolean isCOD) {}
+
+    OrderPaymentInfo getPaymentInfoForOrder(UUID orderId);
+
+    OrderPaymentInfo getPaymentInfoForOrder(String orderIdOrNumber);
+
         OrderResponseDto createFromCart(UUID userCredentialId, CreateOrderRequestDto request, String idempotencyKey);
 
         OrderResponseDto getById(UUID orderId, UUID userCredentialId, UserType userType);

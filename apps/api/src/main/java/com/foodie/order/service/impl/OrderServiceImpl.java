@@ -66,6 +66,9 @@ import org.slf4j.LoggerFactory;
 @Service
 public class OrderServiceImpl implements OrderService {
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.payment.repository.PaymentRepository paymentRepository;
+
     private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     private final OrderRepository orderRepository;
@@ -651,6 +654,63 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    
+    public record PaymentDetailRecord(String method, String status, String transactionId, boolean isCOD) {}
+
+    public PaymentDetailRecord resolvePaymentInfo(Order order) {
+        if (order == null) {
+            return new PaymentDetailRecord("COD", "PENDING", null, true);
+        }
+        if (paymentRepository != null) {
+            try {
+                var paymentOpt = paymentRepository.findByOrderId(order.getId());
+                if (paymentOpt.isPresent()) {
+                    var payment = paymentOpt.get();
+                    if (payment.getStatus() == com.foodie.common.enums.PaymentStatus.CAPTURED) {
+                        String txnId = payment.getCashfreeOrderId() != null && !payment.getCashfreeOrderId().isBlank()
+                                ? payment.getCashfreeOrderId()
+                                : "TXN_" + payment.getId().toString().replace("-", "").substring(0, 12).toUpperCase();
+                        return new PaymentDetailRecord("ONLINE", "PAID", txnId, false);
+                    } else if (payment.getStatus() == com.foodie.common.enums.PaymentStatus.FAILED) {
+                        return new PaymentDetailRecord("ONLINE", "FAILED", payment.getCashfreeOrderId(), false);
+                    } else {
+                        return new PaymentDetailRecord("ONLINE", "PENDING", payment.getPaymentSessionId(), false);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        boolean isDelivered = order.getStatus() == OrderStatus.DELIVERED;
+        return new PaymentDetailRecord("COD", isDelivered ? "PAID" : "PENDING", null, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderPaymentInfo getPaymentInfoForOrder(UUID orderId) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+        PaymentDetailRecord info = resolvePaymentInfo(order);
+        return new OrderPaymentInfo(info.method(), info.status(), info.transactionId(), info.isCOD());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderPaymentInfo getPaymentInfoForOrder(String orderIdOrNumber) {
+        if (orderIdOrNumber == null || orderIdOrNumber.isBlank()) {
+            return new OrderPaymentInfo("COD", "PENDING", null, true);
+        }
+        String clean = orderIdOrNumber.replace("#", "").trim();
+        try {
+            UUID id = UUID.fromString(clean);
+            return getPaymentInfoForOrder(id);
+        } catch (IllegalArgumentException ignored) {
+            Order order = orderRepository.findByOrderNumber(clean)
+                    .or(() -> orderRepository.findByOrderNumber("#" + clean))
+                    .orElse(null);
+            PaymentDetailRecord info = resolvePaymentInfo(order);
+            return new OrderPaymentInfo(info.method(), info.status(), info.transactionId(), info.isCOD());
+        }
+    }
+
     private OrderResponseDto toDetail(Order order) {
         List<OrderItem> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
         Map<UUID, String> names = new LinkedHashMap<>();
@@ -665,6 +725,7 @@ public class OrderServiceImpl implements OrderService {
         if (contact == null) {
             contact = new CustomerContact("Customer", "", "");
         }
+        PaymentDetailRecord pInfo = resolvePaymentInfo(order);
         return orderMapper.toDetail(
                 order,
                 items,
@@ -672,7 +733,10 @@ public class OrderServiceImpl implements OrderService {
                 names,
                 contact.name() != null ? contact.name() : "Customer",
                 contact.phone() != null ? contact.phone() : "",
-                contact.address() != null ? contact.address() : "");
+                contact.address() != null ? contact.address() : "",
+                pInfo.method(),
+                pInfo.status(),
+                pInfo.transactionId());
     }
 
     private PageResult<OrderSummaryResponseDto> toPage(Page<Order> result) {
@@ -681,11 +745,15 @@ public class OrderServiceImpl implements OrderService {
             if (contact == null) {
                 contact = new CustomerContact("Customer", "", "");
             }
+            PaymentDetailRecord pInfo = resolvePaymentInfo(order);
             return orderMapper.toSummary(
                     order,
                     contact.name() != null ? contact.name() : "Customer",
                     contact.phone() != null ? contact.phone() : "",
-                    contact.address() != null ? contact.address() : "");
+                    contact.address() != null ? contact.address() : "",
+                    pInfo.method(),
+                    pInfo.status(),
+                    pInfo.transactionId());
         }).toList();
         PaginationMeta meta = new PaginationMeta(
                 result.getNumber(),

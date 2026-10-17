@@ -6,6 +6,10 @@ import java.util.UUID;
 
 public record CreateOrderRequestDto(
         @NotNull UUID addressId,
-        @Size(max = 30) String couponCode
+        @Size(max = 30) String couponCode,
+        String paymentMethod
 ) {
+    public CreateOrderRequestDto(UUID addressId, String couponCode) {
+        this(addressId, couponCode, null);
+    }
 }
