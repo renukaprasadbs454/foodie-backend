@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/delivery/shifts")
+@RequestMapping({"/api/v1/delivery/shifts", "/api/v1/delivery-partners/shifts"})
 @Tag(name = "Delivery — Shift Booking & Availability")
 public class DeliveryShiftController {
 
@@ -30,6 +30,12 @@ public class DeliveryShiftController {
 
     public DeliveryShiftController(DeliveryShiftService shiftService) {
         this.shiftService = shiftService;
+    }
+
+    @GetMapping
+    @Operation(summary = "List all active shifts available for delivery partners (alias)")
+    public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getShifts() {
+        return getAvailableShifts();
     }
 
     @GetMapping("/available")
