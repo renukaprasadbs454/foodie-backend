@@ -74,6 +74,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     @Autowired(required = false)
     private PayoutRepository payoutRepository;
 
+    @Autowired
     public DeliveryIncentiveServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
             DeliveryAssignmentRepository deliveryAssignmentRepository,
