@@ -162,28 +162,8 @@ public class LocationZoneController {
 
     @GetMapping("/zones")
     public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
-        LocationZone bgl = zoneRepository.findById("dz-bangalore").orElse(null);
-        if (bgl == null) {
-            bgl = new LocationZone();
-            bgl.setId("dz-bangalore");
-            bgl.setZoneName("Bangalore Zone");
-            bgl.setCityName("Bangalore");
-            bgl.setLatitude(12.9716);
-            bgl.setLongitude(77.5946);
-            bgl.setRadiusKm(25.0);
-            bgl.setPolygonCoordinates("12.9716,77.5946 | 13.0000,77.6200 | 12.9500,77.5800");
-            bgl.setActiveDrivers(45);
-            bgl.setSurgeMultiplier(new BigDecimal("1.00"));
-            bgl.setStatus("ACTIVE");
-            bgl.setRestaurantEnabled(true);
-            bgl.setDeliveryPartnerEnabled(true);
-            bgl.setCustomerOrderingEnabled(true);
-            zoneRepository.saveAndFlush(bgl);
-        }
-
         List<LocationZoneDto> dtos = zoneRepository.findAll().stream()
-                .filter(z -> ("dz-bangalore".equalsIgnoreCase(z.getId()) || "dz-tumkur".equalsIgnoreCase(z.getId()))
-                        || ("ACTIVE".equalsIgnoreCase(z.getStatus()) && !z.getZoneName().toLowerCase().contains("zone 1")))
+                .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
@@ -258,17 +238,22 @@ public class LocationZoneController {
     @Transactional
     public ResponseEntity<ApiResponse<Boolean>> deleteZone(@PathVariable String zoneId) {
         LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
-        if (zone == null)
-            return ResponseEntity.notFound().build();
-
-        zoneRepository.deleteById(zoneId);
-        if (zone.getCityName() != null) {
-            cityRepository.findFirstCityByCityNameIgnoreCase(zone.getCityName()).ifPresent(city -> {
-                if (city.getActiveZonesCount() > 0) {
-                    city.setActiveZonesCount(city.getActiveZonesCount() - 1);
-                    cityRepository.saveAndFlush(city);
-                }
-            });
+        if (zone == null) {
+            zone = zoneRepository.findAll().stream()
+                    .filter(z -> z.getId().equalsIgnoreCase(zoneId) ||
+                            (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(zoneId)))
+                    .findFirst().orElse(null);
+        }
+        if (zone != null) {
+            zoneRepository.delete(zone);
+            if (zone.getCityName() != null) {
+                cityRepository.findFirstCityByCityNameIgnoreCase(zone.getCityName()).ifPresent(city -> {
+                    if (city.getActiveZonesCount() > 0) {
+                        city.setActiveZonesCount(city.getActiveZonesCount() - 1);
+                        cityRepository.saveAndFlush(city);
+                    }
+                });
+            }
         }
         return ResponseEntity.ok(ApiResponse.success(true));
     }
