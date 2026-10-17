@@ -5,8 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.enums.DeliveryAssignmentStatus;
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
+import com.foodie.common.enums.PayoutStatus;
 import com.foodie.common.exception.ResourceNotFoundException;
+import com.foodie.delivery.dto.response.DeliveryIncentivesEarningsSummaryDto;
 import com.foodie.delivery.dto.response.IncentiveEarningHistoryDto;
+import com.foodie.delivery.dto.response.IncentiveMilestoneDto;
 import com.foodie.delivery.dto.response.IncentiveOfferProgressDto;
 import com.foodie.delivery.dto.response.IncentivesProgressResponseDto;
 import com.foodie.delivery.entity.DeliveryAssignment;
@@ -18,6 +21,9 @@ import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.repository.DeliveryPricingConfigRepository;
 import com.foodie.delivery.service.DeliveryIncentiveService;
+import com.foodie.wallet.repository.LedgerEntryRepository;
+import com.foodie.wallet.repository.PayoutRepository;
+import com.foodie.wallet.repository.WalletAccountRepository;
 import com.foodie.wallet.service.WalletService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -39,6 +45,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +56,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private static final Logger log = LoggerFactory.getLogger(DeliveryIncentiveServiceImpl.class);
     private static final UUID DEFAULT_CONFIG_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     private static final ZoneId ZONE_IST = ZoneId.of("Asia/Kolkata");
-    private static final Pattern TARGET_PATTERN = Pattern.compile("(\\d+)\\s*(?:or more\\s*)?(?:orders|deliveries)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TARGET_PATTERN = Pattern.compile("(\\d+)\\s*(?:or more\\s*)?(?:orders|deliveries|trips)", Pattern.CASE_INSENSITIVE);
 
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
@@ -57,6 +64,15 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private final DeliveryPartnerIncentiveEarningRepository earningRepository;
     private final WalletService walletService;
     private final ObjectMapper objectMapper;
+
+    @Autowired(required = false)
+    private WalletAccountRepository walletAccountRepository;
+
+    @Autowired(required = false)
+    private LedgerEntryRepository ledgerEntryRepository;
+
+    @Autowired(required = false)
+    private PayoutRepository payoutRepository;
 
     public DeliveryIncentiveServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -74,6 +90,28 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         this.objectMapper = objectMapper;
     }
 
+    public DeliveryIncentiveServiceImpl(
+            DeliveryPartnerRepository deliveryPartnerRepository,
+            DeliveryAssignmentRepository deliveryAssignmentRepository,
+            DeliveryPricingConfigRepository pricingConfigRepository,
+            DeliveryPartnerIncentiveEarningRepository earningRepository,
+            WalletService walletService,
+            ObjectMapper objectMapper,
+            WalletAccountRepository walletAccountRepository,
+            LedgerEntryRepository ledgerEntryRepository,
+            PayoutRepository payoutRepository
+    ) {
+        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository, walletService, objectMapper);
+        this.walletAccountRepository = walletAccountRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
+        this.payoutRepository = payoutRepository;
+    }
+
+    public record MilestoneDef(
+            int trips,
+            BigDecimal reward
+    ) {}
+
     public record IncentiveRuleDef(
             String id,
             String title,
@@ -82,8 +120,23 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             boolean active,
             String description,
             String category,
-            String condition
-    ) {}
+            String condition,
+            Integer targetCount,
+            List<MilestoneDef> milestones
+    ) {
+        public IncentiveRuleDef(
+                String id,
+                String title,
+                BigDecimal value,
+                String unit,
+                boolean active,
+                String description,
+                String category,
+                String condition
+        ) {
+            this(id, title, value, unit, active, description, category, condition, null, null);
+        }
+    }
 
     @Override
     @Transactional
@@ -126,7 +179,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     }
                     case "performanceBonus" -> evaluatePerformanceBonus(partner, rule, periodDate);
                     default -> {
-                        // Custom rules (e.g. customBonus_...) default to per-order surge if active
+                        // Custom rules default to per-order surge if active
                         evaluateCustomRule(partner, rule, assignmentId, orderId, periodDate);
                     }
                 }
@@ -163,8 +216,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             LocalDate periodDate
     ) {
         if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
-        // Delivery assignment distance logic: default standard distance check
-        double distanceKm = 8.0; // Qualified long distance delivery standard simulation/order distance
+        double distanceKm = 8.0;
         if (distanceKm > 5.0) {
             double extraKm = distanceKm - 5.0;
             BigDecimal extraAmount = rule.value().multiply(BigDecimal.valueOf(extraKm)).setScale(2, RoundingMode.HALF_UP);
@@ -184,7 +236,6 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         if ("BAD_WEATHER".equalsIgnoreCase(weatherEnv) || "RAIN".equalsIgnoreCase(weatherEnv)) {
             return true;
         }
-        // Active bad-weather surge condition in active pricing config or assignment
         try {
             DeliveryPricingConfig config = pricingConfigRepository.findById(DEFAULT_CONFIG_ID).orElse(null);
             if (config != null && config.getConfigData() != null) {
@@ -202,9 +253,6 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private void evaluateDailyTarget(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
-
-        int target = parseTargetFromDescription(rule.description(), 15);
         ZonedDateTime startOfDay = today.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfDay = today.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
@@ -215,7 +263,30 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 endOfDay.toInstant()
         );
 
-        if (completedToday >= target) {
+        // Evaluate milestone ladder if configured
+        if (rule.milestones() != null && !rule.milestones().isEmpty()) {
+            for (MilestoneDef milestone : rule.milestones()) {
+                if (completedToday >= milestone.trips() && milestone.reward().compareTo(BigDecimal.ZERO) > 0) {
+                    UUID milestoneRefId = UUID.nameUUIDFromBytes(
+                            (partner.getId() + ":DAILY_TARGET_MILESTONE:" + today + ":" + milestone.trips()).getBytes(StandardCharsets.UTF_8)
+                    );
+                    awardIncentive(
+                            partner,
+                            rule.id() + "_m" + milestone.trips(),
+                            rule.title() + " (" + milestone.trips() + " trips milestone)",
+                            milestone.reward(),
+                            "DAILY_TARGET_MILESTONE",
+                            milestoneRefId,
+                            null,
+                            today
+                    );
+                }
+            }
+        }
+
+        // Evaluate main target
+        int target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
+        if (rule.value().compareTo(BigDecimal.ZERO) > 0 && completedToday >= target) {
             UUID dailyRefId = UUID.nameUUIDFromBytes((partner.getId() + ":DAILY_TARGET:" + today).getBytes(StandardCharsets.UTF_8));
             awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DAILY_TARGET", dailyRefId, null, today);
         }
@@ -224,7 +295,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private void evaluateWeeklyTarget(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
         if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
 
-        int target = parseTargetFromDescription(rule.description(), 80);
+        int target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 80);
         LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate weekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
 
@@ -250,7 +321,6 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         UUID perfRefId = UUID.nameUUIDFromBytes((partner.getId() + ":PERFORMANCE:" + weekStart).getBytes(StandardCharsets.UTF_8));
 
-        // Award performance incentive if not awarded this week
         awardIncentive(partner, rule.id(), rule.title(), rule.value(), "PERFORMANCE", perfRefId, null, today);
     }
 
@@ -378,6 +448,76 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public DeliveryIncentivesEarningsSummaryDto getEarningsSummary(UUID userCredentialId) {
+        DeliveryPartner partner = requirePartner(userCredentialId);
+
+        BigDecimal regularEarnings = BigDecimal.ZERO;
+        BigDecimal incentiveEarnings = BigDecimal.ZERO;
+        BigDecimal availableBalance = BigDecimal.ZERO;
+        BigDecimal paidOutIncentives = BigDecimal.ZERO;
+
+        if (walletAccountRepository != null) {
+            var optAcc = walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partner.getId());
+            if (optAcc.isPresent()) {
+                var acc = optAcc.get();
+                availableBalance = acc.getBalance() != null ? acc.getBalance() : BigDecimal.ZERO;
+
+                if (ledgerEntryRepository != null) {
+                    BigDecimal reg = ledgerEntryRepository.sumDeliveryCreditsByWalletAccountId(acc.getId());
+                    if (reg != null) regularEarnings = reg;
+
+                    BigDecimal inc = ledgerEntryRepository.sumIncentiveCreditsByWalletAccountId(acc.getId());
+                    if (inc != null) incentiveEarnings = inc;
+                }
+
+                if (payoutRepository != null) {
+                    BigDecimal paid = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
+                            acc.getId(),
+                            List.of(PayoutStatus.COMPLETED)
+                    );
+                    if (paid != null) paidOutIncentives = paid;
+                }
+            }
+        }
+
+        BigDecimal earnedIncentives = earningRepository.sumAmountByDeliveryPartnerId(partner.getId());
+        if (earnedIncentives == null || earnedIncentives.compareTo(BigDecimal.ZERO) == 0) {
+            earnedIncentives = incentiveEarnings;
+        }
+
+        // Calculate pending incentives (potential reward of offers currently In Progress today)
+        LocalDate today = LocalDate.now(ZONE_IST);
+        IncentivesProgressResponseDto progress = getIncentivesProgress(userCredentialId, today);
+        BigDecimal pendingIncentives = BigDecimal.ZERO;
+        if (progress != null && progress.offers() != null) {
+            for (var offer : progress.offers()) {
+                if (offer.milestones() != null && !offer.milestones().isEmpty()) {
+                    for (var m : offer.milestones()) {
+                        if ("In Progress".equalsIgnoreCase(m.status())) {
+                            pendingIncentives = pendingIncentives.add(m.rewardAmount() != null ? m.rewardAmount() : BigDecimal.ZERO);
+                        }
+                    }
+                } else if ("In Progress".equalsIgnoreCase(offer.status()) && !offer.isEarned()) {
+                    pendingIncentives = pendingIncentives.add(offer.rewardAmount() != null ? offer.rewardAmount() : BigDecimal.ZERO);
+                }
+            }
+        }
+
+        List<IncentiveEarningHistoryDto> history = getIncentiveEarnings(userCredentialId);
+
+        return new DeliveryIncentivesEarningsSummaryDto(
+                regularEarnings.setScale(2, RoundingMode.HALF_UP),
+                incentiveEarnings.setScale(2, RoundingMode.HALF_UP),
+                earnedIncentives.setScale(2, RoundingMode.HALF_UP),
+                pendingIncentives.setScale(2, RoundingMode.HALF_UP),
+                paidOutIncentives.setScale(2, RoundingMode.HALF_UP),
+                availableBalance.setScale(2, RoundingMode.HALF_UP),
+                history
+        );
+    }
+
     private List<IncentiveOfferProgressDto> buildOfferProgressList(
             DeliveryPartner partner,
             List<IncentiveRuleDef> rules,
@@ -405,7 +545,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
         for (IncentiveRuleDef rule : rules) {
             if (!rule.active()) {
-                continue; // Only active rules appear as offers per spec
+                continue;
             }
 
             int target;
@@ -414,6 +554,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String status;
             Integer remaining;
             String validity;
+            List<IncentiveMilestoneDto> offerMilestones = null;
 
             switch (rule.id()) {
                 case "basePay" -> {
@@ -425,15 +566,34 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     validity = "Per Order Completed";
                 }
                 case "dailyTargetBonus" -> {
-                    target = parseTargetFromDescription(rule.description(), 15);
+                    target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
                     currentProgress = (int) Math.min(tripsToday, target);
                     isEarned = (tripsToday >= target) || earnedMap.containsKey(rule.id());
                     remaining = Math.max(0, target - (int) tripsToday);
                     status = isEarned ? "Completed" : (tripsToday > 0 ? "In Progress" : "Upcoming");
                     validity = "Today (Ends 11:59 PM)";
+
+                    if (rule.milestones() != null && !rule.milestones().isEmpty()) {
+                        offerMilestones = new ArrayList<>();
+                        boolean firstUnearnedSeen = false;
+                        for (MilestoneDef m : rule.milestones()) {
+                            boolean mEarned = (tripsToday >= m.trips()) || earnedMap.containsKey(rule.id() + "_m" + m.trips());
+                            int mRemaining = Math.max(0, m.trips() - (int) tripsToday);
+                            String mStatus;
+                            if (mEarned) {
+                                mStatus = "Completed";
+                            } else if (!firstUnearnedSeen) {
+                                mStatus = "In Progress";
+                                firstUnearnedSeen = true;
+                            } else {
+                                mStatus = "Locked";
+                            }
+                            offerMilestones.add(new IncentiveMilestoneDto(m.trips(), m.reward(), mStatus, mRemaining, mEarned));
+                        }
+                    }
                 }
                 case "weeklyTargetBonus" -> {
-                    target = parseTargetFromDescription(rule.description(), 80);
+                    target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 80);
                     currentProgress = (int) Math.min(tripsThisWeek, target);
                     isEarned = (tripsThisWeek >= target);
                     remaining = Math.max(0, target - (int) tripsThisWeek);
@@ -465,10 +625,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     validity = "Severe Weather Surge";
                 }
                 case "referralBonus" -> {
-                    target = 25;
+                    target = rule.targetCount() != null ? rule.targetCount() : 25;
                     currentProgress = 0;
                     isEarned = earnedMap.containsKey(rule.id());
-                    remaining = 25;
+                    remaining = target;
                     status = isEarned ? "Completed" : "Upcoming";
                     validity = "Per Qualified Referral";
                 }
@@ -503,7 +663,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     remaining,
                     validity,
                     isEarned,
-                    rule.active()
+                    rule.active(),
+                    offerMilestones
             ));
         }
 
@@ -560,8 +721,34 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                                 ? item.get("condition").asText()
                                 : ("rainBonus".equalsIgnoreCase(id) ? "BAD_WEATHER" : "");
 
+                        Integer targetCount = null;
+                        if (item.has("targetCount") && !item.get("targetCount").isNull()) {
+                            targetCount = item.get("targetCount").asInt();
+                        }
+
+                        List<MilestoneDef> milestones = null;
+                        if (item.has("milestones") && item.get("milestones").isArray()) {
+                            milestones = new ArrayList<>();
+                            for (JsonNode mNode : item.get("milestones")) {
+                                if (mNode.has("trips")) {
+                                    int mTrips = mNode.get("trips").asInt();
+                                    BigDecimal mReward = mNode.has("reward")
+                                            ? new BigDecimal(mNode.get("reward").asText("0"))
+                                            : (mNode.has("rewardAmount") ? new BigDecimal(mNode.get("rewardAmount").asText("0")) : BigDecimal.ZERO);
+                                    milestones.add(new MilestoneDef(mTrips, mReward));
+                                }
+                            }
+                        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+                            milestones = List.of(
+                                    new MilestoneDef(6, new BigDecimal("50.00")),
+                                    new MilestoneDef(9, new BigDecimal("75.00")),
+                                    new MilestoneDef(13, new BigDecimal("120.00")),
+                                    new MilestoneDef(18, new BigDecimal("190.00"))
+                            );
+                        }
+
                         if (!id.isBlank()) {
-                            rules.add(new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition));
+                            rules.add(new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones));
                         }
                     }
                 }
@@ -578,14 +765,21 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     private List<IncentiveRuleDef> defaultRules() {
         return List.of(
-                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", ""),
-                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR"),
-                new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day", true, "Bonus awarded upon completing 15 or more orders in a single calendar day.", "Target & Mileage", "DAILY_TARGET"),
-                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET"),
-                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE"),
-                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER"),
-                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL"),
-                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE")
+                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null),
+                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null),
+                new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day", true, "Bonus awarded upon completing daily order targets.", "Target & Mileage", "DAILY_TARGET", 15,
+                        List.of(
+                                new MilestoneDef(6, new BigDecimal("50.00")),
+                                new MilestoneDef(9, new BigDecimal("75.00")),
+                                new MilestoneDef(13, new BigDecimal("120.00")),
+                                new MilestoneDef(18, new BigDecimal("190.00"))
+                        )
+                ),
+                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null),
+                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null),
+                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null),
+                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null),
+                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null)
         );
     }
 

@@ -52,6 +52,9 @@ class DeliveryIncentiveServiceImplTest {
     @Mock private DeliveryPricingConfigRepository pricingConfigRepository;
     @Mock private DeliveryPartnerIncentiveEarningRepository earningRepository;
     @Mock private WalletService walletService;
+    @Mock private com.foodie.wallet.repository.WalletAccountRepository walletAccountRepository;
+    @Mock private com.foodie.wallet.repository.LedgerEntryRepository ledgerEntryRepository;
+    @Mock private com.foodie.wallet.repository.PayoutRepository payoutRepository;
 
     private ObjectMapper objectMapper;
     private DeliveryIncentiveServiceImpl incentiveService;
@@ -69,7 +72,10 @@ class DeliveryIncentiveServiceImplTest {
                 pricingConfigRepository,
                 earningRepository,
                 walletService,
-                objectMapper
+                objectMapper,
+                walletAccountRepository,
+                ledgerEntryRepository,
+                payoutRepository
         );
 
         partnerId = UUID.randomUUID();
@@ -318,5 +324,86 @@ class DeliveryIncentiveServiceImplTest {
 
         IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
         assertThat(progress.offers()).isEmpty();
+    }
+
+    @Test
+    void getIncentivesProgress_calculatesMilestoneLadderCorrectly() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        // 7 trips completed today
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(7L);
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        assertThat(dailyOffer.milestones()).isNotNull();
+        assertThat(dailyOffer.milestones()).hasSize(4);
+
+        // Milestone 1: 6 trips -> completed
+        var m1 = dailyOffer.milestones().get(0);
+        assertThat(m1.trips()).isEqualTo(6);
+        assertThat(m1.rewardAmount()).isEqualByComparingTo("50.00");
+        assertThat(m1.status()).isEqualTo("Completed");
+        assertThat(m1.remaining()).isEqualTo(0);
+        assertThat(m1.isEarned()).isTrue();
+
+        // Milestone 2: 9 trips -> in progress (2 remaining)
+        var m2 = dailyOffer.milestones().get(1);
+        assertThat(m2.trips()).isEqualTo(9);
+        assertThat(m2.rewardAmount()).isEqualByComparingTo("75.00");
+        assertThat(m2.status()).isEqualTo("In Progress");
+        assertThat(m2.remaining()).isEqualTo(2);
+        assertThat(m2.isEarned()).isFalse();
+
+        // Milestone 3: 13 trips -> locked (6 remaining)
+        var m3 = dailyOffer.milestones().get(2);
+        assertThat(m3.trips()).isEqualTo(13);
+        assertThat(m3.rewardAmount()).isEqualByComparingTo("120.00");
+        assertThat(m3.status()).isEqualTo("Locked");
+        assertThat(m3.remaining()).isEqualTo(6);
+
+        // Milestone 4: 18 trips -> locked (11 remaining)
+        var m4 = dailyOffer.milestones().get(3);
+        assertThat(m4.trips()).isEqualTo(18);
+        assertThat(m4.rewardAmount()).isEqualByComparingTo("190.00");
+        assertThat(m4.status()).isEqualTo("Locked");
+        assertThat(m4.remaining()).isEqualTo(11);
+    }
+
+    @Test
+    void getEarningsSummary_returnsSeparatedRegularAndIncentiveEarnings() {
+        UUID walletId = UUID.randomUUID();
+        var walletAccount = com.foodie.wallet.entity.WalletAccount.open(OwnerType.DELIVERY_PARTNER, partnerId);
+        try {
+            var idField = com.foodie.common.entity.BaseEntity.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(walletAccount, walletId);
+        } catch (Exception ignored) {}
+        walletAccount.applyCredit(new BigDecimal("1250.00"));
+
+        when(walletAccountRepository.findByOwnerTypeAndOwnerId(OwnerType.DELIVERY_PARTNER, partnerId))
+                .thenReturn(Optional.of(walletAccount));
+        when(ledgerEntryRepository.sumDeliveryCreditsByWalletAccountId(walletId))
+                .thenReturn(new BigDecimal("1000.00"));
+        when(ledgerEntryRepository.sumIncentiveCreditsByWalletAccountId(walletId))
+                .thenReturn(new BigDecimal("250.00"));
+        when(earningRepository.sumAmountByDeliveryPartnerId(partnerId))
+                .thenReturn(new BigDecimal("250.00"));
+        when(payoutRepository.sumAmountByWalletAccountIdAndStatusIn(eq(walletId), any()))
+                .thenReturn(new BigDecimal("500.00"));
+
+        var summary = incentiveService.getEarningsSummary(userCredentialId);
+
+        assertThat(summary.regularDeliveryEarnings()).isEqualByComparingTo("1000.00");
+        assertThat(summary.incentiveEarnings()).isEqualByComparingTo("250.00");
+        assertThat(summary.earnedIncentives()).isEqualByComparingTo("250.00");
+        assertThat(summary.paidOutIncentives()).isEqualByComparingTo("500.00");
+        assertThat(summary.availableBalance()).isEqualByComparingTo("1250.00");
     }
 }
