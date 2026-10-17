@@ -144,6 +144,16 @@ public class OrderController {
                 orderService.getById(id, principal.userId(), principal.userType())));
     }
 
+    @GetMapping("/{id}/invoice")
+    @PreAuthorize("hasAnyRole('RESTAURANT','CUSTOMER','ADMIN')")
+    @Operation(summary = "Get order invoice details (dynamic, role-scoped)")
+    public ResponseEntity<ApiResponse<com.foodie.order.dto.response.OrderInvoiceResponseDto>> getOrderInvoice(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                orderService.getOrderInvoice(id, principal.userId(), principal.userType())));
+    }
+
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('CUSTOMER','RESTAURANT','ADMIN')")
     @Operation(summary = "Transition order status (state-machine enforced)")

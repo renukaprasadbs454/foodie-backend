@@ -362,6 +362,118 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
+    public com.foodie.order.dto.response.OrderInvoiceResponseDto getOrderInvoice(UUID orderId, UUID userCredentialId, UserType userType) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+        assertVisible(order, userCredentialId, userType);
+
+        String restaurantName = restaurantSummaryProvider.findByRestaurantId(order.getRestaurantId())
+                .map(RestaurantSummaryProvider.RestaurantSummary::name)
+                .filter(name -> !name.isBlank())
+                .orElse("Restaurant");
+
+        final String[] nameHolder = new String[1];
+        final String[] phoneHolder = new String[1];
+
+        // Try reading recipient info from Address
+        if (order.getAddressId() != null && jdbcTemplate != null) {
+            try {
+                jdbcTemplate.query(
+                        "SELECT recipient_name, recipient_phone FROM \"address\" WHERE id = ?",
+                        rs -> {
+                            if (rs.next()) {
+                                String rName = rs.getString("recipient_name");
+                                String rPhone = rs.getString("recipient_phone");
+                                if (rName != null && !rName.isBlank()) nameHolder[0] = rName.trim();
+                                if (rPhone != null && !rPhone.isBlank()) phoneHolder[0] = rPhone.trim();
+                            }
+                            return null;
+                        },
+                        order.getAddressId()
+                );
+            } catch (Exception ex) {
+                log.warn("Notice: address lookup for invoice: {}", ex.getMessage());
+            }
+        }
+
+        // Fallback customer name from customer summary provider
+        if ((nameHolder[0] == null || nameHolder[0].isBlank()) && order.getCustomerId() != null) {
+            nameHolder[0] = customerSummaryProvider.findByCustomerId(order.getCustomerId())
+                    .map(CustomerSummaryProvider.CustomerSummary::fullName)
+                    .filter(name -> !name.isBlank())
+                    .orElse(null);
+        }
+
+        // Fallback customer name from customer table directly
+        if ((nameHolder[0] == null || nameHolder[0].isBlank()) && order.getCustomerId() != null && jdbcTemplate != null) {
+            try {
+                nameHolder[0] = jdbcTemplate.queryForObject(
+                        "SELECT full_name FROM \"customer\" WHERE id = ?",
+                        String.class,
+                        order.getCustomerId()
+                );
+            } catch (Exception ignored) {}
+        }
+        if (nameHolder[0] == null || nameHolder[0].isBlank()) {
+            nameHolder[0] = "Customer";
+        }
+
+        // Fallback customer phone from user_credential table
+        if ((phoneHolder[0] == null || phoneHolder[0].isBlank()) && order.getCustomerId() != null && jdbcTemplate != null) {
+            try {
+                phoneHolder[0] = jdbcTemplate.queryForObject(
+                        "SELECT uc.phone_number FROM \"user_credential\" uc JOIN \"customer\" c ON c.user_credential_id = uc.id WHERE c.id = ?",
+                        String.class,
+                        order.getCustomerId()
+                );
+            } catch (Exception ignored) {}
+        }
+        if (phoneHolder[0] == null || phoneHolder[0].isBlank()) {
+            phoneHolder[0] = "+91 98000 00000";
+        }
+
+        // Items breakdown
+        List<OrderItem> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+        List<com.foodie.order.dto.response.OrderInvoiceResponseDto.InvoiceItemDto> itemDtos = new java.util.ArrayList<>();
+        for (OrderItem item : items) {
+            String itemName = menuItemPriceProvider.getPriceSnapshot(item.getMenuItemId(), item.getVariantId())
+                    .map(MenuItemPriceProvider.MenuItemPriceSnapshot::itemName)
+                    .filter(name -> !name.isBlank())
+                    .orElse("Menu item");
+            BigDecimal lineTotal = item.getLineTotal() != null
+                    ? item.getLineTotal()
+                    : (item.getUnitPrice() != null ? item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())) : BigDecimal.ZERO);
+
+            itemDtos.add(new com.foodie.order.dto.response.OrderInvoiceResponseDto.InvoiceItemDto(
+                    item.getMenuItemId(),
+                    itemName,
+                    item.getQuantity(),
+                    item.getUnitPrice(),
+                    lineTotal
+            ));
+        }
+
+        java.time.Instant placedAt = order.getPlacedAt() != null ? order.getPlacedAt() : order.getCreatedAt();
+        java.time.ZonedDateTime zdt = (placedAt != null ? placedAt : java.time.Instant.now()).atZone(java.time.ZoneId.of("Asia/Kolkata"));
+        String orderDate = zdt.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String orderTime = zdt.format(java.time.format.DateTimeFormatter.ofPattern("hh:mm a"));
+
+        return new com.foodie.order.dto.response.OrderInvoiceResponseDto(
+                order.getId(),
+                order.getOrderNumber(),
+                restaurantName,
+                nameHolder[0],
+                phoneHolder[0],
+                orderDate,
+                orderTime,
+                placedAt,
+                itemDtos,
+                order.getTotalAmount()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public OrderResponseDto getActiveOrderForCustomer(UUID userCredentialId) {
         UUID customerId = resolveCustomerId(userCredentialId);
         List<OrderStatus> activeStatuses = List.of(

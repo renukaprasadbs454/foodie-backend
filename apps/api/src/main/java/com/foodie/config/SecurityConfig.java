@@ -62,7 +62,11 @@ public class SecurityConfig {
                                                                 "/api/v1/payouts/webhook/**",
                                                                 "/api/v1/storage/**",
                                                                 "/api/v1/debug/**",
-                                                                "/api/v1/restaurants/cleanup-dummy")
+                                                                "/api/v1/restaurants/cleanup-dummy",
+                                                                "/api/v1/admin/shifts",
+                                                                "/api/v1/admin/shifts/**",
+                                                                "/api/v1/delivery/shifts",
+                                                                "/api/v1/delivery/shifts/**")
                                                 .permitAll()
                                                 .requestMatchers(
                                                                 "/api/v1/admin/support-tickets",
