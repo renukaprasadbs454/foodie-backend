@@ -107,36 +107,13 @@ public class AuthController {
             }
         }
 
-        // Map canonical zones + any active created zones
+        // Map canonical zones + any active created zones (do NOT resurrect deleted zones)
         List<LocationZone> activeZones = new ArrayList<>();
-        boolean hasBangalore = false;
-        boolean hasTumkur = false;
-
         for (LocationZone z : zones) {
             if (z.getId() == null) continue;
-            String zIdLower = z.getId().toLowerCase();
-            if ("dz-bangalore".equals(zIdLower)) hasBangalore = true;
-            if ("dz-tumkur".equals(zIdLower)) hasTumkur = true;
-
-            if ("ACTIVE".equalsIgnoreCase(z.getStatus()) || "dz-bangalore".equals(zIdLower) || "dz-tumkur".equals(zIdLower)) {
+            if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
                 activeZones.add(z);
             }
-        }
-
-        if (!hasBangalore) {
-            LocationZone bgl = new LocationZone();
-            bgl.setId("dz-bangalore");
-            bgl.setZoneName("Bangalore Zone");
-            bgl.setStatus("ACTIVE");
-            activeZones.add(bgl);
-        }
-
-        if (!hasTumkur) {
-            LocationZone tmk = new LocationZone();
-            tmk.setId("dz-tumkur");
-            tmk.setZoneName("Tumkur Zone");
-            tmk.setStatus("ACTIVE");
-            activeZones.add(tmk);
         }
 
         // Sort zones: Bangalore first, then Tumkur, then newly created alphabetically
