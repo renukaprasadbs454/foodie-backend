@@ -65,6 +65,24 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "Compliance Auditor"
             );
 
+            String bangaloreZoneId = "dz-bangalore";
+            String tumkurZoneId = "dz-tumkur";
+            try {
+                java.util.List<String> bZones = jdbcTemplate.query(
+                        "SELECT \"id\" FROM \"location_zone\" WHERE LOWER(\"id\") LIKE '%bangalore%' OR LOWER(\"id\") LIKE '%bengaluru%' OR LOWER(\"zone_name\") LIKE '%bangalore%' OR LOWER(\"zone_name\") LIKE '%bengaluru%' LIMIT 1",
+                        (rs, rowNum) -> rs.getString(1));
+                if (!bZones.isEmpty()) {
+                    bangaloreZoneId = bZones.get(0);
+                }
+                java.util.List<String> tZones = jdbcTemplate.query(
+                        "SELECT \"id\" FROM \"location_zone\" WHERE LOWER(\"id\") LIKE '%tumkur%' OR LOWER(\"id\") LIKE '%tumakuru%' OR LOWER(\"zone_name\") LIKE '%tumkur%' OR LOWER(\"zone_name\") LIKE '%tumakuru%' LIMIT 1",
+                        (rs, rowNum) -> rs.getString(1));
+                if (!tZones.isEmpty()) {
+                    tumkurZoneId = tZones.get(0);
+                }
+            } catch (Exception ignored) {
+            }
+
             // Seed Operations Admin / Bangalore Zone Admin
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333006",
@@ -73,7 +91,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444006",
                     "11111111-1111-1111-1111-111111111006",
                     "Operations Admin",
-                    "dz-bangalore"
+                    bangaloreZoneId
             );
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333016",
@@ -82,7 +100,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444016",
                     "11111111-1111-1111-1111-111111111006",
                     "Operations Admin",
-                    "dz-bangalore"
+                    bangaloreZoneId
             );
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333026",
@@ -91,7 +109,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444026",
                     "11111111-1111-1111-1111-111111111006",
                     "Bangalore Zone Manager",
-                    "dz-bangalore"
+                    bangaloreZoneId
             );
 
             // Seed Finance Admin / Tumkur Zone Admin
@@ -102,7 +120,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444005",
                     "11111111-1111-1111-1111-111111111005",
                     "Finance Admin",
-                    "dz-tumkur"
+                    tumkurZoneId
             );
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333015",
@@ -111,7 +129,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444015",
                     "11111111-1111-1111-1111-111111111005",
                     "Finance Admin",
-                    "dz-tumkur"
+                    tumkurZoneId
             );
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333025",
@@ -120,7 +138,7 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "44444444-4444-4444-4444-444444444025",
                     "11111111-1111-1111-1111-111111111005",
                     "Tumkur Zone Manager",
-                    "dz-tumkur"
+                    tumkurZoneId
             );
 
             // Seed Restaurant Manager

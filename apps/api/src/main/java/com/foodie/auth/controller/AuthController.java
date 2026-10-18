@@ -135,9 +135,10 @@ public class AuthController {
                     ? assignedUser.getRole().getName().name()
                     : "OPS";
             String email = null;
-            if ("dz-bangalore".equalsIgnoreCase(zId)) {
+            String checkStr = ((zId != null ? zId : "") + " " + (zName != null ? zName : "")).toLowerCase();
+            if (checkStr.contains("bangalore") || checkStr.contains("bengaluru")) {
                 email = "ops@foodie.local";
-            } else if ("dz-tumkur".equalsIgnoreCase(zId)) {
+            } else if (checkStr.contains("tumkur") || checkStr.contains("tumakuru")) {
                 email = "finance@foodie.local";
             }
 

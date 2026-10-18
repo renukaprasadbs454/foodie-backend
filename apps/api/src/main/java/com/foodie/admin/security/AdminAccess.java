@@ -64,6 +64,16 @@ public class AdminAccess {
                 admin.getRole().getId(), resource, action);
     }
 
+    public static boolean areZonesEquivalent(String zoneA, String zoneB) {
+        if (zoneA == null || zoneB == null) return false;
+        String a = zoneA.trim().toLowerCase();
+        String b = zoneB.trim().toLowerCase();
+        if (a.equals(b)) return true;
+        if ((a.contains("bangalore") || a.contains("bengaluru")) && (b.contains("bangalore") || b.contains("bengaluru"))) return true;
+        if ((a.contains("tumkur") || a.contains("tumakuru")) && (b.contains("tumkur") || b.contains("tumakuru"))) return true;
+        return false;
+    }
+
     public boolean canAccessZone(Authentication authentication, String zoneId) {
         AdminUser admin = requireAdmin(authentication);
         if (admin.getRole().getName() == AdminRoleName.SUPER_ADMIN) {
@@ -75,7 +85,7 @@ public class AdminAccess {
         if (zoneId == null || zoneId.isBlank()) {
             return false;
         }
-        return admin.getAssignedZoneId().equalsIgnoreCase(zoneId.trim());
+        return areZonesEquivalent(admin.getAssignedZoneId(), zoneId.trim());
     }
 
     public String resolveAuthorizedZone(Authentication authentication, String requestedZoneId) {
@@ -89,9 +99,10 @@ public class AdminAccess {
         }
         if (admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
             if (requestedZoneId != null && !requestedZoneId.isBlank()) {
-                if (requestedZoneId.equalsIgnoreCase("ALL") || !admin.getAssignedZoneId().equalsIgnoreCase(requestedZoneId.trim())) {
+                if (requestedZoneId.equalsIgnoreCase("ALL") || !areZonesEquivalent(admin.getAssignedZoneId(), requestedZoneId.trim())) {
                     throw new ForbiddenException("Unauthorized cross-zone access attempt: Your account is restricted to zone '" + admin.getAssignedZoneId() + "'.");
                 }
+                return requestedZoneId.trim();
             }
             return admin.getAssignedZoneId();
         }
