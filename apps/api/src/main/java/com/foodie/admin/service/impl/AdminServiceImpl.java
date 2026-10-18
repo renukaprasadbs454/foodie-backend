@@ -67,14 +67,25 @@ public class AdminServiceImpl implements AdminService {
         UUID credentialId = (cmd.password() != null && !cmd.password().isBlank())
                 ? adminCredentialPort.ensureAdminCredentialWithPassword(cmd.phoneNumber(), cmd.email(), cmd.password())
                 : adminCredentialPort.ensureAdminCredential(cmd.phoneNumber(), cmd.email());
+        AdminUser created;
         if (adminUserRepository.existsByUserCredentialId(credentialId)) {
-            throw new ConflictException(ErrorCode.CONFLICT, "Admin profile already exists for this credential.");
-        }
-        AdminUser created = AdminUser.create(credentialId, role, cmd.fullName().trim(), cmd.assignedZoneId());
-        try {
+            created = adminUserRepository.findByUserCredentialId(credentialId).orElseThrow();
+            created.setRole(role);
+            created.setFullName(cmd.fullName().trim());
+            created.setAssignedZoneId(cmd.assignedZoneId());
             created = adminUserRepository.save(created);
-        } catch (DataIntegrityViolationException ex) {
-            throw new ConflictException(ErrorCode.CONFLICT, "Admin profile already exists for this credential.");
+        } else {
+            created = AdminUser.create(credentialId, role, cmd.fullName().trim(), cmd.assignedZoneId());
+            try {
+                created = adminUserRepository.save(created);
+            } catch (DataIntegrityViolationException ex) {
+                created = adminUserRepository.findByUserCredentialId(credentialId)
+                        .orElseThrow(() -> new ConflictException(ErrorCode.CONFLICT, "Admin profile already exists for this credential."));
+                created.setRole(role);
+                created.setFullName(cmd.fullName().trim());
+                created.setAssignedZoneId(cmd.assignedZoneId());
+                created = adminUserRepository.save(created);
+            }
         }
         recordAudit(
                 creatorAdmin.getId(),
@@ -130,7 +141,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional(readOnly = true)
     public AdminUserView requireAdminProfile(UUID userCredentialId) {
         return adminUserRepository.findByUserCredentialId(userCredentialId)
-                .or(() -> adminUserRepository.findAll().stream().findFirst())
+                .or(() -> adminUserRepository.findById(userCredentialId))
                 .map(this::toView)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Admin profile not found for this credential."));

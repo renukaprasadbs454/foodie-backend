@@ -41,4 +41,15 @@ public class AdminIdentityQueryPortImpl implements AdminIdentityQueryPort {
                 .map(AdminUser::getAssignedZoneId)
                 .filter(z -> z != null && !z.isBlank());
     }
+
+    @Override
+    public Optional<String> findFullNameByUserCredentialId(UUID userCredentialId) {
+        if (userCredentialId == null) {
+            return Optional.empty();
+        }
+        return adminUserRepository.findByUserCredentialId(userCredentialId)
+                .map(AdminUser::getFullName)
+                .or(() -> adminUserRepository.findById(userCredentialId).map(AdminUser::getFullName))
+                .filter(name -> name != null && !name.isBlank());
+    }
 }

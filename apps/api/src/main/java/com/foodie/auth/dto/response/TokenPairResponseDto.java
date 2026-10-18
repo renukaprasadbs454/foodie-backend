@@ -18,7 +18,8 @@ public record TokenPairResponseDto(
          */
         String role,
         String assignedZoneId,
-        String assignedZoneName
+        String assignedZoneName,
+        String fullName
 ) {
     public TokenPairResponseDto(
             String accessToken,
@@ -28,6 +29,19 @@ public record TokenPairResponseDto(
             boolean isNewUser,
             UUID userId,
             String role) {
-        this(accessToken, refreshToken, expiresIn, userType, isNewUser, userId, role, null, null);
+        this(accessToken, refreshToken, expiresIn, userType, isNewUser, userId, role, null, null, null);
+    }
+
+    public TokenPairResponseDto(
+            String accessToken,
+            String refreshToken,
+            long expiresIn,
+            UserType userType,
+            boolean isNewUser,
+            UUID userId,
+            String role,
+            String assignedZoneId,
+            String assignedZoneName) {
+        this(accessToken, refreshToken, expiresIn, userType, isNewUser, userId, role, assignedZoneId, assignedZoneName, null);
     }
 }

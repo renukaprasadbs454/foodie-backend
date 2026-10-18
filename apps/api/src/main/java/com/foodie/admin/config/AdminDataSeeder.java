@@ -65,24 +65,6 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "Compliance Auditor"
             );
 
-            // Seed Finance Admin
-            seedAdminUser(
-                    "33333333-3333-3333-3333-333333333005",
-                    "+919999999995",
-                    "finance@foodie.local",
-                    "44444444-4444-4444-4444-444444444005",
-                    "11111111-1111-1111-1111-111111111005",
-                    "Finance Admin"
-            );
-            seedAdminUser(
-                    "33333333-3333-3333-3333-333333333015",
-                    "+919999999985",
-                    "financeadmin@foodie.local",
-                    "44444444-4444-4444-4444-444444444015",
-                    "11111111-1111-1111-1111-111111111005",
-                    "Finance Admin"
-            );
-
             // Seed Operations Admin / Bangalore Zone Admin
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333006",
@@ -201,34 +183,37 @@ public class AdminDataSeeder implements ApplicationRunner {
         UUID roleId = UUID.fromString(roleIdStr);
 
         try {
-            Integer credCount = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM \"user_credential\" WHERE \"email\" = ? AND \"user_type\" = 'ADMIN'",
-                    Integer.class, email);
+            java.util.List<UUID> existingCreds = jdbcTemplate.query(
+                    "SELECT \"id\" FROM \"user_credential\" WHERE LOWER(\"email\") = LOWER(?) AND \"user_type\" = 'ADMIN'",
+                    (rs, rowNum) -> rs.getObject(1, UUID.class), email);
 
-            if (credCount == null || credCount == 0) {
+            UUID actualCredId;
+            if (existingCreds.isEmpty()) {
+                actualCredId = credId;
                 jdbcTemplate.update(
                         "INSERT INTO \"user_credential\" (\"id\", \"phone_number\", \"email\", \"password_hash\", \"user_type\", \"active\", \"created_at\", \"updated_at\") " +
                                 "VALUES (?, ?, ?, ?, 'ADMIN', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                        credId, phone, email, BCRYPT_PASSWORD);
+                        actualCredId, phone, email, BCRYPT_PASSWORD);
             } else {
+                actualCredId = existingCreds.get(0);
                 jdbcTemplate.update(
-                        "UPDATE \"user_credential\" SET \"password_hash\" = ?, \"active\" = TRUE, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"email\" = ? AND \"user_type\" = 'ADMIN'",
-                        BCRYPT_PASSWORD, email);
+                        "UPDATE \"user_credential\" SET \"password_hash\" = ?, \"phone_number\" = ?, \"active\" = TRUE, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"id\" = ?",
+                        BCRYPT_PASSWORD, phone, actualCredId);
             }
 
             Integer adminCount = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM \"admin_user\" WHERE \"user_credential_id\" = ?",
-                    Integer.class, credId);
+                    Integer.class, actualCredId);
 
             if (adminCount == null || adminCount == 0) {
                 jdbcTemplate.update(
                         "INSERT INTO \"admin_user\" (\"id\", \"user_credential_id\", \"role_id\", \"full_name\", \"assigned_zone_id\", \"created_at\", \"updated_at\") " +
                                 "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                        adminId, credId, roleId, fullName, assignedZoneId);
+                        adminId, actualCredId, roleId, fullName, assignedZoneId);
             } else {
                 jdbcTemplate.update(
                         "UPDATE \"admin_user\" SET \"role_id\" = ?, \"full_name\" = ?, \"assigned_zone_id\" = ?, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"user_credential_id\" = ?",
-                        roleId, fullName, assignedZoneId, credId);
+                        roleId, fullName, assignedZoneId, actualCredId);
             }
         } catch (Exception e) {
             log.warn("Failed to seed admin user {}: {}", email, e.getMessage());

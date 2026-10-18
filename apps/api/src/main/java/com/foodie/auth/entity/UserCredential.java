@@ -66,6 +66,10 @@ public class UserCredential extends BaseEntity {
         this.passwordHash = passwordHash;
     }
 
+    public void updatePhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
     /** Provisioned by Admin module via {@code AdminCredentialPort} — never OTP self-signup. */
     public static UserCredential adminProvision(String phoneNumber, String email) {
         UserCredential credential = new UserCredential();

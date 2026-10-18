@@ -65,6 +65,14 @@ public class AdminUser extends BaseEntity {
         return assignedZoneId;
     }
 
+    public void setRole(Role role) {
+        this.role = role;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
     public void setAssignedZoneId(String assignedZoneId) {
         this.assignedZoneId = assignedZoneId;
     }

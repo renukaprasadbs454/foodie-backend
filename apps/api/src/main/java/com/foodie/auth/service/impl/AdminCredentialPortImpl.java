@@ -35,16 +35,24 @@ public class AdminCredentialPortImpl implements AdminCredentialPort {
     @Override
     @Transactional
     public UUID ensureAdminCredentialWithPassword(String phoneNumber, String email, String password) {
-        var existingForPhone = userCredentialRepository.findAllByPhoneNumber(phoneNumber);
+        var existingForPhone = (phoneNumber != null && !phoneNumber.isBlank())
+                ? userCredentialRepository.findAllByPhoneNumber(phoneNumber)
+                : java.util.List.<UserCredential>of();
         Optional<UserCredential> existingAdmin = existingForPhone.stream()
                 .filter(c -> c.getUserType() == UserType.ADMIN)
                 .findFirst();
+        if (existingAdmin.isEmpty() && email != null && !email.isBlank()) {
+            existingAdmin = userCredentialRepository.findByEmailIgnoreCaseAndUserType(email.trim(), UserType.ADMIN);
+        }
         if (existingAdmin.isPresent()) {
             UserCredential cred = existingAdmin.get();
             if (password != null && !password.isBlank()) {
                 cred.updatePasswordHash(passwordEncoder.encode(password));
-                userCredentialRepository.save(cred);
             }
+            if (phoneNumber != null && !phoneNumber.isBlank()) {
+                cred.updatePhoneNumber(phoneNumber);
+            }
+            userCredentialRepository.save(cred);
             return cred.getId();
         }
         boolean usedByNonAdmin = existingForPhone.stream()

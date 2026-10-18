@@ -19,4 +19,9 @@ public interface AdminIdentityQueryPort {
     default Optional<String> findAssignedZoneIdByUserCredentialId(UUID userCredentialId) {
         return Optional.empty();
     }
+
+    /** Resolves full_name if configured on admin_user. */
+    default Optional<String> findFullNameByUserCredentialId(UUID userCredentialId) {
+        return Optional.empty();
+    }
 }

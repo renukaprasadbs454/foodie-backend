@@ -104,7 +104,7 @@ public class AdminAccess {
             throw new ForbiddenException("Admin access required.");
         }
         return adminUserRepository.findByUserCredentialId(principal.userId())
-                .or(() -> adminUserRepository.findAll().stream().findFirst())
+                .or(() -> adminUserRepository.findById(principal.userId()))
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Admin profile not found for this credential."));
     }
