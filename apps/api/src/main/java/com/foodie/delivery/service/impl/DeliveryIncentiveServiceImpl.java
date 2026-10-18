@@ -8,6 +8,7 @@ import com.foodie.common.enums.OwnerType;
 import com.foodie.common.enums.PayoutStatus;
 import com.foodie.common.exception.ResourceNotFoundException;
 import com.foodie.delivery.dto.response.DeliveryIncentivesEarningsSummaryDto;
+import com.foodie.delivery.dto.response.IncentiveConditionProgressDto;
 import com.foodie.delivery.dto.response.IncentiveEarningHistoryDto;
 import com.foodie.delivery.dto.response.IncentiveMilestoneDto;
 import com.foodie.delivery.dto.response.IncentiveOfferProgressDto;
@@ -16,10 +17,14 @@ import com.foodie.delivery.entity.DeliveryAssignment;
 import com.foodie.delivery.entity.DeliveryPartner;
 import com.foodie.delivery.entity.DeliveryPartnerIncentiveEarning;
 import com.foodie.delivery.entity.DeliveryPricingConfig;
+import com.foodie.delivery.entity.DeliveryOnlineSession;
+import com.foodie.delivery.entity.DeliveryShiftBooking;
 import com.foodie.delivery.repository.DeliveryAssignmentRepository;
+import com.foodie.delivery.repository.DeliveryOnlineSessionRepository;
 import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.repository.DeliveryPricingConfigRepository;
+import com.foodie.delivery.repository.DeliveryShiftBookingRepository;
 import com.foodie.delivery.service.DeliveryIncentiveService;
 import com.foodie.wallet.repository.LedgerEntryRepository;
 import com.foodie.wallet.repository.PayoutRepository;
@@ -73,6 +78,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     @Autowired(required = false)
     private PayoutRepository payoutRepository;
 
+    @Autowired(required = false)
+    private DeliveryShiftBookingRepository shiftBookingRepository;
+
+    @Autowired(required = false)
+    private DeliveryOnlineSessionRepository onlineSessionRepository;
+
     @Autowired
     public DeliveryIncentiveServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -107,9 +118,47 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         this.payoutRepository = payoutRepository;
     }
 
+    public DeliveryIncentiveServiceImpl(
+            DeliveryPartnerRepository deliveryPartnerRepository,
+            DeliveryAssignmentRepository deliveryAssignmentRepository,
+            DeliveryPricingConfigRepository pricingConfigRepository,
+            DeliveryPartnerIncentiveEarningRepository earningRepository,
+            WalletService walletService,
+            ObjectMapper objectMapper,
+            WalletAccountRepository walletAccountRepository,
+            LedgerEntryRepository ledgerEntryRepository,
+            PayoutRepository payoutRepository,
+            DeliveryShiftBookingRepository shiftBookingRepository,
+            DeliveryOnlineSessionRepository onlineSessionRepository
+    ) {
+        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository, walletService, objectMapper, walletAccountRepository, ledgerEntryRepository, payoutRepository);
+        this.shiftBookingRepository = shiftBookingRepository;
+        this.onlineSessionRepository = onlineSessionRepository;
+    }
+
+    public void setShiftBookingRepository(DeliveryShiftBookingRepository shiftBookingRepository) {
+        this.shiftBookingRepository = shiftBookingRepository;
+    }
+
+    public void setOnlineSessionRepository(DeliveryOnlineSessionRepository onlineSessionRepository) {
+        this.onlineSessionRepository = onlineSessionRepository;
+    }
+
     public record MilestoneDef(
             int trips,
             BigDecimal reward
+    ) {}
+
+    public record ConditionDef(
+            String id,
+            String type,
+            String title,
+            String value,
+            String subtext,
+            String timeSlot,
+            String duration,
+            Integer minDurationMinutes,
+            Integer maxRejections
     ) {}
 
     public record IncentiveRuleDef(
@@ -122,7 +171,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String category,
             String condition,
             Integer targetCount,
-            List<MilestoneDef> milestones
+            List<MilestoneDef> milestones,
+            List<ConditionDef> conditions
     ) {
         public IncentiveRuleDef(
                 String id,
@@ -134,7 +184,22 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String category,
                 String condition
         ) {
-            this(id, title, value, unit, active, description, category, condition, null, null);
+            this(id, title, value, unit, active, description, category, condition, null, null, null);
+        }
+
+        public IncentiveRuleDef(
+                String id,
+                String title,
+                BigDecimal value,
+                String unit,
+                boolean active,
+                String description,
+                String category,
+                String condition,
+                Integer targetCount,
+                List<MilestoneDef> milestones
+        ) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null);
         }
     }
 
@@ -255,6 +320,43 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private void evaluateDailyTarget(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
         ZonedDateTime startOfDay = today.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfDay = today.atTime(LocalTime.MAX).atZone(ZONE_IST);
+
+        // Verify mandatory login slot condition if configured and a shift is booked
+        if (rule.conditions() != null && shiftBookingRepository != null && onlineSessionRepository != null) {
+            boolean hasLoginSlot = rule.conditions().stream().anyMatch(c -> "LOGIN_SLOT".equalsIgnoreCase(c.type()));
+            var bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+            boolean hasBookedShift = bookings != null && bookings.stream().anyMatch(b -> "BOOKED".equalsIgnoreCase(b.getStatus()));
+            if (hasLoginSlot && hasBookedShift) {
+                List<IncentiveConditionProgressDto> conditions = evaluateConditionsForPartner(partner, rule, today);
+                boolean slotSatisfied = conditions != null && conditions.stream()
+                        .filter(c -> "LOGIN_SLOT".equalsIgnoreCase(c.type()))
+                        .allMatch(c -> "SATISFIED".equalsIgnoreCase(c.status()) || c.progressPercentage() >= 100.0);
+                if (!slotSatisfied) {
+                    log.info("Partner {} daily target reward pending: mandatory login slot condition not fulfilled", partner.getId());
+                    return;
+                }
+            }
+        }
+
+        // Verify offer conditions eligibility (e.g. max order rejections)
+        int maxRejections = 1;
+        if (rule.conditions() != null) {
+            for (ConditionDef c : rule.conditions()) {
+                if ("ORDER_REJECTION".equalsIgnoreCase(c.type()) && c.maxRejections() != null) {
+                    maxRejections = c.maxRejections();
+                }
+            }
+        }
+        long rejectedToday = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+                partner.getId(),
+                DeliveryAssignmentStatus.REJECTED,
+                startOfDay.toInstant(),
+                endOfDay.toInstant()
+        );
+        if (rejectedToday > maxRejections) {
+            log.info("Partner {} daily target reward ineligible: rejected {} orders (max allowed: {})", partner.getId(), rejectedToday, maxRejections);
+            return;
+        }
 
         long completedToday = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
                 partner.getId(),
@@ -556,6 +658,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String validity;
             List<IncentiveMilestoneDto> offerMilestones = null;
 
+            List<IncentiveConditionProgressDto> offerConditions = null;
+
             switch (rule.id()) {
                 case "basePay" -> {
                     target = 1;
@@ -573,15 +677,20 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     status = isEarned ? "Completed" : (tripsToday > 0 ? "In Progress" : "Upcoming");
                     validity = "Today (Ends 11:59 PM)";
 
+                    offerConditions = evaluateConditionsForPartner(partner, rule, date);
+                    boolean conditionsFailed = offerConditions != null && offerConditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
+
                     if (rule.milestones() != null && !rule.milestones().isEmpty()) {
                         offerMilestones = new ArrayList<>();
                         boolean firstUnearnedSeen = false;
                         for (MilestoneDef m : rule.milestones()) {
-                            boolean mEarned = (tripsToday >= m.trips()) || earnedMap.containsKey(rule.id() + "_m" + m.trips());
+                            boolean mEarned = !conditionsFailed && ((tripsToday >= m.trips()) || earnedMap.containsKey(rule.id() + "_m" + m.trips()));
                             int mRemaining = Math.max(0, m.trips() - (int) tripsToday);
                             String mStatus;
                             if (mEarned) {
                                 mStatus = "Completed";
+                            } else if (conditionsFailed) {
+                                mStatus = "Locked";
                             } else if (!firstUnearnedSeen) {
                                 mStatus = "In Progress";
                                 firstUnearnedSeen = true;
@@ -664,11 +773,299 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     validity,
                     isEarned,
                     rule.active(),
-                    offerMilestones
+                    offerMilestones,
+                    offerConditions
             ));
         }
 
         return list;
+    }
+
+    private List<IncentiveConditionProgressDto> evaluateConditionsForPartner(
+            DeliveryPartner partner,
+            IncentiveRuleDef rule,
+            LocalDate date
+    ) {
+        List<IncentiveConditionProgressDto> result = new ArrayList<>();
+        List<ConditionDef> conditionDefs = rule.conditions();
+        if (conditionDefs == null || conditionDefs.isEmpty()) {
+            conditionDefs = List.of(
+                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
+            );
+        }
+
+        LocalDate today = LocalDate.now(ZONE_IST);
+        ZonedDateTime startOfDay = date.atStartOfDay(ZONE_IST);
+        ZonedDateTime endOfDay = date.atTime(LocalTime.MAX).atZone(ZONE_IST);
+
+        // Find active shift booking for partner
+        DeliveryShiftBooking bookedShift = null;
+        if (shiftBookingRepository != null && partner != null) {
+            List<DeliveryShiftBooking> bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+            for (DeliveryShiftBooking b : bookings) {
+                if ("BOOKED".equalsIgnoreCase(b.getStatus())) {
+                    bookedShift = b;
+                    break;
+                }
+            }
+        }
+
+        for (ConditionDef c : conditionDefs) {
+            if ("LOGIN_SLOT".equalsIgnoreCase(c.type())) {
+                String rawStartTime;
+                String rawEndTime;
+                String rawDuration;
+                int defaultMinMinutes = c.minDurationMinutes() != null ? c.minDurationMinutes() : 270;
+
+                if (bookedShift != null) {
+                    rawStartTime = bookedShift.getStartTime();
+                    rawEndTime = bookedShift.getEndTime();
+                    rawDuration = bookedShift.getDurationHours();
+                } else {
+                    String configuredSlot = (c.timeSlot() != null && !c.timeSlot().isBlank()) ? c.timeSlot() : (c.value() != null ? c.value() : "7pm - 12am");
+                    String[] parts = configuredSlot.split("\\s*-\\s*");
+                    rawStartTime = parts.length > 0 ? parts[0] : "7pm";
+                    rawEndTime = parts.length > 1 ? parts[1] : "12am";
+                    rawDuration = (c.duration() != null && !c.duration().isBlank()) ? c.duration() : (c.subtext() != null ? c.subtext() : "4h 30m");
+                }
+
+                String timeSlot = formatTimeSlotDisplay(rawStartTime, rawEndTime);
+                int requiredMinutes = parseDurationMinutes(rawDuration, defaultMinMinutes);
+                String requiredDurationStr = formatDurationDisplay(requiredMinutes);
+
+                Instant[] bounds = getShiftBounds(date, rawStartTime, rawEndTime);
+                Instant shiftStartInstant = bounds[0];
+                Instant shiftEndInstant = bounds[1];
+
+                long eligibleMinutes = calculateEligibleOnlineMinutes(partner, shiftStartInstant, shiftEndInstant);
+                double progressPct = Math.min(100.0, ((double) eligibleMinutes / (double) requiredMinutes) * 100.0);
+
+                Instant now = Instant.now();
+                String status;
+                String subtext;
+                String progressText;
+
+                if (progressPct >= 100.0) {
+                    status = "SATISFIED";
+                    subtext = requiredDurationStr;
+                    progressText = "Slot fulfilled (" + requiredDurationStr + ")";
+                } else if (now.isAfter(shiftEndInstant) || date.isBefore(today)) {
+                    status = "FAILED";
+                    subtext = (eligibleMinutes > 0) ? formatDurationDisplay(eligibleMinutes) : requiredDurationStr;
+                    progressText = "Slot requirement not met";
+                } else {
+                    status = "PENDING";
+                    subtext = (eligibleMinutes > 0) ? formatDurationDisplay(eligibleMinutes) : requiredDurationStr;
+                    progressText = formatDurationDisplay(eligibleMinutes) + " of " + requiredDurationStr + " completed";
+                }
+
+                result.add(new IncentiveConditionProgressDto(
+                        c.id(),
+                        "LOGIN_SLOT",
+                        c.title() != null ? c.title() : "Mandatory Login: Complete below slot",
+                        timeSlot,
+                        subtext,
+                        status,
+                        progressPct,
+                        progressText
+                ));
+            } else if ("ORDER_REJECTION".equalsIgnoreCase(c.type())) {
+                int maxRejections = c.maxRejections() != null ? c.maxRejections() : 1;
+                long rejectedCount = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.REJECTED,
+                        startOfDay.toInstant(),
+                        endOfDay.toInstant()
+                );
+
+                String status;
+                double progressPct;
+                String progressText;
+
+                if (rejectedCount > maxRejections) {
+                    status = "FAILED";
+                    progressPct = 100.0;
+                    progressText = rejectedCount + " rejected (limit: " + maxRejections + ")";
+                } else if (rejectedCount > 0) {
+                    status = "PENDING";
+                    progressPct = 50.0;
+                    progressText = rejectedCount + " of " + maxRejections + " rejected";
+                } else {
+                    status = "SATISFIED";
+                    progressPct = 100.0;
+                    progressText = "0 orders rejected";
+                }
+
+                String val = (c.value() != null && !c.value().isBlank()) ? c.value() : "Do not reject";
+                String sub = (c.subtext() != null && !c.subtext().isBlank()) ? c.subtext() : ("more than " + maxRejections + (maxRejections == 1 ? " order" : " orders"));
+
+                result.add(new IncentiveConditionProgressDto(
+                        c.id(),
+                        "ORDER_REJECTION",
+                        c.title() != null ? c.title() : "Other condition",
+                        val,
+                        sub,
+                        status,
+                        progressPct,
+                        progressText
+                ));
+            } else {
+                result.add(new IncentiveConditionProgressDto(
+                        c.id(),
+                        c.type() != null ? c.type() : "CUSTOM",
+                        c.title(),
+                        c.value(),
+                        c.subtext(),
+                        "SATISFIED",
+                        100.0,
+                        c.subtext()
+                ));
+            }
+        }
+        return result;
+    }
+
+    private long calculateEligibleOnlineMinutes(DeliveryPartner partner, Instant shiftStartInstant, Instant shiftEndInstant) {
+        if (onlineSessionRepository == null || partner == null) {
+            return 0;
+        }
+        List<DeliveryOnlineSession> sessions = onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partner.getId());
+        long totalSeconds = 0;
+        Instant now = Instant.now();
+        boolean hasOpenSession = false;
+
+        for (DeliveryOnlineSession session : sessions) {
+            Instant sStart = session.getOnlineAt();
+            if (sStart == null) continue;
+            Instant sEnd = session.getOfflineAt();
+            if (sEnd == null) {
+                hasOpenSession = true;
+                sEnd = now;
+            }
+
+            Instant overlapStart = sStart.isAfter(shiftStartInstant) ? sStart : shiftStartInstant;
+            Instant overlapEnd = sEnd.isBefore(shiftEndInstant) ? sEnd : shiftEndInstant;
+
+            if (overlapEnd.isAfter(overlapStart)) {
+                totalSeconds += java.time.Duration.between(overlapStart, overlapEnd).getSeconds();
+            }
+        }
+
+        if (partner.isOnline() && !hasOpenSession) {
+            Instant sStart = partner.getUpdatedAt() != null ? partner.getUpdatedAt() : now;
+            Instant overlapStart = sStart.isAfter(shiftStartInstant) ? sStart : shiftStartInstant;
+            Instant overlapEnd = now.isBefore(shiftEndInstant) ? now : shiftEndInstant;
+            if (overlapEnd.isAfter(overlapStart)) {
+                totalSeconds += java.time.Duration.between(overlapStart, overlapEnd).getSeconds();
+            }
+        }
+
+        return totalSeconds / 60;
+    }
+
+    public static String formatTimeSlotDisplay(String startTime, String endTime) {
+        String s = formatSingleTimeForCard(startTime);
+        String e = formatSingleTimeForCard(endTime);
+        if (s == null && e == null) return "7pm - 12am";
+        if (s == null) return e;
+        if (e == null) return s;
+        return s + " - " + e;
+    }
+
+    public static String formatSingleTimeForCard(String t) {
+        if (t == null || t.isBlank()) return null;
+        String trimmed = t.trim();
+        LocalTime lt = parseLocalTimeFlexible(trimmed);
+        if (lt != null) {
+            int hour = lt.getHour();
+            int minute = lt.getMinute();
+            String ampm = (hour >= 12) ? "pm" : "am";
+            int h12 = hour % 12;
+            if (h12 == 0) h12 = 12;
+            if (minute == 0) {
+                return h12 + ampm;
+            } else {
+                return String.format("%d:%02d%s", h12, minute, ampm);
+            }
+        }
+        String clean = trimmed.toLowerCase().replaceAll("\\s+", "");
+        clean = clean.replace(":00", "");
+        if (clean.startsWith("0")) {
+            clean = clean.substring(1);
+        }
+        return clean;
+    }
+
+    public static LocalTime parseLocalTimeFlexible(String t) {
+        if (t == null || t.isBlank()) return null;
+        String s = t.trim().toUpperCase();
+        Matcher m12 = Pattern.compile("^(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)$").matcher(s);
+        if (m12.matches()) {
+            int hour = Integer.parseInt(m12.group(1));
+            int minute = (m12.group(2) != null) ? Integer.parseInt(m12.group(2)) : 0;
+            String ampm = m12.group(3);
+            if ("PM".equals(ampm) && hour < 12) hour += 12;
+            if ("AM".equals(ampm) && hour == 12) hour = 0;
+            return LocalTime.of(hour, minute);
+        }
+        Matcher m24 = Pattern.compile("^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?$").matcher(s);
+        if (m24.matches()) {
+            int hour = Integer.parseInt(m24.group(1));
+            int minute = Integer.parseInt(m24.group(2));
+            if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+                return LocalTime.of(hour, minute);
+            }
+        }
+        return null;
+    }
+
+    public static Instant[] getShiftBounds(LocalDate date, String startTimeStr, String endTimeStr) {
+        LocalTime startLt = parseLocalTimeFlexible(startTimeStr);
+        LocalTime endLt = parseLocalTimeFlexible(endTimeStr);
+        if (startLt == null) startLt = LocalTime.of(19, 0); // 7:00 PM
+        if (endLt == null) endLt = LocalTime.of(0, 0);      // 12:00 AM
+
+        ZonedDateTime startZdt = date.atTime(startLt).atZone(ZONE_IST);
+        ZonedDateTime endZdt;
+        if (!endLt.isAfter(startLt)) {
+            endZdt = date.plusDays(1).atTime(endLt).atZone(ZONE_IST);
+        } else {
+            endZdt = date.atTime(endLt).atZone(ZONE_IST);
+        }
+        return new Instant[]{startZdt.toInstant(), endZdt.toInstant()};
+    }
+
+    public static int parseDurationMinutes(String durationStr, int defaultMinutes) {
+        if (durationStr == null || durationStr.isBlank()) return defaultMinutes;
+        String s = durationStr.trim().toLowerCase();
+        Matcher mHm = Pattern.compile("(?:(\\d+)\\s*h)?\\s*(?:(\\d+)\\s*m)?").matcher(s);
+        if (mHm.matches() && (mHm.group(1) != null || mHm.group(2) != null)) {
+            int h = mHm.group(1) != null ? Integer.parseInt(mHm.group(1)) : 0;
+            int m = mHm.group(2) != null ? Integer.parseInt(mHm.group(2)) : 0;
+            int total = h * 60 + m;
+            if (total > 0) return total;
+        }
+        Matcher mDec = Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*h?$").matcher(s);
+        if (mDec.matches()) {
+            double hrs = Double.parseDouble(mDec.group(1));
+            int total = (int) Math.round(hrs * 60.0);
+            if (total > 0) return total;
+        }
+        return defaultMinutes;
+    }
+
+    public static String formatDurationDisplay(long minutes) {
+        if (minutes <= 0) return "0m";
+        long h = minutes / 60;
+        long m = minutes % 60;
+        if (h > 0 && m > 0) {
+            return h + "h " + m + "m";
+        } else if (h > 0) {
+            return h + "h";
+        } else {
+            return m + "m";
+        }
     }
 
     private List<IncentiveRuleDef> loadActiveRules() {
@@ -747,8 +1144,30 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                             );
                         }
 
+                        List<ConditionDef> conditions = null;
+                        if (item.has("conditions") && item.get("conditions").isArray()) {
+                            conditions = new ArrayList<>();
+                            for (JsonNode cNode : item.get("conditions")) {
+                                String cId = cNode.has("id") ? cNode.get("id").asText() : UUID.randomUUID().toString();
+                                String cType = cNode.has("type") ? cNode.get("type").asText() : "CUSTOM";
+                                String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
+                                String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
+                                String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
+                                String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
+                                String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
+                                Integer cMinDur = cNode.has("minDurationMinutes") ? cNode.get("minDurationMinutes").asInt() : null;
+                                Integer cMaxRej = cNode.has("maxRejections") ? cNode.get("maxRejections").asInt() : null;
+                                conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
+                            }
+                        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+                            conditions = List.of(
+                                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
+                            );
+                        }
+
                         if (!id.isBlank()) {
-                            rules.add(new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones));
+                            rules.add(new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions));
                         }
                     }
                 }
@@ -765,21 +1184,25 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     private List<IncentiveRuleDef> defaultRules() {
         return List.of(
-                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null),
-                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null),
+                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null, null),
+                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null, null),
                 new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day", true, "Bonus awarded upon completing daily order targets.", "Target & Mileage", "DAILY_TARGET", 15,
                         List.of(
                                 new MilestoneDef(6, new BigDecimal("50.00")),
                                 new MilestoneDef(9, new BigDecimal("75.00")),
                                 new MilestoneDef(13, new BigDecimal("120.00")),
                                 new MilestoneDef(18, new BigDecimal("190.00"))
+                        ),
+                        List.of(
+                                new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                                new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
                         )
                 ),
-                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null),
-                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null),
-                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null),
-                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null),
-                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null)
+                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null, null),
+                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null, null),
+                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null, null),
+                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null, null),
+                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null, null)
         );
     }
 

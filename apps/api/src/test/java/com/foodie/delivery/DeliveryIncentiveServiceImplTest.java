@@ -50,6 +50,8 @@ class DeliveryIncentiveServiceImplTest {
     @Mock private com.foodie.wallet.repository.WalletAccountRepository walletAccountRepository;
     @Mock private com.foodie.wallet.repository.LedgerEntryRepository ledgerEntryRepository;
     @Mock private com.foodie.wallet.repository.PayoutRepository payoutRepository;
+    @Mock private com.foodie.delivery.repository.DeliveryShiftBookingRepository shiftBookingRepository;
+    @Mock private com.foodie.delivery.repository.DeliveryOnlineSessionRepository onlineSessionRepository;
 
     private ObjectMapper objectMapper;
     private DeliveryIncentiveServiceImpl incentiveService;
@@ -70,7 +72,9 @@ class DeliveryIncentiveServiceImplTest {
                 objectMapper,
                 walletAccountRepository,
                 ledgerEntryRepository,
-                payoutRepository
+                payoutRepository,
+                shiftBookingRepository,
+                onlineSessionRepository
         );
 
         partnerId = UUID.randomUUID();
@@ -85,6 +89,8 @@ class DeliveryIncentiveServiceImplTest {
         when(deliveryPartnerRepository.findById(partnerId)).thenReturn(Optional.of(partner));
         when(deliveryPartnerRepository.findByUserCredentialId(userCredentialId)).thenReturn(Optional.of(partner));
         when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(DeliveryPricingConfig.createDefault()));
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(any())).thenReturn(List.of());
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(any())).thenReturn(List.of());
     }
 
     @Test
@@ -400,5 +406,404 @@ class DeliveryIncentiveServiceImplTest {
         assertThat(summary.earnedIncentives()).isEqualByComparingTo("250.00");
         assertThat(summary.paidOutIncentives()).isEqualByComparingTo("500.00");
         assertThat(summary.availableBalance()).isEqualByComparingTo("1250.00");
+    }
+
+    @Test
+    void getIncentivesProgress_evaluatesDynamicOfferConditionsCorrectly() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        // Partner has 0 rejected orders
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.REJECTED), any(), any()))
+                .thenReturn(0L);
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        assertThat(dailyOffer.conditions()).isNotNull();
+        assertThat(dailyOffer.conditions()).hasSize(2);
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst()
+                .orElse(null);
+        assertThat(loginCond).isNotNull();
+        assertThat(loginCond.title()).contains("Mandatory Login");
+        assertThat(loginCond.value()).isEqualTo("7pm - 12am");
+
+        var rejCond = dailyOffer.conditions().stream()
+                .filter(c -> "ORDER_REJECTION".equals(c.type()))
+                .findFirst()
+                .orElse(null);
+        assertThat(rejCond).isNotNull();
+        assertThat(rejCond.title()).isEqualTo("Other condition");
+        assertThat(rejCond.status()).isEqualTo("SATISFIED");
+        assertThat(rejCond.currentProgressText()).isEqualTo("0 orders rejected");
+    }
+
+    @Test
+    void evaluateDailyTarget_orderRejectionExceedingLimitBlocksReward() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        // Partner completed 18 deliveries (eligible for all milestones and target)
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(18L);
+
+        // BUT partner rejected 2 orders today (limit is 1)
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.REJECTED), any(), any()))
+                .thenReturn(2L);
+
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Verify that walletService.credit was NEVER called because condition failed!
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                any(),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void getIncentivesProgress_orderRejectionConditionFailedLocksMilestones() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        // Partner completed 10 deliveries (normally milestone 1 and 2 would be unlocked)
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(10L);
+
+        // But partner has 2 rejected orders (limit: 1) -> condition FAILED
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.REJECTED), any(), any()))
+                .thenReturn(2L);
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        var rejCond = dailyOffer.conditions().stream()
+                .filter(c -> "ORDER_REJECTION".equals(c.type()))
+                .findFirst()
+                .orElse(null);
+        assertThat(rejCond).isNotNull();
+        assertThat(rejCond.status()).isEqualTo("FAILED");
+
+        // Milestones must be Locked because condition is FAILED
+        for (var m : dailyOffer.milestones()) {
+            assertThat(m.status()).isEqualTo("Locked");
+            assertThat(m.isEarned()).isFalse();
+        }
+    }
+
+    @Test
+    void getIncentivesProgress_displaysSelectedShiftTimes_7pmTo12am() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        assertThat(loginCond.value()).isEqualTo("7pm - 12am");
+        assertThat(loginCond.subtext()).isEqualTo("4h 30m");
+        assertThat(loginCond.progressPercentage()).isEqualTo(0.0);
+        assertThat(loginCond.status()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void getIncentivesProgress_displaysDifferentSelectedShift_11amTo4pm() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Lunch Shift", "11:00 AM", "04:00 PM", "5h", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        assertThat(loginCond.value()).isEqualTo("11am - 4pm");
+        assertThat(loginCond.subtext()).isEqualTo("5h");
+        assertThat(loginCond.progressPercentage()).isEqualTo(0.0);
+    }
+
+    @Test
+    void getIncentivesProgress_evaluatesDynamicOnlineDurationAndProgress_2h15mOf4h30m() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // 2 hours 15 minutes = 135 minutes online inside 7pm-12am window
+        Instant shiftStart = today.atTime(19, 0).atZone(ZONE_IST).toInstant();
+        Instant sessionOnline = shiftStart.plus(java.time.Duration.ofMinutes(15));
+        Instant sessionOffline = sessionOnline.plus(java.time.Duration.ofMinutes(135));
+
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, sessionOnline
+        );
+        session.setOfflineAt(sessionOffline);
+        session.setDurationSeconds(135L * 60L);
+
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        assertThat(loginCond.value()).isEqualTo("7pm - 12am");
+        assertThat(loginCond.subtext()).isEqualTo("2h 15m");
+        assertThat(loginCond.progressPercentage()).isEqualTo(50.0);
+        assertThat(loginCond.status()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void getIncentivesProgress_offlineSessionPausesAccumulation() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // Partner logged in for 60 minutes and went offline
+        Instant shiftStart = today.atTime(19, 0).atZone(ZONE_IST).toInstant();
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, shiftStart
+        );
+        session.setOfflineAt(shiftStart.plus(java.time.Duration.ofMinutes(60)));
+        session.setDurationSeconds(3600L);
+
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        // 60 / 270 = ~22.22%
+        assertThat(loginCond.subtext()).isEqualTo("1h");
+        assertThat(loginCond.progressPercentage()).isCloseTo(22.22, org.assertj.core.data.Offset.offset(0.1));
+    }
+
+    @Test
+    void getIncentivesProgress_timeOutsideShiftWindowNotCounted() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // Online at 9:00 AM to 11:00 AM (completely outside shift window 7 PM to 12 AM)
+        Instant morningOnline = today.atTime(9, 0).atZone(ZONE_IST).toInstant();
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, morningOnline
+        );
+        session.setOfflineAt(morningOnline.plus(java.time.Duration.ofHours(2)));
+
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        // Must NOT be counted towards shift duration!
+        assertThat(loginCond.progressPercentage()).isEqualTo(0.0);
+        assertThat(loginCond.subtext()).isEqualTo("4h 30m");
+    }
+
+    @Test
+    void getIncentivesProgress_completedDurationAchievesSatisfiedStatus() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // Completed 270 minutes (4.5h)
+        Instant shiftStart = today.atTime(19, 0).atZone(ZONE_IST).toInstant();
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, shiftStart
+        );
+        session.setOfflineAt(shiftStart.plus(java.time.Duration.ofMinutes(270)));
+
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst().orElseThrow();
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst().orElseThrow();
+
+        assertThat(loginCond.progressPercentage()).isEqualTo(100.0);
+        assertThat(loginCond.status()).isEqualTo("SATISFIED");
+        assertThat(loginCond.subtext()).isEqualTo("4h 30m");
+    }
+
+    @Test
+    void evaluateDailyTarget_whenShiftBooked_unfulfilledSlotBlocksReward() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        // Shift booked: 7pm to 12am, required 4.5h (270 mins)
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // Partner completed 15 deliveries (target met)
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(15L);
+
+        // BUT partner only has 60 minutes online (out of 270)
+        Instant shiftStart = today.atTime(19, 0).atZone(ZONE_IST).toInstant();
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, shiftStart
+        );
+        session.setOfflineAt(shiftStart.plus(java.time.Duration.ofMinutes(60)));
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Daily target reward must NOT be granted because mandatory login slot is unfulfilled!
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("150.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void evaluateDailyTarget_whenShiftBooked_fulfilledSlotAwardsReward() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        UUID shiftId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        // Shift booked: 7pm to 12am, required 4.5h (270 mins)
+        com.foodie.delivery.entity.DeliveryShiftBooking booking = new com.foodie.delivery.entity.DeliveryShiftBooking(
+                partnerId, shiftId, "Dinner Shift", "07:00 PM", "12:00 AM", "4.5", "BOOKED", Instant.now()
+        );
+        when(shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId))
+                .thenReturn(List.of(booking));
+
+        // Partner completed 15 deliveries (target met)
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(15L);
+
+        // Partner has 270 minutes online (fully fulfilled)
+        Instant shiftStart = today.atTime(19, 0).atZone(ZONE_IST).toInstant();
+        com.foodie.delivery.entity.DeliveryOnlineSession session = new com.foodie.delivery.entity.DeliveryOnlineSession(
+                partnerId, shiftId, shiftStart
+        );
+        session.setOfflineAt(shiftStart.plus(java.time.Duration.ofMinutes(270)));
+        when(onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partnerId))
+                .thenReturn(List.of(session));
+
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+        when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Daily target reward ₹150 IS granted!
+        verify(walletService).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("150.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void helperMethods_formatTimeAndDurationAccurately() {
+        assertThat(DeliveryIncentiveServiceImpl.formatTimeSlotDisplay("07:00 PM", "12:00 AM")).isEqualTo("7pm - 12am");
+        assertThat(DeliveryIncentiveServiceImpl.formatTimeSlotDisplay("11:00 AM", "04:00 PM")).isEqualTo("11am - 4pm");
+        assertThat(DeliveryIncentiveServiceImpl.formatTimeSlotDisplay("19:00", "00:00")).isEqualTo("7pm - 12am");
+        assertThat(DeliveryIncentiveServiceImpl.formatTimeSlotDisplay("06:30 PM", "11:30 PM")).isEqualTo("6:30pm - 11:30pm");
+
+        assertThat(DeliveryIncentiveServiceImpl.formatDurationDisplay(270)).isEqualTo("4h 30m");
+        assertThat(DeliveryIncentiveServiceImpl.formatDurationDisplay(135)).isEqualTo("2h 15m");
+        assertThat(DeliveryIncentiveServiceImpl.formatDurationDisplay(300)).isEqualTo("5h");
+        assertThat(DeliveryIncentiveServiceImpl.formatDurationDisplay(45)).isEqualTo("45m");
+        assertThat(DeliveryIncentiveServiceImpl.formatDurationDisplay(0)).isEqualTo("0m");
+
+        assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("4.5", 270)).isEqualTo(270);
+        assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("4h 30m", 270)).isEqualTo(270);
+        assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("5", 270)).isEqualTo(300);
+        assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("5h", 270)).isEqualTo(300);
     }
 }

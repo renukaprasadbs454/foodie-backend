@@ -141,14 +141,17 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
                         "Shift is not available for booking or has expired."
                 ));
 
-        boolean alreadyBooked = bookingRepository.existsByDeliveryPartnerIdAndShiftIdAndStatus(
-                partnerId, shiftId, "BOOKED"
-        );
-        if (alreadyBooked) {
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "You have already booked this shift ('" + shift.getShiftName() + "')."
-            );
+        List<DeliveryShiftBooking> activeBookings = bookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partnerId);
+        for (DeliveryShiftBooking existing : activeBookings) {
+            if ("BOOKED".equalsIgnoreCase(existing.getStatus())) {
+                if (existing.getShiftId().equals(shiftId)) {
+                    log.info("Delivery partner {} already has active booking for shift {}", partnerId, shiftId);
+                    return mapBookingToDto(existing);
+                } else {
+                    existing.setStatus("CANCELLED");
+                    bookingRepository.save(existing);
+                }
+            }
         }
 
         DeliveryShiftBooking booking = new DeliveryShiftBooking(

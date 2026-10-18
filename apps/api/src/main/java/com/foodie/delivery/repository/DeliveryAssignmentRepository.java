@@ -39,4 +39,11 @@ public interface DeliveryAssignmentRepository extends JpaRepository<DeliveryAssi
             Instant from,
             Instant to
     );
+
+    long countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
+            UUID deliveryPartnerId,
+            DeliveryAssignmentStatus status,
+            Instant from,
+            Instant to
+    );
 }

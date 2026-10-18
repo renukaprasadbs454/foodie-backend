@@ -51,6 +51,10 @@ import com.foodie.shared.event.DeliveryCompletedEvent;
 import com.foodie.shared.event.DeliveryLocationUpdatedEvent;
 import com.foodie.shared.event.DeliveryOfferCreatedEvent;
 import com.foodie.shared.event.DeliveryPartnerAssignedEvent;
+import com.foodie.delivery.entity.DeliveryOnlineSession;
+import com.foodie.delivery.repository.DeliveryOnlineSessionRepository;
+import com.foodie.delivery.repository.DeliveryShiftBookingRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Duration;
@@ -162,6 +166,20 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     public void setLocationZoneRepository(LocationZoneRepository locationZoneRepository) {
         this.locationZoneRepository = locationZoneRepository;
+    }
+
+    @Autowired(required = false)
+    private DeliveryOnlineSessionRepository onlineSessionRepository;
+
+    @Autowired(required = false)
+    private DeliveryShiftBookingRepository shiftBookingRepository;
+
+    public void setOnlineSessionRepository(DeliveryOnlineSessionRepository onlineSessionRepository) {
+        this.onlineSessionRepository = onlineSessionRepository;
+    }
+
+    public void setShiftBookingRepository(DeliveryShiftBookingRepository shiftBookingRepository) {
+        this.shiftBookingRepository = shiftBookingRepository;
     }
 
     @Override
@@ -304,15 +322,43 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional
     public AvailabilityResponseDto setAvailability(UUID userCredentialId, SetAvailabilityRequestDto request) {
         DeliveryPartner partner = requirePartner(userCredentialId);
-        if (Boolean.TRUE.equals(request.isOnline())) {
+        boolean isGoingOnline = Boolean.TRUE.equals(request.isOnline());
+        if (isGoingOnline) {
             if (partner.getKycStatus() != KycStatus.VERIFIED) {
                 throw new UnprocessableEntityException(
                         ErrorCode.KYC_NOT_VERIFIED,
                         "KYC must be verified before going online.");
             }
         }
-        partner.setOnline(request.isOnline());
+        partner.setOnline(isGoingOnline);
         deliveryPartnerRepository.save(partner);
+
+        if (onlineSessionRepository != null) {
+            if (isGoingOnline) {
+                var activeSession = onlineSessionRepository.findFirstByDeliveryPartnerIdAndOfflineAtIsNullOrderByOnlineAtDesc(partner.getId());
+                if (activeSession.isEmpty()) {
+                    UUID shiftId = null;
+                    if (shiftBookingRepository != null) {
+                        var bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+                        if (!bookings.isEmpty()) {
+                            shiftId = bookings.get(0).getShiftId();
+                        }
+                    }
+                    DeliveryOnlineSession session = new DeliveryOnlineSession(partner.getId(), shiftId, java.time.Instant.now());
+                    onlineSessionRepository.save(session);
+                }
+            } else {
+                var activeSession = onlineSessionRepository.findFirstByDeliveryPartnerIdAndOfflineAtIsNullOrderByOnlineAtDesc(partner.getId());
+                if (activeSession.isPresent()) {
+                    DeliveryOnlineSession session = activeSession.get();
+                    java.time.Instant now = java.time.Instant.now();
+                    session.setOfflineAt(now);
+                    session.setDurationSeconds(Duration.between(session.getOnlineAt(), now).toSeconds());
+                    onlineSessionRepository.save(session);
+                }
+            }
+        }
+
         return new AvailabilityResponseDto(partner.isOnline());
     }
 
