@@ -79,7 +79,27 @@ public class AdminOrderController {
             BigDecimal totalAmount,
             String paymentMethod,
             String status,
-            String createdAt) {}
+            String createdAt,
+            String zoneId,
+            String zoneName,
+            String restaurantId) {
+
+        public AdminOrderSummaryDto(
+                String id,
+                String orderCode,
+                String customerName,
+                String customerPhone,
+                String storeName,
+                String module,
+                String itemsSummary,
+                BigDecimal totalAmount,
+                String paymentMethod,
+                String status,
+                String createdAt) {
+            this(id, orderCode, customerName, customerPhone, storeName, module,
+                    itemsSummary, totalAmount, paymentMethod, status, createdAt, null, null, null);
+        }
+    }
 
     @GetMapping
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -121,13 +141,34 @@ public class AdminOrderController {
                 }
             }
 
+            String restZoneId = "dz-bangalore";
+            String restZoneName = "Bangalore Zone";
+            String restIdStr = order.getRestaurantId() != null ? order.getRestaurantId().toString() : null;
+
+            if (matchedRestaurant != null) {
+                String restCity = matchedRestaurant.getAddress() != null ? matchedRestaurant.getAddress().getCity() : null;
+                Double restLat = matchedRestaurant.getLatitude() != null ? matchedRestaurant.getLatitude().doubleValue() : null;
+                Double restLng = matchedRestaurant.getLongitude() != null ? matchedRestaurant.getLongitude().doubleValue() : null;
+                if ((restCity != null && (restCity.toLowerCase().contains("tumkur") || restCity.toLowerCase().contains("tumakuru") || restCity.toLowerCase().contains("tmk")))
+                        || (restLat != null && restLat > 13.2 && restLat < 13.5)) {
+                    restZoneId = "dz-tumkur";
+                    restZoneName = "Tumkur Zone";
+                } else {
+                    restZoneId = "dz-bangalore";
+                    restZoneName = "Bangalore Zone";
+                }
+            }
+
             if (zone != null) {
                 if (matchedRestaurant == null) {
                     continue;
                 }
                 Double lat = matchedRestaurant.getLatitude() != null ? matchedRestaurant.getLatitude().doubleValue() : null;
                 Double lng = matchedRestaurant.getLongitude() != null ? matchedRestaurant.getLongitude().doubleValue() : null;
-                if (!adminZoneService.isLocationInZone(lat, lng, null, zone)) {
+                String city = matchedRestaurant.getAddress() != null ? matchedRestaurant.getAddress().getCity() : null;
+                if (zone.getId().equalsIgnoreCase(restZoneId)) {
+                    // matches restaurant operating zone directly
+                } else if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
                     continue;
                 }
             }
@@ -170,7 +211,10 @@ public class AdminOrderController {
                             ? (paymentRepository != null ? paymentRepository.findByOrderId(order.getId()).map(p -> p.getStatus() == com.foodie.common.enums.PaymentStatus.CAPTURED ? "ONLINE" : "COD").orElse("COD") : "COD")
                             : "COD",
                     statusStr,
-                    order.getCreatedAt() != null ? order.getCreatedAt().toString() : "Just now"
+                    order.getCreatedAt() != null ? order.getCreatedAt().toString() : "Just now",
+                    restZoneId,
+                    restZoneName,
+                    restIdStr
             ));
         }
 
@@ -199,7 +243,8 @@ public class AdminOrderController {
                         LocationZone zone = adminZoneService.validateZone(admin.getAssignedZoneId());
                         Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
                         Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
-                        if (!adminZoneService.isLocationInZone(lat, lng, null, zone)) {
+                        String city = r.getAddress() != null ? r.getAddress().getCity() : null;
+                        if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
                             throw new com.foodie.common.exception.ForbiddenException("Cannot modify orders outside your assigned zone.");
                         }
                     }
@@ -208,5 +253,75 @@ public class AdminOrderController {
         }
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.overrideOrderStatus(principal.userId(), orderId, request)));
+    }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    @org.springframework.transaction.annotation.Transactional
+    public void seedInitialOrdersIfEmpty() {
+        try {
+            if (orderRepository.count() == 0) {
+                List<Restaurant> allRestos = restaurantRepository.findAll();
+                if (allRestos.isEmpty()) return;
+
+                Restaurant blrResto = allRestos.stream()
+                        .filter(r -> r.getAddress() != null && r.getAddress().getCity() != null
+                                && (r.getAddress().getCity().toLowerCase().contains("bangalore") || r.getAddress().getCity().toLowerCase().contains("bengaluru")))
+                        .findFirst()
+                        .orElse(allRestos.get(0));
+
+                Restaurant tmkResto = allRestos.stream()
+                        .filter(r -> (r.getAddress() != null && r.getAddress().getCity() != null
+                                && (r.getAddress().getCity().toLowerCase().contains("tumkur") || r.getAddress().getCity().toLowerCase().contains("tumakuru")))
+                                || (r.getName() != null && r.getName().toLowerCase().contains("tumkur")))
+                        .findFirst()
+                        .orElse(null);
+
+                List<Customer> customers = customerRepository.findAll();
+                Customer blrCust = customers.stream()
+                        .filter(c -> c.getFullName() != null && (c.getFullName().toLowerCase().contains("ananya") || c.getFullName().toLowerCase().contains("rahul")))
+                        .findFirst()
+                        .orElse(!customers.isEmpty() ? customers.get(0) : null);
+
+                Customer tmkCust = customers.stream()
+                        .filter(c -> c.getFullName() != null && (c.getFullName().toLowerCase().contains("priya") || c.getFullName().toLowerCase().contains("karthik")))
+                        .findFirst()
+                        .orElse(null);
+
+                if (blrCust != null && blrResto != null) {
+                    Order o1 = Order.place(
+                            "ORD-BLR-1001",
+                            blrCust.getId(),
+                            blrResto.getId(),
+                            blrCust.getDefaultAddressId() != null ? blrCust.getDefaultAddressId() : UUID.randomUUID(),
+                            BigDecimal.valueOf(450.0),
+                            BigDecimal.valueOf(35.0),
+                            BigDecimal.ZERO,
+                            BigDecimal.valueOf(22.5),
+                            BigDecimal.valueOf(507.5),
+                            UUID.randomUUID().toString()
+                    );
+                    o1.transitionTo(OrderStatus.PREPARING);
+                    orderRepository.save(o1);
+                }
+
+                if (tmkCust != null && tmkResto != null) {
+                    Order o2 = Order.place(
+                            "ORD-TMK-2001",
+                            tmkCust.getId(),
+                            tmkResto.getId(),
+                            tmkCust.getDefaultAddressId() != null ? tmkCust.getDefaultAddressId() : UUID.randomUUID(),
+                            BigDecimal.valueOf(280.0),
+                            BigDecimal.valueOf(25.0),
+                            BigDecimal.ZERO,
+                            BigDecimal.valueOf(14.0),
+                            BigDecimal.valueOf(319.0),
+                            UUID.randomUUID().toString()
+                    );
+                    o2.transitionTo(OrderStatus.CONFIRMED);
+                    orderRepository.save(o2);
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 }

@@ -72,6 +72,9 @@ public class AdminRestaurantController {
             LocationZone zone = adminZoneService.validateZone(activeZoneId);
             List<RestaurantDetailResponseDto> filteredItems = result.items().stream()
                     .filter(r -> {
+                        if (r.zoneId() != null && r.zoneId().equalsIgnoreCase(zone.getId())) {
+                            return true;
+                        }
                         Double lat = r.latitude() != null ? r.latitude().doubleValue() : null;
                         Double lng = r.longitude() != null ? r.longitude().doubleValue() : null;
                         String city = r.address() != null ? r.address().city() : null;
