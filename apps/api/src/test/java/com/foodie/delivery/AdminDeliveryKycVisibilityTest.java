@@ -4,13 +4,9 @@ import com.foodie.admin.controller.AdminDeliveryController;
 import com.foodie.admin.repository.AdminUserRepository;
 import com.foodie.auth.repository.UserCredentialRepository;
 import com.foodie.common.enums.DeliveryDocType;
-import com.foodie.common.enums.DocumentVerificationStatus;
-import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.VehicleType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ResourceNotFoundException;
-import com.foodie.delivery.dto.response.AdminDeliveryPartnerResponseDto;
-import com.foodie.delivery.dto.response.AdminDeliveryStatsDto;
 import com.foodie.delivery.entity.DeliveryPartner;
 import com.foodie.delivery.entity.DeliveryPartnerDocument;
 import com.foodie.delivery.mapper.DeliveryMapper;
@@ -66,7 +62,6 @@ class AdminDeliveryKycVisibilityTest {
     @InjectMocks
     private AdminDeliveryController adminDeliveryController;
 
-    private UUID partnerId;
     private UUID userCredentialId;
     private DeliveryPartner completePartner;
     private DeliveryPartner noZonePartner;
@@ -74,7 +69,6 @@ class AdminDeliveryKycVisibilityTest {
 
     @BeforeEach
     void setUp() {
-        partnerId = UUID.randomUUID();
         userCredentialId = UUID.randomUUID();
 
         // 1. Complete Partner: zone selected & verified, all 3 documents uploaded

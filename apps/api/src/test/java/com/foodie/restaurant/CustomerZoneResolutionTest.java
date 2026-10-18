@@ -12,7 +12,6 @@ import com.foodie.restaurant.repository.RestaurantAddressRepository;
 import com.foodie.restaurant.repository.RestaurantLegalDetailRepository;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import com.foodie.restaurant.service.RestaurantCacheService;
-import com.foodie.restaurant.service.RestaurantService.PageResult;
 import com.foodie.restaurant.service.impl.RestaurantServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +23,6 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;

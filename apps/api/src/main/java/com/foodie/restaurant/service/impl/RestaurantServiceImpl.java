@@ -1037,10 +1037,6 @@ public class RestaurantServiceImpl implements RestaurantService {
         return value == null ? "" : value;
     }
 
-    private static String emptyToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
-    }
-
     private record CachedPage(List<RestaurantSummaryResponseDto> items, PaginationMeta pagination) {
     }
 

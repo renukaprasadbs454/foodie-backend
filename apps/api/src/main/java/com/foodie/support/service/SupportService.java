@@ -192,7 +192,7 @@ public class SupportService {
 
     @Transactional
     public List<SupportMessage> getRestaurantMessages(String conversationId, UUID restaurantId) {
-        SupportConversation conv = conversationRepository.findByIdAndRestaurantId(conversationId, restaurantId)
+        conversationRepository.findByIdAndRestaurantId(conversationId, restaurantId)
                 .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Unauthorized: Conversation does not belong to your restaurant"));
 
         // Mark incoming agent messages as read by restaurant

@@ -111,6 +111,7 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
                 .orElseGet(() -> configRepository.save(DeliveryPricingConfig.createDefault()));
     }
 
+    @SuppressWarnings("unchecked")
     private DeliveryPricingConfigResponseDto toDto(DeliveryPricingConfig config) {
         Object universalConfig = null;
         Map<String, Object> zoneConfigs = null;

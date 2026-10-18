@@ -821,7 +821,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     @Transactional(readOnly = true)
     public DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId) {
-        DeliveryPartner partner = requirePartner(userCredentialId);
+        requirePartner(userCredentialId);
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
 
         OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(assignment.getOrderId())
