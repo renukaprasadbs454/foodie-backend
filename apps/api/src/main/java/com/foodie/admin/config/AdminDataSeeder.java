@@ -83,14 +83,15 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "Finance Admin"
             );
 
-            // Seed Operations Admin
+            // Seed Operations Admin / Bangalore Zone Admin
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333006",
                     "+919999999996",
                     "ops@foodie.local",
                     "44444444-4444-4444-4444-444444444006",
                     "11111111-1111-1111-1111-111111111006",
-                    "Operations Admin"
+                    "Operations Admin",
+                    "dz-bangalore"
             );
             seedAdminUser(
                     "33333333-3333-3333-3333-333333333016",
@@ -98,7 +99,46 @@ public class AdminDataSeeder implements ApplicationRunner {
                     "opsadmin@foodie.local",
                     "44444444-4444-4444-4444-444444444016",
                     "11111111-1111-1111-1111-111111111006",
-                    "Operations Admin"
+                    "Operations Admin",
+                    "dz-bangalore"
+            );
+            seedAdminUser(
+                    "33333333-3333-3333-3333-333333333026",
+                    "+919999999976",
+                    "blr.admin@foodie.local",
+                    "44444444-4444-4444-4444-444444444026",
+                    "11111111-1111-1111-1111-111111111006",
+                    "Bangalore Zone Manager",
+                    "dz-bangalore"
+            );
+
+            // Seed Finance Admin / Tumkur Zone Admin
+            seedAdminUser(
+                    "33333333-3333-3333-3333-333333333005",
+                    "+919999999995",
+                    "finance@foodie.local",
+                    "44444444-4444-4444-4444-444444444005",
+                    "11111111-1111-1111-1111-111111111005",
+                    "Finance Admin",
+                    "dz-tumkur"
+            );
+            seedAdminUser(
+                    "33333333-3333-3333-3333-333333333015",
+                    "+919999999985",
+                    "financeadmin@foodie.local",
+                    "44444444-4444-4444-4444-444444444015",
+                    "11111111-1111-1111-1111-111111111005",
+                    "Finance Admin",
+                    "dz-tumkur"
+            );
+            seedAdminUser(
+                    "33333333-3333-3333-3333-333333333025",
+                    "+919999999975",
+                    "tmk.admin@foodie.local",
+                    "44444444-4444-4444-4444-444444444025",
+                    "11111111-1111-1111-1111-111111111005",
+                    "Tumkur Zone Manager",
+                    "dz-tumkur"
             );
 
             // Seed Restaurant Manager
@@ -152,6 +192,10 @@ public class AdminDataSeeder implements ApplicationRunner {
     }
 
     private void seedAdminUser(String credIdStr, String phone, String email, String adminUserIdStr, String roleIdStr, String fullName) {
+        seedAdminUser(credIdStr, phone, email, adminUserIdStr, roleIdStr, fullName, null);
+    }
+
+    private void seedAdminUser(String credIdStr, String phone, String email, String adminUserIdStr, String roleIdStr, String fullName, String assignedZoneId) {
         UUID credId = UUID.fromString(credIdStr);
         UUID adminId = UUID.fromString(adminUserIdStr);
         UUID roleId = UUID.fromString(roleIdStr);
@@ -178,13 +222,13 @@ public class AdminDataSeeder implements ApplicationRunner {
 
             if (adminCount == null || adminCount == 0) {
                 jdbcTemplate.update(
-                        "INSERT INTO \"admin_user\" (\"id\", \"user_credential_id\", \"role_id\", \"full_name\", \"created_at\", \"updated_at\") " +
-                                "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                        adminId, credId, roleId, fullName);
+                        "INSERT INTO \"admin_user\" (\"id\", \"user_credential_id\", \"role_id\", \"full_name\", \"assigned_zone_id\", \"created_at\", \"updated_at\") " +
+                                "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                        adminId, credId, roleId, fullName, assignedZoneId);
             } else {
                 jdbcTemplate.update(
-                        "UPDATE \"admin_user\" SET \"role_id\" = ?, \"full_name\" = ?, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"user_credential_id\" = ?",
-                        roleId, fullName, credId);
+                        "UPDATE \"admin_user\" SET \"role_id\" = ?, \"full_name\" = ?, \"assigned_zone_id\" = ?, \"updated_at\" = CURRENT_TIMESTAMP WHERE \"user_credential_id\" = ?",
+                        roleId, fullName, assignedZoneId, credId);
             }
         } catch (Exception e) {
             log.warn("Failed to seed admin user {}: {}", email, e.getMessage());
