@@ -12,7 +12,15 @@ public interface AdminPaymentService {
 
     CommissionConfigDto getCommissionRules();
 
+    default CommissionConfigDto getCommissionRules(String zoneId) {
+        return getCommissionRules();
+    }
+
     CommissionConfigDto updateCommissionRules(CommissionConfigDto config);
+
+    default CommissionConfigDto updateCommissionRules(String zoneId, CommissionConfigDto config) {
+        return updateCommissionRules(config);
+    }
 
     PaymentSplitBreakdownDto calculateSplit(BigDecimal foodSubtotal, BigDecimal deliveryFee);
 

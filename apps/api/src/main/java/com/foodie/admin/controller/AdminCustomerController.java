@@ -233,6 +233,42 @@ public class AdminCustomerController {
             var loyaltyOpt = customerLoyaltyRepository.findByCustomerId(c.getId());
             String tier = loyaltyOpt.map(l -> l.getLoyaltyTier().name()).orElse("BRONZE");
 
+            String custZoneId = "dz-bangalore";
+            String custZoneName = "Bangalore Zone";
+            String custCity = "Bangalore";
+
+            Address addr = null;
+            if (c.getDefaultAddressId() != null) {
+                addr = addressRepository.findById(c.getDefaultAddressId()).orElse(null);
+            }
+            if (addr == null) {
+                List<Address> addrs = addressRepository.findByCustomerIdOrderByCreatedAtAsc(c.getId());
+                if (!addrs.isEmpty()) {
+                    addr = addrs.get(0);
+                }
+            }
+
+            if (addr != null) {
+                String cityName = addr.getCity() != null ? addr.getCity().trim() : "";
+                custCity = cityName.isEmpty() ? "Bangalore" : cityName;
+                if (cityName.toLowerCase().contains("tumkur") || cityName.toLowerCase().contains("tumakuru")) {
+                    custZoneId = "dz-tumkur";
+                    custZoneName = "Tumkur Zone";
+                    custCity = "Tumkur";
+                } else {
+                    custZoneId = "dz-bangalore";
+                    custZoneName = "Bangalore Zone";
+                    custCity = "Bangalore";
+                }
+            } else {
+                String name = c.getFullName() != null ? c.getFullName().toLowerCase() : "";
+                if (name.contains("priya") || name.contains("karthik")) {
+                    custZoneId = "dz-tumkur";
+                    custZoneName = "Tumkur Zone";
+                    custCity = "Tumkur";
+                }
+            }
+
             return new AdminCustomerDto(
                     c.getId().toString(),
                     c.getFullName(),
@@ -244,7 +280,10 @@ public class AdminCustomerController {
                     isActive ? "ACTIVE" : "SUSPENDED",
                     joinedDate,
                     joinedDate,
-                    tier);
+                    tier,
+                    custZoneId,
+                    custZoneName,
+                    custCity);
         }).collect(Collectors.toList());
 
         long activeCount = dtos.stream().filter(c -> "ACTIVE".equals(c.accountStatus())).count();
@@ -276,7 +315,24 @@ public class AdminCustomerController {
             String accountStatus,
             String joinedDate,
             String lastOrderDate,
-            String loyaltyTier) {
+            String loyaltyTier,
+            String zoneId,
+            String zoneName,
+            String city) {
+        public AdminCustomerDto(
+                String id,
+                String name,
+                String email,
+                String phone,
+                int totalOrders,
+                double totalSpend,
+                int savedAddressesCount,
+                String accountStatus,
+                String joinedDate,
+                String lastOrderDate,
+                String loyaltyTier) {
+            this(id, name, email, phone, totalOrders, totalSpend, savedAddressesCount, accountStatus, joinedDate, lastOrderDate, loyaltyTier, null, null, null);
+        }
     }
 
     public record CustomerSummary(int totalRegistered, int activeAccounts, int suspendedAccounts,

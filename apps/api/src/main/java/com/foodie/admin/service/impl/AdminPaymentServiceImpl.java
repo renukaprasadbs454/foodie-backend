@@ -51,30 +51,57 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                 this.walletAccountRepository = walletAccountRepository;
         }
 
-        private final AtomicReference<CommissionConfigDto> activeConfig = new AtomicReference<>(
-                        new CommissionConfigDto(
-                                        new BigDecimal("15.00"),
-                                        new BigDecimal("10.00"),
-                                        new BigDecimal("40.00")));
+        private final java.util.concurrent.ConcurrentHashMap<String, CommissionConfigDto> zoneConfigs = new java.util.concurrent.ConcurrentHashMap<>();
+        private final CommissionConfigDto defaultConfig = new CommissionConfigDto(
+                        new BigDecimal("15.00"),
+                        new BigDecimal("10.00"),
+                        new BigDecimal("40.00"));
+
+        public static String resolveZoneKey(String zoneId) {
+                if (zoneId == null || zoneId.isBlank()) return "DEFAULT";
+                String clean = zoneId.trim().toLowerCase();
+                if (clean.equals("all")) return "DEFAULT";
+                if (clean.contains("tumkur") || clean.contains("tumakuru") || clean.contains("tmk")) return "dz-tumkur";
+                if (clean.contains("bangalore") || clean.contains("bengaluru") || clean.contains("blr")) return "dz-bangalore";
+                return clean;
+        }
 
         @Override
         public CommissionConfigDto getCommissionRules() {
-                return activeConfig.get();
+                return getCommissionRules(null);
+        }
+
+        @Override
+        public CommissionConfigDto getCommissionRules(String zoneId) {
+                String key = resolveZoneKey(zoneId);
+                if ("DEFAULT".equals(key)) {
+                        return zoneConfigs.getOrDefault("DEFAULT", defaultConfig);
+                }
+                return zoneConfigs.computeIfAbsent(key, k -> zoneConfigs.getOrDefault("DEFAULT", defaultConfig));
         }
 
         @Override
         public CommissionConfigDto updateCommissionRules(CommissionConfigDto config) {
+                return updateCommissionRules(null, config);
+        }
+
+        @Override
+        public CommissionConfigDto updateCommissionRules(String zoneId, CommissionConfigDto config) {
                 CommissionConfigDto updated = new CommissionConfigDto(
                                 config.restaurantCommissionRate().setScale(2, RoundingMode.HALF_UP),
                                 config.deliveryCommissionRate().setScale(2, RoundingMode.HALF_UP),
                                 config.platformFixedFee().setScale(2, RoundingMode.HALF_UP));
-                activeConfig.set(updated);
+                String key = resolveZoneKey(zoneId);
+                zoneConfigs.put(key, updated);
+                if ("DEFAULT".equals(key)) {
+                        zoneConfigs.put("DEFAULT", updated);
+                }
                 return updated;
         }
 
         @Override
         public PaymentSplitBreakdownDto calculateSplit(BigDecimal foodSubtotal, BigDecimal deliveryFee) {
-                CommissionConfigDto rules = activeConfig.get();
+                CommissionConfigDto rules = getCommissionRules();
 
                 BigDecimal food = foodSubtotal != null ? foodSubtotal : BigDecimal.ZERO;
                 BigDecimal delivery = deliveryFee != null ? deliveryFee : BigDecimal.ZERO;

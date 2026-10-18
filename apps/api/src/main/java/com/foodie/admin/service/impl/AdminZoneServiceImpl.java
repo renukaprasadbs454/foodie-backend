@@ -300,8 +300,9 @@ public class AdminZoneServiceImpl implements AdminZoneService {
         return v.equals(BANGALORE_ZONE_ID.toLowerCase())
                 || v.equals(BANGALORE_ZONE_NAME.toLowerCase())
                 || v.equals(BANGALORE_CITY.toLowerCase())
-                || v.equals("bengaluru")
-                || v.equals("bengaluru zone");
+                || v.contains("bangalore")
+                || v.contains("bengaluru")
+                || v.contains("blr");
     }
 
     private boolean isTumkurZone(String val) {
@@ -310,8 +311,9 @@ public class AdminZoneServiceImpl implements AdminZoneService {
         return v.equals(TUMKUR_ZONE_ID.toLowerCase())
                 || v.equals(TUMKUR_ZONE_NAME.toLowerCase())
                 || v.equals(TUMKUR_CITY.toLowerCase())
-                || v.equals("tumkur central")
-                || v.equals("tumkur zone 1");
+                || v.contains("tumkur")
+                || v.contains("tumakuru")
+                || v.contains("tmk");
     }
 
     @Override

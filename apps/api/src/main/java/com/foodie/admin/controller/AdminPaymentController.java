@@ -384,16 +384,34 @@ public class AdminPaymentController {
     @GetMapping("/commission-rules")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Get active commission and platform fee rules")
-    public ResponseEntity<ApiResponse<CommissionConfigDto>> getCommissionRules() {
-        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.getCommissionRules()));
+    public ResponseEntity<ApiResponse<CommissionConfigDto>> getCommissionRules(
+            org.springframework.security.core.Authentication authentication,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.getCommissionRules(activeZoneId)));
     }
 
     @PostMapping("/commission-rules")
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Update active commission and platform fee rules")
     public ResponseEntity<ApiResponse<CommissionConfigDto>> updateCommissionRules(
+            org.springframework.security.core.Authentication authentication,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam,
             @Valid @RequestBody CommissionConfigDto config) {
-        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.updateCommissionRules(config)));
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = adminAccess != null
+                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                : requestedZoneId;
+        return ResponseEntity.ok(ApiResponse.success(adminPaymentService.updateCommissionRules(activeZoneId, config)));
     }
 
     @PostMapping("/calculate-split")

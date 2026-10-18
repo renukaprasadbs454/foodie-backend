@@ -51,6 +51,8 @@ public class LocationZoneController {
     private final ConcurrentHashMap<String, UnserviceableRequestDto> unserviceableRequests = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ServiceAreaDto> serviceAreas = new ConcurrentHashMap<>();
 
+    private final ConcurrentHashMap<String, DeliveryChargesDto> zoneDeliveryCharges = new ConcurrentHashMap<>();
+
     private DeliveryChargesDto deliveryCharges = new DeliveryChargesDto(
             new BigDecimal("35.00"),
             new BigDecimal("3.00"),
@@ -59,6 +61,15 @@ public class LocationZoneController {
             new BigDecimal("25.00"),
             new BigDecimal("1.15")
     );
+
+    public static String resolveZoneKey(String zoneId) {
+        if (zoneId == null || zoneId.isBlank()) return "DEFAULT";
+        String clean = zoneId.trim().toLowerCase();
+        if (clean.equals("all")) return "DEFAULT";
+        if (clean.contains("tumkur") || clean.contains("tumakuru") || clean.contains("tmk")) return "dz-tumkur";
+        if (clean.contains("bangalore") || clean.contains("bengaluru") || clean.contains("blr")) return "dz-bangalore";
+        return clean;
+    }
 
     private RadiusSettingsDto radiusSettings = new RadiusSettingsDto(
             new BigDecimal("15.00"),
@@ -566,14 +577,58 @@ public class LocationZoneController {
     }
 
     @GetMapping("/delivery-charges")
-    public ResponseEntity<ApiResponse<DeliveryChargesDto>> getDeliveryCharges() {
-        return ResponseEntity.ok(ApiResponse.success(deliveryCharges));
+    public ResponseEntity<ApiResponse<DeliveryChargesDto>> getDeliveryCharges(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = null;
+        try {
+            if (adminAccess != null && authentication != null) {
+                activeZoneId = adminAccess.resolveAuthorizedZone(authentication, requestedZoneId);
+            } else {
+                activeZoneId = requestedZoneId;
+            }
+        } catch (Exception e) {
+            activeZoneId = requestedZoneId;
+        }
+
+        String key = resolveZoneKey(activeZoneId);
+        DeliveryChargesDto dto = zoneDeliveryCharges.get(key);
+        if (dto == null) {
+            dto = zoneDeliveryCharges.getOrDefault("DEFAULT", deliveryCharges);
+        }
+        return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
     @PutMapping("/delivery-charges")
-    public ResponseEntity<ApiResponse<DeliveryChargesDto>> updateDeliveryCharges(@RequestBody DeliveryChargesDto dto) {
-        this.deliveryCharges = dto;
-        return ResponseEntity.ok(ApiResponse.success(this.deliveryCharges));
+    public ResponseEntity<ApiResponse<DeliveryChargesDto>> updateDeliveryCharges(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam,
+            @RequestBody DeliveryChargesDto dto) {
+        String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                ? activeZoneHeader.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+        String activeZoneId = null;
+        try {
+            if (adminAccess != null && authentication != null) {
+                activeZoneId = adminAccess.resolveAuthorizedZone(authentication, requestedZoneId);
+            } else {
+                activeZoneId = requestedZoneId;
+            }
+        } catch (Exception e) {
+            activeZoneId = requestedZoneId;
+        }
+
+        String key = resolveZoneKey(activeZoneId);
+        zoneDeliveryCharges.put(key, dto);
+        if ("DEFAULT".equals(key)) {
+            this.deliveryCharges = dto;
+        }
+        return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
     @GetMapping("/radius-settings")
