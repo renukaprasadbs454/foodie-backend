@@ -1130,37 +1130,10 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     private List<LocationZone> getOrInitActiveZones() {
-        List<LocationZone> zones = locationZoneRepository.findAll();
-        if (zones.isEmpty()) {
-            LocationZone bgl = new LocationZone();
-            bgl.setId("dz-bangalore");
-            bgl.setZoneName("Bangalore Zone");
-            bgl.setCityName("Bangalore");
-            bgl.setLatitude(12.9716);
-            bgl.setLongitude(77.5946);
-            bgl.setRadiusKm(25.0);
-            bgl.setStatus("ACTIVE");
-            bgl.setRestaurantEnabled(true);
-            bgl.setDeliveryPartnerEnabled(true);
-            bgl.setCustomerOrderingEnabled(true);
-            locationZoneRepository.saveAndFlush(bgl);
-
-            LocationZone tmk = new LocationZone();
-            tmk.setId("dz-tumkur");
-            tmk.setZoneName("Tumkur Zone");
-            tmk.setCityName("Tumkur");
-            tmk.setLatitude(13.3379);
-            tmk.setLongitude(77.1173);
-            tmk.setRadiusKm(20.0);
-            tmk.setStatus("ACTIVE");
-            tmk.setRestaurantEnabled(true);
-            tmk.setDeliveryPartnerEnabled(true);
-            tmk.setCustomerOrderingEnabled(true);
-            locationZoneRepository.saveAndFlush(tmk);
-
-            zones = locationZoneRepository.findAll();
-        }
-        return zones;
+        return locationZoneRepository.findAll().stream()
+                .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
+                .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     private LocationZone findActiveZoneForCoordinates(Double lat, Double lng) {

@@ -116,10 +116,9 @@ public class LocationZoneController {
             cityRepository.saveAndFlush(cTmk);
         }
 
-        // Ensure canonical approved operating zones exist and are ACTIVE
-        LocationZone bgl = zoneRepository.findById("dz-bangalore").orElse(null);
-        if (bgl == null) {
-            bgl = new LocationZone();
+        // Only seed canonical default zones if no zones exist in the database at all (initial fresh install)
+        if (zoneRepository.count() == 0 && cityRepository.count() <= 4) {
+            LocationZone bgl = new LocationZone();
             bgl.setId("dz-bangalore");
             bgl.setZoneName("Bangalore Zone");
             bgl.setCityName("Bangalore");
@@ -134,16 +133,8 @@ public class LocationZoneController {
             bgl.setDeliveryPartnerEnabled(true);
             bgl.setCustomerOrderingEnabled(true);
             zoneRepository.saveAndFlush(bgl);
-        } else if (!"ACTIVE".equalsIgnoreCase(bgl.getStatus()) || !"Bangalore Zone".equals(bgl.getZoneName())) {
-            bgl.setZoneName("Bangalore Zone");
-            bgl.setCityName("Bangalore");
-            bgl.setStatus("ACTIVE");
-            zoneRepository.saveAndFlush(bgl);
-        }
 
-        LocationZone tmk = zoneRepository.findById("dz-tumkur").orElse(null);
-        if (tmk == null) {
-            tmk = new LocationZone();
+            LocationZone tmk = new LocationZone();
             tmk.setId("dz-tumkur");
             tmk.setZoneName("Tumkur Zone");
             tmk.setCityName("Tumkur");
@@ -157,11 +148,6 @@ public class LocationZoneController {
             tmk.setRestaurantEnabled(true);
             tmk.setDeliveryPartnerEnabled(true);
             tmk.setCustomerOrderingEnabled(true);
-            zoneRepository.saveAndFlush(tmk);
-        } else if (!"ACTIVE".equalsIgnoreCase(tmk.getStatus()) || !"Tumkur Zone".equals(tmk.getZoneName())) {
-            tmk.setZoneName("Tumkur Zone");
-            tmk.setCityName("Tumkur");
-            tmk.setStatus("ACTIVE");
             zoneRepository.saveAndFlush(tmk);
         }
 
@@ -192,6 +178,7 @@ public class LocationZoneController {
     @GetMapping("/zones")
     public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
         List<LocationZoneDto> dtos = zoneRepository.findAll().stream()
+                .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
                 .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
                 .map(this::mapToDto)
                 .collect(Collectors.toList());

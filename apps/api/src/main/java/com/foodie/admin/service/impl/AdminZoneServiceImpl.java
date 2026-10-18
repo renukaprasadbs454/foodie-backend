@@ -67,86 +67,28 @@ public class AdminZoneServiceImpl implements AdminZoneService {
     public List<ActiveOperatingZoneDto> getAvailableZones(UUID userCredentialId) {
         List<LocationZone> allZones = locationZoneRepository.findAll();
 
-        // 1. Locate canonical or best matching record for Bangalore Zone
-        LocationZone bgl = allZones.stream()
-                .filter(z -> BANGALORE_ZONE_ID.equalsIgnoreCase(z.getId())
-                        || BANGALORE_ZONE_NAME.equalsIgnoreCase(z.getZoneName()))
-                .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
-                .findFirst()
-                .orElse(null);
-
-        if (bgl == null) {
-            bgl = locationZoneRepository.findById(BANGALORE_ZONE_ID).orElseGet(this::createDefaultBangaloreZone);
-        }
-
-        // 2. Locate canonical or best matching record for Tumkur Zone
-        LocationZone tmk = allZones.stream()
-                .filter(z -> TUMKUR_ZONE_ID.equalsIgnoreCase(z.getId())
-                        || TUMKUR_ZONE_NAME.equalsIgnoreCase(z.getZoneName()))
-                .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
-                .findFirst()
-                .orElse(null);
-
-        if (tmk == null) {
-            tmk = locationZoneRepository.findById(TUMKUR_ZONE_ID).orElseGet(this::createDefaultTumkurZone);
-        }
-
-        // Map strictly to the two approved operating zones:
-        // 1. Bangalore Zone — Bangalore
-        // 2. Tumkur Zone — Tumkur
-        List<ActiveOperatingZoneDto> result = new java.util.ArrayList<>(2);
-        result.add(new ActiveOperatingZoneDto(
-                bgl.getId() != null ? bgl.getId() : BANGALORE_ZONE_ID,
-                BANGALORE_ZONE_NAME,
-                BANGALORE_CITY,
-                bgl.getLatitude() != null ? bgl.getLatitude() : 12.9716,
-                bgl.getLongitude() != null ? bgl.getLongitude() : 77.5946,
-                bgl.getRadiusKm() != null ? bgl.getRadiusKm() : 25.0,
-                "ACTIVE",
-                bgl.isRestaurantEnabled(),
-                bgl.isDeliveryPartnerEnabled(),
-                bgl.isCustomerOrderingEnabled(),
-                bgl.getActiveDrivers() > 0 ? bgl.getActiveDrivers() : 45
-        ));
-
-        result.add(new ActiveOperatingZoneDto(
-                tmk.getId() != null ? tmk.getId() : TUMKUR_ZONE_ID,
-                TUMKUR_ZONE_NAME,
-                TUMKUR_CITY,
-                tmk.getLatitude() != null ? tmk.getLatitude() : 13.3379,
-                tmk.getLongitude() != null ? tmk.getLongitude() : 77.1173,
-                tmk.getRadiusKm() != null ? tmk.getRadiusKm() : 20.0,
-                "ACTIVE",
-                tmk.isRestaurantEnabled(),
-                tmk.isDeliveryPartnerEnabled(),
-                tmk.isCustomerOrderingEnabled(),
-                tmk.getActiveDrivers() > 0 ? tmk.getActiveDrivers() : 22
-        ));
-
-        // Dynamic active zones created by Super Admin
+        List<ActiveOperatingZoneDto> result = new java.util.ArrayList<>();
         for (LocationZone z : allZones) {
-            if (z.getId() == null) continue;
-            if (BANGALORE_ZONE_ID.equalsIgnoreCase(z.getId()) || TUMKUR_ZONE_ID.equalsIgnoreCase(z.getId())) {
-                continue;
-            }
-            if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
-                result.add(new ActiveOperatingZoneDto(
-                        z.getId(),
-                        z.getZoneName() != null ? z.getZoneName() : z.getId(),
-                        z.getCityName() != null ? z.getCityName() : "Karnataka",
-                        z.getLatitude() != null ? z.getLatitude() : 12.9716,
-                        z.getLongitude() != null ? z.getLongitude() : 77.5946,
-                        z.getRadiusKm() != null ? z.getRadiusKm() : 15.0,
-                        "ACTIVE",
-                        z.isRestaurantEnabled(),
-                        z.isDeliveryPartnerEnabled(),
-                        z.isCustomerOrderingEnabled(),
-                        z.getActiveDrivers() > 0 ? z.getActiveDrivers() : 10
-                ));
-            }
+            if (z == null || z.getId() == null) continue;
+            if ("DELETED".equalsIgnoreCase(z.getStatus())) continue;
+            if (!"ACTIVE".equalsIgnoreCase(z.getStatus())) continue;
+
+            result.add(new ActiveOperatingZoneDto(
+                    z.getId(),
+                    z.getZoneName() != null ? z.getZoneName() : z.getId(),
+                    z.getCityName() != null ? z.getCityName() : "Karnataka",
+                    z.getLatitude() != null ? z.getLatitude() : 12.9716,
+                    z.getLongitude() != null ? z.getLongitude() : 77.5946,
+                    z.getRadiusKm() != null ? z.getRadiusKm() : 15.0,
+                    "ACTIVE",
+                    z.isRestaurantEnabled(),
+                    z.isDeliveryPartnerEnabled(),
+                    z.isCustomerOrderingEnabled(),
+                    z.getActiveDrivers() > 0 ? z.getActiveDrivers() : 10
+            ));
         }
 
-        // Keep alphabetical order: Bangalore Zone, then Tumkur Zone, then newly created
+        // Keep alphabetical order
         result.sort(Comparator.comparing(ActiveOperatingZoneDto::zoneName, String.CASE_INSENSITIVE_ORDER));
 
         if (userCredentialId != null) {
@@ -335,27 +277,19 @@ public class AdminZoneServiceImpl implements AdminZoneService {
         }
 
         if (zone == null) {
-            // Check if matches approved zone alias or name
             if (isBangaloreZone(cleanId)) {
-                zone = locationZoneRepository.findById(BANGALORE_ZONE_ID)
-                        .orElseGet(this::createDefaultBangaloreZone);
+                zone = locationZoneRepository.findById(BANGALORE_ZONE_ID).orElse(null);
             } else if (isTumkurZone(cleanId)) {
-                zone = locationZoneRepository.findById(TUMKUR_ZONE_ID)
-                        .orElseGet(this::createDefaultTumkurZone);
-            } else {
-                throw new ResourceNotFoundException("Zone not found: " + zoneId);
+                zone = locationZoneRepository.findById(TUMKUR_ZONE_ID).orElse(null);
             }
         }
 
-        if (!"ACTIVE".equalsIgnoreCase(zone.getStatus())) {
-            throw new ForbiddenException("Zone '" + zone.getZoneName() + "' is currently INACTIVE.");
+        if (zone == null) {
+            throw new ResourceNotFoundException("Zone not found: " + zoneId);
         }
 
-        // Validate that the active zone is one of the two approved operating zones
-        if (!isBangaloreZone(zone.getId()) && !isBangaloreZone(zone.getZoneName())
-                && !isTumkurZone(zone.getId()) && !isTumkurZone(zone.getZoneName())) {
-            throw new ForbiddenException("Invalid operating zone: '" + zone.getZoneName()
-                    + "'. Only Bangalore Zone and Tumkur Zone are approved operating zones.");
+        if (!"ACTIVE".equalsIgnoreCase(zone.getStatus()) || "DELETED".equalsIgnoreCase(zone.getStatus())) {
+            throw new ForbiddenException("Zone '" + zone.getZoneName() + "' is currently INACTIVE or DELETED.");
         }
 
         return zone;
