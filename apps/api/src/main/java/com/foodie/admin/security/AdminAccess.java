@@ -69,9 +69,10 @@ public class AdminAccess {
         String a = zoneA.trim().toLowerCase();
         String b = zoneB.trim().toLowerCase();
         if (a.equals(b)) return true;
-        if ((a.contains("bangalore") || a.contains("bengaluru")) && (b.contains("bangalore") || b.contains("bengaluru"))) return true;
-        if ((a.contains("tumkur") || a.contains("tumakuru")) && (b.contains("tumkur") || b.contains("tumakuru"))) return true;
-        return false;
+        if ((a.contains("bangalore") || a.contains("bengaluru") || a.contains("blr")) && (b.contains("bangalore") || b.contains("bengaluru") || b.contains("blr"))) return true;
+        if ((a.contains("tumkur") || a.contains("tumakuru") || a.contains("tmk")) && (b.contains("tumkur") || b.contains("tumakuru") || b.contains("tmk"))) return true;
+        if ((a.contains("mysore") || a.contains("mysuru") || a.contains("myq")) && (b.contains("mysore") || b.contains("mysuru") || b.contains("myq"))) return true;
+        return a.contains(b) || b.contains(a);
     }
 
     public boolean canAccessZone(Authentication authentication, String zoneId) {

@@ -45,6 +45,9 @@ public class LocationZoneController {
     @Autowired(required = false)
     private RestaurantAddressRepository restaurantAddressRepository;
 
+    @Autowired(required = false)
+    private com.foodie.admin.security.AdminAccess adminAccess;
+
     private final ConcurrentHashMap<String, UnserviceableRequestDto> unserviceableRequests = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ServiceAreaDto> serviceAreas = new ConcurrentHashMap<>();
 
@@ -176,10 +179,32 @@ public class LocationZoneController {
     }
 
     @GetMapping("/zones")
-    public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones() {
+    public ResponseEntity<ApiResponse<List<LocationZoneDto>>> getAllZones(
+            org.springframework.security.core.Authentication authentication,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String requestedZoneId) {
+        String authorizedZone = null;
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
+            try {
+                authorizedZone = adminAccess.resolveAuthorizedZone(authentication, requestedZoneId);
+            } catch (Exception e) {
+                // Fallback for public or unauthenticated requests
+            }
+        }
+        final String effectiveZone = authorizedZone;
         List<LocationZoneDto> dtos = zoneRepository.findAll().stream()
                 .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
                 .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
+                .filter(z -> {
+                    if (effectiveZone == null || effectiveZone.isBlank() || effectiveZone.equalsIgnoreCase("ALL")) {
+                        return true;
+                    }
+                    String zId = z.getId() != null ? z.getId() : "";
+                    String zName = z.getZoneName() != null ? z.getZoneName() : "";
+                    String zCity = z.getCityName() != null ? z.getCityName() : "";
+                    return com.foodie.admin.security.AdminAccess.areZonesEquivalent(zId, effectiveZone) ||
+                           com.foodie.admin.security.AdminAccess.areZonesEquivalent(zName, effectiveZone) ||
+                           com.foodie.admin.security.AdminAccess.areZonesEquivalent(zCity, effectiveZone);
+                })
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(dtos));
@@ -187,7 +212,16 @@ public class LocationZoneController {
 
     @PostMapping("/zones")
     @Transactional
-    public ResponseEntity<ApiResponse<LocationZoneDto>> createZone(@RequestBody LocationZoneDto dto) {
+    public ResponseEntity<ApiResponse<LocationZoneDto>> createZone(
+            @RequestBody LocationZoneDto dto,
+            org.springframework.security.core.Authentication authentication) {
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
+                throw new com.foodie.common.exception.ForbiddenException("Zone creation is strictly reserved for Super Administrators.");
+            }
+        }
+
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("dz-" + UUID.randomUUID().toString().substring(0, 6));
         }
@@ -214,9 +248,16 @@ public class LocationZoneController {
     @Transactional
     public ResponseEntity<ApiResponse<LocationZoneDto>> updateZoneToggles(
             @PathVariable String zoneId,
+            org.springframework.security.core.Authentication authentication,
             @RequestParam(required = false) Boolean restaurantEnabled,
             @RequestParam(required = false) Boolean deliveryPartnerEnabled,
             @RequestParam(required = false) Boolean customerOrderingEnabled) {
+
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
+            if (!adminAccess.canAccessZone(authentication, zoneId)) {
+                throw new com.foodie.common.exception.ForbiddenException("Cannot modify switches for a foreign zone.");
+            }
+        }
 
         LocationZone zone = zoneRepository.findById(zoneId).orElse(null);
         if (zone == null) {
@@ -252,7 +293,16 @@ public class LocationZoneController {
 
     @DeleteMapping("/zones/{zoneId}")
     @Transactional
-    public ResponseEntity<ApiResponse<Boolean>> deleteZone(@PathVariable String zoneId) {
+    public ResponseEntity<ApiResponse<Boolean>> deleteZone(
+            @PathVariable String zoneId,
+            org.springframework.security.core.Authentication authentication) {
+        if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
+            com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
+                throw new com.foodie.common.exception.ForbiddenException("Zone deletion is strictly reserved for Super Administrators.");
+            }
+        }
+
         String zIdLower = zoneId.trim().toLowerCase();
         List<LocationZone> toDelete = zoneRepository.findAll().stream()
                 .filter(z -> z.getId().equalsIgnoreCase(zoneId) ||
