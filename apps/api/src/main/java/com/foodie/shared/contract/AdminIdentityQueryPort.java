@@ -14,4 +14,9 @@ public interface AdminIdentityQueryPort {
 
     /** Resolves admin_user.id from user_credential.id */
     Optional<UUID> findAdminUserIdByUserCredentialId(UUID userCredentialId);
+
+    /** Resolves assigned_zone_id if configured on admin_user. */
+    default Optional<String> findAssignedZoneIdByUserCredentialId(UUID userCredentialId) {
+        return Optional.empty();
+    }
 }

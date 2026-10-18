@@ -608,6 +608,20 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .map(a -> a.getDeliveryPartner().getId())
                 .toList();
 
+        // Strict Zone Isolation: Resolve order operating zone from restaurant coordinates
+        LocationZone orderZone = null;
+        try {
+            List<LocationZone> allZones = locationZoneRepository.findAll();
+            for (LocationZone z : allZones) {
+                if ("ACTIVE".equalsIgnoreCase(z.getStatus()) && isPointInsideZone(restaurantLat, restaurantLng, z)) {
+                    orderZone = z;
+                    break;
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed resolving order operating zone: {}", ex.getMessage());
+        }
+
         // Get partner ID that previously was offered this assignment
         UUID previousPartnerId = existingAssignmentOpt.map(a -> a.getDeliveryPartner().getId()).orElse(null);
 
@@ -623,6 +637,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                         && candidate.get().isOnline()
                         && candidate.get().getKycStatus() == KycStatus.VERIFIED
                         && !candidate.get().isCashLimitExceeded()) {
+                    DeliveryPartner p = candidate.get();
+                    if (orderZone != null && p.getZoneId() != null && !p.getZoneId().isBlank()) {
+                        if (!orderZone.getId().equalsIgnoreCase(p.getZoneId().trim())) {
+                            continue; // Partner selected a different zone in KYC form
+                        }
+                    }
                     selectedPartner = candidate;
                     selectedDistance = hit.distanceKm();
                     break;
@@ -633,7 +653,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         // Fallback: If no strict nearby unassigned partner found, pick any online
-        // verified partner not busy (ordered by most recently active)
+        // verified partner not busy in matching zone (ordered by most recently active)
         if (selectedPartner.isEmpty()) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
             log.info(
@@ -647,6 +667,11 @@ public class DeliveryServiceImpl implements DeliveryService {
                         && !candidate.isCashLimitExceeded()
                         && !busyPartnerIds.contains(candidate.getId())
                         && !candidate.getId().equals(previousPartnerId)) {
+                    if (orderZone != null && candidate.getZoneId() != null && !candidate.getZoneId().isBlank()) {
+                        if (!orderZone.getId().equalsIgnoreCase(candidate.getZoneId().trim())) {
+                            continue; // Partner selected a different zone in KYC form
+                        }
+                    }
                     selectedPartner = Optional.of(candidate);
                     selectedDistance = 2.5;
                     break;

@@ -63,6 +63,9 @@ public class AuthServiceImpl implements AuthService {
     private final ApplicationEventPublisher eventPublisher;
     private final AdminIdentityQueryPort adminIdentityQueryPort;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.repository.LocationZoneRepository locationZoneRepository;
+
     public AuthServiceImpl(
             UserCredentialRepository userCredentialRepository,
             RefreshTokenRepository refreshTokenRepository,
@@ -417,6 +420,17 @@ public class AuthServiceImpl implements AuthService {
             }
         }
 
+        String assignedZoneId = null;
+        String assignedZoneName = null;
+        if (credential.getUserType() == UserType.ADMIN) {
+            assignedZoneId = adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(credential.getId()).orElse(null);
+            if (assignedZoneId != null && locationZoneRepository != null) {
+                assignedZoneName = locationZoneRepository.findById(assignedZoneId)
+                        .map(com.foodie.admin.entity.LocationZone::getZoneName)
+                        .orElse(assignedZoneId);
+            }
+        }
+
         return new TokenPairResponseDto(
                 accessToken,
                 refreshRaw,
@@ -424,7 +438,9 @@ public class AuthServiceImpl implements AuthService {
                 credential.getUserType(),
                 isNewUser,
                 credential.getId(),
-                role);
+                role,
+                assignedZoneId,
+                assignedZoneName);
     }
 
     private void assertActive(UserCredential credential) {

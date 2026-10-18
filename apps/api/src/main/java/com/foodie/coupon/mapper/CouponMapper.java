@@ -52,7 +52,8 @@ public final class CouponMapper {
                 coupon.getUsageLimitTotal(),
                 coupon.getUsageLimitPerUser(),
                 coupon.getRestaurantId(),
-                coupon.isActive());
+                coupon.isActive(),
+                coupon.getZoneId());
     }
 
     public static BigDecimal scaleMoney(BigDecimal amount) {

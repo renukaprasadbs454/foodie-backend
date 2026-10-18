@@ -66,17 +66,22 @@ public class AdminCouponController {
                                 : requestedZoneId;
 
                 var list = couponRepository.findAll();
-                if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL") && adminZoneService != null && restaurantRepository != null) {
-                        com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(activeZoneId);
+                if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+                        com.foodie.admin.entity.LocationZone zone = adminZoneService != null ? adminZoneService.validateZone(activeZoneId) : null;
                         list = list.stream().filter(c -> {
-                                if (c.getRestaurantId() == null) return true; // platform coupon
-                                var r = restaurantRepository.findById(c.getRestaurantId()).orElse(null);
-                                if (r == null) return false;
-                                return adminZoneService.isLocationInZone(
-                                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
-                                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
-                                                null,
-                                                zone);
+                                if (c.getZoneId() != null && !c.getZoneId().isBlank()) {
+                                        return c.getZoneId().trim().equalsIgnoreCase(activeZoneId.trim());
+                                }
+                                if (c.getRestaurantId() != null && restaurantRepository != null && adminZoneService != null && zone != null) {
+                                        var r = restaurantRepository.findById(c.getRestaurantId()).orElse(null);
+                                        if (r == null) return false;
+                                        return adminZoneService.isLocationInZone(
+                                                        r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                                        r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                                        null,
+                                                        zone);
+                                }
+                                return false; // Zone admin only sees their particular zone coupons
                         }).toList();
                 }
 
@@ -86,12 +91,53 @@ public class AdminCouponController {
                                                 .collect(Collectors.toList())));
         }
 
+        private void assertCouponInZone(org.springframework.security.core.Authentication authentication, UUID couponId, String activeZoneHeader) {
+                String effectiveZone = activeZoneHeader;
+                if (adminAccess != null && authentication != null && authentication.isAuthenticated()
+                                && authentication.getPrincipal() instanceof com.foodie.security.principal.AuthPrincipal) {
+                        com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+                        if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                                        && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                                effectiveZone = admin.getAssignedZoneId();
+                        }
+                }
+                if (effectiveZone == null || effectiveZone.isBlank() || effectiveZone.equalsIgnoreCase("ALL")) {
+                        return;
+                }
+                var c = couponRepository.findById(couponId).orElse(null);
+                if (c != null && c.getZoneId() != null && !c.getZoneId().isBlank()) {
+                        if (!c.getZoneId().trim().equalsIgnoreCase(effectiveZone.trim())) {
+                                throw new com.foodie.common.exception.ForbiddenException("Cross-zone access denied: Coupon belongs to zone " + c.getZoneId());
+                        }
+                }
+        }
+
         @PostMapping
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Create a coupon")
         public ResponseEntity<ApiResponse<CouponResponseDto>> create(
+                        org.springframework.security.core.Authentication authentication,
                         @AuthenticationPrincipal AuthPrincipal principal,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @Valid @RequestBody CreateCouponRequestDto request) {
+                String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
+                                ? activeZoneHeader.trim()
+                                : (request.getZoneId() != null && !request.getZoneId().isBlank() ? request.getZoneId().trim() : null);
+
+                String activeZoneId = adminAccess != null
+                                ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
+                                : requestedZoneId;
+
+                if (adminAccess != null && authentication != null) {
+                        com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
+                        if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                                        && admin.getAssignedZoneId() != null && !admin.getAssignedZoneId().isBlank()) {
+                                request.setZoneId(admin.getAssignedZoneId());
+                        } else if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+                                request.setZoneId(activeZoneId);
+                        }
+                }
+
                 return ResponseEntity.status(HttpStatus.CREATED)
                                 .body(ApiResponse.success(
                                                 adminOperationsService.createCoupon(principal.userId(), request)));
@@ -101,8 +147,11 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Deactivate a coupon")
         public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> deactivate(
+                        org.springframework.security.core.Authentication authentication,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable("id") UUID couponId) {
+                assertCouponInZone(authentication, couponId, activeZoneHeader);
                 return ResponseEntity.ok(ApiResponse.success(
                                 adminOperationsService.deactivateCoupon(principal.userId(), couponId)));
         }
@@ -111,8 +160,11 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Activate a coupon")
         public ResponseEntity<ApiResponse<DeactivateCouponResponseDto>> activate(
+                        org.springframework.security.core.Authentication authentication,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable("id") UUID couponId) {
+                assertCouponInZone(authentication, couponId, activeZoneHeader);
                 return ResponseEntity.ok(ApiResponse.success(
                                 adminOperationsService.activateCoupon(principal.userId(), couponId)));
         }
@@ -121,8 +173,11 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Approve a pending restaurant campaign")
         public ResponseEntity<ApiResponse<CouponResponseDto>> approve(
+                        org.springframework.security.core.Authentication authentication,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable("id") UUID couponId) {
+                assertCouponInZone(authentication, couponId, activeZoneHeader);
                 return ResponseEntity.ok(ApiResponse.success(
                                 adminOperationsService.approveCoupon(principal.userId(), couponId)));
         }
@@ -131,8 +186,11 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
         @Operation(summary = "Reject a pending restaurant campaign")
         public ResponseEntity<ApiResponse<CouponResponseDto>> reject(
+                        org.springframework.security.core.Authentication authentication,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable("id") UUID couponId) {
+                assertCouponInZone(authentication, couponId, activeZoneHeader);
                 return ResponseEntity.ok(ApiResponse.success(
                                 adminOperationsService.rejectCoupon(principal.userId(), couponId)));
         }
@@ -141,8 +199,11 @@ public class AdminCouponController {
         @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN', 'OPS', 'FINANCE')")
         @Operation(summary = "Delete a coupon permanently")
         public ResponseEntity<ApiResponse<Boolean>> deleteCoupon(
+                        org.springframework.security.core.Authentication authentication,
+                        @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
                         @AuthenticationPrincipal AuthPrincipal principal,
                         @PathVariable("id") UUID couponId) {
+                assertCouponInZone(authentication, couponId, activeZoneHeader);
                 return ResponseEntity.ok(ApiResponse.success(
                                 adminOperationsService.deleteCoupon(principal.userId(), couponId)));
         }

@@ -64,6 +64,12 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         this.orderRepository = orderRepository;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
     @Override
     @Transactional(readOnly = true)
     public List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal) {
@@ -72,6 +78,20 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, now, Coupon.ApprovalStatus.APPROVED);
         List<CouponView> eligible = new ArrayList<>();
         for (Coupon coupon : candidates) {
+            if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null && adminZoneService != null) {
+                try {
+                    com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(coupon.getZoneId().trim());
+                    var r = restaurantRepository.findById(restaurantId).orElse(null);
+                    if (r != null) {
+                        Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
+                        Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
+                        String city = r.getAddress() != null ? r.getAddress().getCity() : null;
+                        if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                            continue; // Skip coupon since restaurant is outside coupon zone
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
             if (isWithinUsageLimits(coupon, customerId)) {
                 eligibilityCache.markEligible(coupon.getId(), customerId);
                 eligible.add(CouponMapper.toView(coupon));
@@ -188,6 +208,9 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                 request.getUsageLimitTotal(),
                 request.getUsageLimitPerUser(),
                 request.getRestaurantId());
+        if (request.getZoneId() != null && !request.getZoneId().isBlank()) {
+            coupon.setZoneId(request.getZoneId().trim());
+        }
         try {
             coupon = couponRepository.save(coupon);
         } catch (DataIntegrityViolationException ex) {
@@ -270,6 +293,20 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
             throw new UnprocessableEntityException(
                     ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
                     "Coupon is not applicable to this restaurant.");
+        }
+        if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null && adminZoneService != null) {
+            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(coupon.getZoneId().trim());
+            var r = restaurantRepository.findById(restaurantId).orElse(null);
+            if (r != null) {
+                Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
+                Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
+                String city = r.getAddress() != null ? r.getAddress().getCity() : null;
+                if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                    throw new UnprocessableEntityException(
+                            ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
+                            "Coupon is only applicable to restaurants in zone: " + zone.getZoneName());
+                }
+            }
         }
         if (cartTotal != null && cartTotal.compareTo(coupon.getMinOrderAmount()) < 0) {
             throw new UnprocessableEntityException(

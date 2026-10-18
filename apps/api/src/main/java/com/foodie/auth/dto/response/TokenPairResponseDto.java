@@ -16,6 +16,18 @@ public record TokenPairResponseDto(
          * Admin role name when {@code userType=ADMIN}; null for other user types.
          * Binding values: SUPER_ADMIN, OPS, FINANCE, SUPPORT.
          */
-        String role
+        String role,
+        String assignedZoneId,
+        String assignedZoneName
 ) {
+    public TokenPairResponseDto(
+            String accessToken,
+            String refreshToken,
+            long expiresIn,
+            UserType userType,
+            boolean isNewUser,
+            UUID userId,
+            String role) {
+        this(accessToken, refreshToken, expiresIn, userType, isNewUser, userId, role, null, null);
+    }
 }

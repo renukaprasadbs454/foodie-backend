@@ -54,6 +54,8 @@ public class CreateCouponRequestDto {
 
     private UUID restaurantId;
 
+    private String zoneId;
+
     public CreateCouponRequestDto() {
     }
 
@@ -177,5 +179,13 @@ public class CreateCouponRequestDto {
 
     public void setRestaurantId(UUID restaurantId) {
         this.restaurantId = restaurantId;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
     }
 }

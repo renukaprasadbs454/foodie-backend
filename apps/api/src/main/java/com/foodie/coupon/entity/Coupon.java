@@ -87,6 +87,9 @@ public class Coupon extends BaseEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -224,6 +227,14 @@ public class Coupon extends BaseEntity {
 
     public Long getVersion() {
         return version;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
     }
 
     public Instant getDeletedAt() {
