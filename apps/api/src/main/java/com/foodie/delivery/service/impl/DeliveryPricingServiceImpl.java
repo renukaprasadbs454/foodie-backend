@@ -52,28 +52,56 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
         DeliveryPricingConfig config = getOrCreateConfig();
 
         UUID adminUserId = actorCredentialId;
+        String actorRole = null;
+        String actorZoneId = null;
         if (adminIdentityQueryPort != null && actorCredentialId != null) {
             adminUserId = adminIdentityQueryPort.findAdminUserIdByUserCredentialId(actorCredentialId)
                     .orElse(actorCredentialId);
+            actorRole = adminIdentityQueryPort.findRoleNameByUserCredentialId(actorCredentialId).orElse(null);
+            actorZoneId = adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(actorCredentialId).orElse(null);
         }
+
+        boolean isZoneAdmin = (actorRole != null && !"SUPER_ADMIN".equalsIgnoreCase(actorRole) && actorZoneId != null && !actorZoneId.isBlank())
+                || "ZONE".equalsIgnoreCase(request.pricingBasis());
 
         String pricingBasis = request.pricingBasis() != null && !request.pricingBasis().isBlank()
                 ? request.pricingBasis()
-                : config.getPricingBasis();
+                : (isZoneAdmin ? "ZONE" : config.getPricingBasis());
 
         String configDataJson = request.configData();
         if ((configDataJson == null || configDataJson.isBlank())
                 && (request.universalConfig() != null || request.zoneConfigs() != null || request.zones() != null)) {
             try {
                 Map<String, Object> payload = new HashMap<>();
+                if (config.getConfigData() != null && !config.getConfigData().isBlank()) {
+                    try {
+                        Map<String, Object> existing = objectMapper.readValue(config.getConfigData(), Map.class);
+                        if (existing != null) {
+                            payload.putAll(existing);
+                        }
+                    } catch (Exception ignored) {}
+                }
                 payload.put("pricingBasis", pricingBasis);
-                if (request.universalConfig() != null) {
+
+                // Universal config can only be updated by Super Admin (not Zone Admin)
+                if (!isZoneAdmin && request.universalConfig() != null) {
                     payload.put("universalConfig", request.universalConfig());
                     if (request.universalConfig() instanceof Map<?, ?> map && map.containsKey("incentives")) {
                         payload.put("incentives", map.get("incentives"));
                     }
                 }
-                if (request.zoneConfigs() != null) payload.put("zoneConfigs", request.zoneConfigs());
+                if (request.zoneConfigs() != null) {
+                    Object existingZones = payload.get("zoneConfigs");
+                    if (existingZones instanceof Map<?, ?> existingZoneMap) {
+                        Map<String, Object> mergedZones = new HashMap<>((Map<String, Object>) existingZoneMap);
+                        if (request.zoneConfigs() instanceof Map<?, ?> newZones) {
+                            mergedZones.putAll((Map<String, Object>) newZones);
+                        }
+                        payload.put("zoneConfigs", mergedZones);
+                    } else {
+                        payload.put("zoneConfigs", request.zoneConfigs());
+                    }
+                }
                 if (request.zones() != null) payload.put("zones", request.zones());
                 configDataJson = objectMapper.writeValueAsString(payload);
             } catch (Exception e) {

@@ -806,4 +806,200 @@ class DeliveryIncentiveServiceImplTest {
         assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("5", 270)).isEqualTo(300);
         assertThat(DeliveryIncentiveServiceImpl.parseDurationMinutes("5h", 270)).isEqualTo(300);
     }
+
+    @Test
+    void zoneWiseIncentives_superAdminUniversalIncentives_visibleAcrossAllZones() {
+        // Universal config with a super admin incentive
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "superAdminUniversalBonus",
+                "title": "Super Admin All-Zones Festival Bonus",
+                "value": "200.00",
+                "active": true,
+                "category": "Reward & Rating"
+              }
+            ]
+          },
+          "zoneConfigs": {}
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "UNIVERSAL", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        // 1. Partner in Tumkur
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+        var tumkurOffers = incentiveService.getActiveIncentives(userCredentialId);
+        assertThat(tumkurOffers).anyMatch(o -> "superAdminUniversalBonus".equals(o.id()));
+
+        // 2. Partner in Bangalore
+        partner.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+        var bangaloreOffers = incentiveService.getActiveIncentives(userCredentialId);
+        assertThat(bangaloreOffers).anyMatch(o -> "superAdminUniversalBonus".equals(o.id()));
+
+        // 3. Partner with no assigned zone
+        partner.invalidateZone(null, null);
+        var unassignedOffers = incentiveService.getActiveIncentives(userCredentialId);
+        assertThat(unassignedOffers).anyMatch(o -> "superAdminUniversalBonus".equals(o.id()));
+    }
+
+    @Test
+    void zoneWiseIncentives_tumkurIncentive_visibleOnlyToTumkurPartner_notBangalore() {
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "baseUniversalIncentive",
+                "title": "Base Universal Incentive",
+                "value": "50.00",
+                "active": true
+              }
+            ]
+          },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "tumkurOnlyIncentive",
+                  "title": "Tumkur Special Rider Surge",
+                  "value": "75.00",
+                  "active": true,
+                  "zoneId": "dz-tumkur"
+                }
+              ]
+            },
+            "dz-bangalore": {
+              "incentives": [
+                {
+                  "id": "bangaloreOnlyIncentive",
+                  "title": "Bangalore Metro Surge",
+                  "value": "90.00",
+                  "active": true,
+                  "zoneId": "dz-bangalore"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        // Partner assigned to Tumkur
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+        var tumkurOffers = incentiveService.getActiveIncentives(userCredentialId);
+
+        // Tumkur partner sees Super Admin universal incentive + Tumkur incentive
+        assertThat(tumkurOffers).anyMatch(o -> "baseUniversalIncentive".equals(o.id()));
+        assertThat(tumkurOffers).anyMatch(o -> "tumkurOnlyIncentive".equals(o.id()));
+        // Tumkur partner MUST NOT see Bangalore incentive!
+        assertThat(tumkurOffers).noneMatch(o -> "bangaloreOnlyIncentive".equals(o.id()));
+
+        // Partner assigned to Bangalore
+        partner.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+        var bangaloreOffers = incentiveService.getActiveIncentives(userCredentialId);
+
+        // Bangalore partner sees Super Admin universal incentive + Bangalore incentive
+        assertThat(bangaloreOffers).anyMatch(o -> "baseUniversalIncentive".equals(o.id()));
+        assertThat(bangaloreOffers).anyMatch(o -> "bangaloreOnlyIncentive".equals(o.id()));
+        // Bangalore partner MUST NOT see Tumkur incentive!
+        assertThat(bangaloreOffers).noneMatch(o -> "tumkurOnlyIncentive".equals(o.id()));
+    }
+
+    @Test
+    void zoneWiseIncentives_zoneOverrideTakesPrecedenceInThatZone() {
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "dailyTargetBonus",
+                "title": "Daily Target Bonus (Universal)",
+                "value": "150.00",
+                "active": true
+              }
+            ]
+          },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "dailyTargetBonus",
+                  "title": "Daily Target Bonus (Tumkur Overridden)",
+                  "value": "220.00",
+                  "active": true,
+                  "zoneId": "dz-tumkur"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        // Partner in Tumkur gets the overridden title and value ₹220
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+        var tumkurOffers = incentiveService.getActiveIncentives(userCredentialId);
+        var tumkurDaily = tumkurOffers.stream().filter(o -> "dailyTargetBonus".equals(o.id())).findFirst().orElseThrow();
+        assertThat(tumkurDaily.title()).isEqualTo("Daily Target Bonus (Tumkur Overridden)");
+        assertThat(tumkurDaily.rewardAmount()).isEqualByComparingTo(new BigDecimal("220.00"));
+
+        // Partner in Bangalore gets the universal ₹150
+        partner.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+        var blrOffers = incentiveService.getActiveIncentives(userCredentialId);
+        var blrDaily = blrOffers.stream().filter(o -> "dailyTargetBonus".equals(o.id())).findFirst().orElseThrow();
+        assertThat(blrDaily.title()).isEqualTo("Daily Target Bonus (Universal)");
+        assertThat(blrDaily.rewardAmount()).isEqualByComparingTo(new BigDecimal("150.00"));
+    }
+
+    @Test
+    void zoneWiseIncentives_inactiveIncentives_areExcludedFromActiveList() {
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "activeBonus",
+                "title": "Active Bonus",
+                "value": "100.00",
+                "active": true
+              },
+              {
+                "id": "inactiveBonus",
+                "title": "Inactive Bonus",
+                "value": "100.00",
+                "active": false
+              }
+            ]
+          },
+          "zoneConfigs": {}
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "UNIVERSAL", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        var offers = incentiveService.getActiveIncentives(userCredentialId);
+        assertThat(offers).anyMatch(o -> "activeBonus".equals(o.id()));
+        assertThat(offers).noneMatch(o -> "inactiveBonus".equals(o.id()));
+    }
+
+    @Test
+    void isZoneMatch_matchesExactAndDynamicLocationZones() {
+        assertThat(incentiveService.isZoneMatch("dz-tumkur", "dz-tumkur")).isTrue();
+        assertThat(incentiveService.isZoneMatch("dz-tumkur", "tumkur")).isTrue();
+        assertThat(incentiveService.isZoneMatch("tumkur", "dz-tumkur")).isTrue();
+        assertThat(incentiveService.isZoneMatch("dz-bangalore", "dz-bangalore")).isTrue();
+        assertThat(incentiveService.isZoneMatch("dz-tumkur", "dz-bangalore")).isFalse();
+        assertThat(incentiveService.isZoneMatch("dz-bangalore", "dz-tumkur")).isFalse();
+        assertThat(incentiveService.isZoneMatch(null, "dz-tumkur")).isFalse();
+        assertThat(incentiveService.isZoneMatch("dz-tumkur", null)).isFalse();
+    }
 }

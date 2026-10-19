@@ -22,6 +22,9 @@ import com.foodie.delivery.entity.DeliveryShiftBooking;
 import com.foodie.delivery.repository.DeliveryAssignmentRepository;
 import com.foodie.delivery.repository.DeliveryOnlineSessionRepository;
 import com.foodie.delivery.repository.DeliveryPartnerIncentiveEarningRepository;
+import com.foodie.admin.entity.LocationZone;
+import com.foodie.admin.repository.LocationZoneRepository;
+import com.foodie.admin.security.AdminAccess;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.repository.DeliveryPricingConfigRepository;
 import com.foodie.delivery.repository.DeliveryShiftBookingRepository;
@@ -84,6 +87,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     @Autowired(required = false)
     private DeliveryOnlineSessionRepository onlineSessionRepository;
 
+    @Autowired(required = false)
+    private LocationZoneRepository locationZoneRepository;
+
     @Autowired
     public DeliveryIncentiveServiceImpl(
             DeliveryPartnerRepository deliveryPartnerRepository,
@@ -144,6 +150,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         this.onlineSessionRepository = onlineSessionRepository;
     }
 
+    public void setLocationZoneRepository(LocationZoneRepository locationZoneRepository) {
+        this.locationZoneRepository = locationZoneRepository;
+    }
+
     public record MilestoneDef(
             int trips,
             BigDecimal reward
@@ -172,7 +182,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String condition,
             Integer targetCount,
             List<MilestoneDef> milestones,
-            List<ConditionDef> conditions
+            List<ConditionDef> conditions,
+            String zoneId
     ) {
         public IncentiveRuleDef(
                 String id,
@@ -184,7 +195,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String category,
                 String condition
         ) {
-            this(id, title, value, unit, active, description, category, condition, null, null, null);
+            this(id, title, value, unit, active, description, category, condition, null, null, null, null);
         }
 
         public IncentiveRuleDef(
@@ -199,7 +210,23 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 Integer targetCount,
                 List<MilestoneDef> milestones
         ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null);
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null, null);
+        }
+
+        public IncentiveRuleDef(
+                String id,
+                String title,
+                BigDecimal value,
+                String unit,
+                boolean active,
+                String description,
+                String category,
+                String condition,
+                Integer targetCount,
+                List<MilestoneDef> milestones,
+                List<ConditionDef> conditions
+        ) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, null);
         }
     }
 
@@ -224,7 +251,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         ZonedDateTime zdt = completedAt.atZone(ZONE_IST);
         LocalDate periodDate = zdt.toLocalDate();
 
-        List<IncentiveRuleDef> activeRules = loadActiveRules();
+        List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
 
         for (IncentiveRuleDef rule : activeRules) {
             if (!rule.active()) {
@@ -496,7 +523,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 .map(DeliveryPartnerIncentiveEarning::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<IncentiveRuleDef> activeRules = loadActiveRules();
+        List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
         List<IncentiveOfferProgressDto> offerDtos = buildOfferProgressList(partner, activeRules, targetDate, tripsCompleted, dayEarnings);
 
         return new IncentivesProgressResponseDto(
@@ -526,7 +553,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         List<DeliveryPartnerIncentiveEarning> dayEarnings = earningRepository
                 .findByDeliveryPartnerIdAndPeriodDate(partner.getId(), today);
 
-        List<IncentiveRuleDef> activeRules = loadActiveRules();
+        List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
         return buildOfferProgressList(partner, activeRules, today, tripsToday, dayEarnings);
     }
 
@@ -824,7 +851,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     rawDuration = bookedShift.getDurationHours();
                 } else {
                     String configuredSlot = (c.timeSlot() != null && !c.timeSlot().isBlank()) ? c.timeSlot() : (c.value() != null ? c.value() : "7pm - 12am");
-                    String[] parts = configuredSlot.split("\\s*-\\s*");
+                    String[] parts = configuredSlot.split("\\s*[-–—]\\s*");
                     rawStartTime = parts.length > 0 ? parts[0] : "7pm";
                     rawEndTime = parts.length > 1 ? parts[1] : "12am";
                     rawDuration = (c.duration() != null && !c.duration().isBlank()) ? c.duration() : (c.subtext() != null ? c.subtext() : "4h 30m");
@@ -1068,115 +1095,199 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         }
     }
 
+    public boolean isZoneMatch(String ruleZone, String partnerZone) {
+        if (ruleZone == null || partnerZone == null) return false;
+        String r = ruleZone.trim().toLowerCase();
+        String p = partnerZone.trim().toLowerCase();
+        if (r.isEmpty() || p.isEmpty()) return false;
+        if (r.equals(p)) return true;
+
+        if (locationZoneRepository != null) {
+            try {
+                List<LocationZone> zones = locationZoneRepository.findAll();
+                LocationZone rZone = zones.stream()
+                        .filter(z -> (z.getId() != null && z.getId().equalsIgnoreCase(r))
+                                || (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(r)))
+                        .findFirst().orElse(null);
+                LocationZone pZone = zones.stream()
+                        .filter(z -> (z.getId() != null && z.getId().equalsIgnoreCase(p))
+                                || (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(p)))
+                        .findFirst().orElse(null);
+                if (rZone != null && pZone != null && rZone.getId().equalsIgnoreCase(pZone.getId())) {
+                    return true;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        String cleanR = r.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "");
+        String cleanP = p.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "");
+        if (!cleanR.isBlank() && cleanR.equals(cleanP)) {
+            return true;
+        }
+
+        return AdminAccess.areZonesEquivalent(r, p);
+    }
+
+    private IncentiveRuleDef parseRuleFromJson(JsonNode item, String fallbackZoneId) {
+        if (item == null || !item.isObject()) return null;
+        String id = item.has("id") ? item.get("id").asText("") : "";
+        if (id.isBlank()) return null;
+
+        String title = item.has("title") ? item.get("title").asText("") : "";
+        BigDecimal value = item.has("value") ? new BigDecimal(item.get("value").asText("0")) : BigDecimal.ZERO;
+        String unit = item.has("unit") ? item.get("unit").asText("₹ / order") : "₹ / order";
+        boolean active = true;
+        if (item.has("active")) {
+            JsonNode activeNode = item.get("active");
+            active = activeNode.isBoolean() ? activeNode.asBoolean() : !"false".equalsIgnoreCase(activeNode.asText());
+        }
+        String desc = item.has("description") ? item.get("description").asText("") : "";
+        String category = item.has("category") ? item.get("category").asText("Reward & Rating") : "Reward & Rating";
+        String condition = item.has("condition") && !item.get("condition").asText().isBlank()
+                ? item.get("condition").asText()
+                : ("rainBonus".equalsIgnoreCase(id) ? "BAD_WEATHER" : "");
+
+        String ruleZoneId = item.has("zoneId") && !item.get("zoneId").isNull() && !item.get("zoneId").asText().isBlank()
+                ? item.get("zoneId").asText().trim()
+                : fallbackZoneId;
+
+        Integer targetCount = null;
+        if (item.has("targetCount") && !item.get("targetCount").isNull()) {
+            targetCount = item.get("targetCount").asInt();
+        }
+
+        List<MilestoneDef> milestones = null;
+        if (item.has("milestones") && item.get("milestones").isArray()) {
+            milestones = new ArrayList<>();
+            for (JsonNode mNode : item.get("milestones")) {
+                if (mNode.has("trips")) {
+                    int mTrips = mNode.get("trips").asInt();
+                    BigDecimal mReward = mNode.has("reward")
+                            ? new BigDecimal(mNode.get("reward").asText("0"))
+                            : (mNode.has("rewardAmount") ? new BigDecimal(mNode.get("rewardAmount").asText("0")) : BigDecimal.ZERO);
+                    milestones.add(new MilestoneDef(mTrips, mReward));
+                }
+            }
+        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+            milestones = List.of(
+                    new MilestoneDef(6, new BigDecimal("50.00")),
+                    new MilestoneDef(9, new BigDecimal("75.00")),
+                    new MilestoneDef(13, new BigDecimal("120.00")),
+                    new MilestoneDef(18, new BigDecimal("190.00"))
+            );
+        }
+
+        List<ConditionDef> conditions = null;
+        if (item.has("conditions") && item.get("conditions").isArray()) {
+            conditions = new ArrayList<>();
+            for (JsonNode cNode : item.get("conditions")) {
+                String cId = cNode.has("id") ? cNode.get("id").asText() : UUID.randomUUID().toString();
+                String cType = cNode.has("type") ? cNode.get("type").asText() : "CUSTOM";
+                String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
+                String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
+                String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
+                String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
+                String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
+                Integer cMinDur = cNode.has("minDurationMinutes") ? cNode.get("minDurationMinutes").asInt() : null;
+                Integer cMaxRej = cNode.has("maxRejections") ? cNode.get("maxRejections").asInt() : null;
+                conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
+            }
+        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+            conditions = List.of(
+                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
+            );
+        }
+
+        return new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions, ruleZoneId);
+    }
+
     private List<IncentiveRuleDef> loadActiveRules() {
+        return loadActiveRules(null);
+    }
+
+    private List<IncentiveRuleDef> loadActiveRules(DeliveryPartner partner) {
         List<IncentiveRuleDef> rules = new ArrayList<>();
+        boolean configFound = false;
         try {
             DeliveryPricingConfig config = pricingConfigRepository.findById(DEFAULT_CONFIG_ID).orElse(null);
             if (config != null && config.getConfigData() != null && !config.getConfigData().isBlank()) {
                 JsonNode root = objectMapper.readTree(config.getConfigData());
-                JsonNode incentivesNode = null;
 
-                String basis = root.has("pricingBasis") ? root.get("pricingBasis").asText("UNIVERSAL") : "UNIVERSAL";
-                if ("ZONE".equalsIgnoreCase(basis) && root.has("zoneConfigs")) {
+                String partnerZoneId = (partner != null && partner.getZoneId() != null && !partner.getZoneId().isBlank())
+                        ? partner.getZoneId().trim()
+                        : null;
+
+                // 1. Universal Incentives (Created by Super Admin, displayed across all zones)
+                List<IncentiveRuleDef> universalRules = new ArrayList<>();
+                JsonNode universalNode = null;
+                if (root.has("universalConfig") && root.get("universalConfig").has("incentives") && root.get("universalConfig").get("incentives").isArray()) {
+                    universalNode = root.get("universalConfig").get("incentives");
+                    configFound = true;
+                } else if (root.has("incentives") && root.get("incentives").isArray()) {
+                    universalNode = root.get("incentives");
+                    configFound = true;
+                }
+
+                if (universalNode != null && universalNode.isArray()) {
+                    for (JsonNode item : universalNode) {
+                        IncentiveRuleDef rule = parseRuleFromJson(item, null);
+                        if (rule != null) {
+                            // If an individual rule in universal has a specific zone assigned, only show to partners in that zone
+                            if (rule.zoneId() != null && !rule.zoneId().isBlank()
+                                    && !"ALL".equalsIgnoreCase(rule.zoneId()) && !"UNIVERSAL".equalsIgnoreCase(rule.zoneId())) {
+                                if (partnerZoneId != null && isZoneMatch(rule.zoneId(), partnerZoneId)) {
+                                    universalRules.add(rule);
+                                }
+                            } else {
+                                universalRules.add(rule);
+                            }
+                        }
+                    }
+                }
+
+                // 2. Zone-Specific Incentives (Created by Zone Admin for a specific zone)
+                List<IncentiveRuleDef> zoneRules = new ArrayList<>();
+                if (partnerZoneId != null && root.has("zoneConfigs") && !root.get("zoneConfigs").isNull()) {
                     JsonNode zoneConfigs = root.get("zoneConfigs");
-                    if (root.has("selectedZoneId") && zoneConfigs.has(root.get("selectedZoneId").asText())) {
-                        JsonNode sel = zoneConfigs.get(root.get("selectedZoneId").asText());
-                        if (sel.has("incentives")) {
-                            incentivesNode = sel.get("incentives");
-                        }
-                    }
-                    if (incentivesNode == null && zoneConfigs.fields().hasNext()) {
-                        Map.Entry<String, JsonNode> entry = zoneConfigs.fields().next();
-                        if (entry.getValue().has("incentives")) {
-                            incentivesNode = entry.getValue().get("incentives");
-                        }
-                    }
-                }
-
-                if (incentivesNode == null && root.has("universalConfig") && root.get("universalConfig").has("incentives")) {
-                    incentivesNode = root.get("universalConfig").get("incentives");
-                }
-
-                if (incentivesNode == null && root.has("incentives") && root.get("incentives").isArray()) {
-                    incentivesNode = root.get("incentives");
-                }
-
-                if (incentivesNode != null && incentivesNode.isArray()) {
-                    for (JsonNode item : incentivesNode) {
-                        String id = item.has("id") ? item.get("id").asText() : "";
-                        String title = item.has("title") ? item.get("title").asText() : "";
-                        BigDecimal value = item.has("value") ? new BigDecimal(item.get("value").asText("0")) : BigDecimal.ZERO;
-                        String unit = item.has("unit") ? item.get("unit").asText("₹ / order") : "₹ / order";
-                        boolean active = true;
-                        if (item.has("active")) {
-                            JsonNode activeNode = item.get("active");
-                            active = activeNode.isBoolean() ? activeNode.asBoolean() : !"false".equalsIgnoreCase(activeNode.asText());
-                        }
-                        String desc = item.has("description") ? item.get("description").asText("") : "";
-                        String category = item.has("category") ? item.get("category").asText("Reward & Rating") : "Reward & Rating";
-                        String condition = item.has("condition") && !item.get("condition").asText().isBlank()
-                                ? item.get("condition").asText()
-                                : ("rainBonus".equalsIgnoreCase(id) ? "BAD_WEATHER" : "");
-
-                        Integer targetCount = null;
-                        if (item.has("targetCount") && !item.get("targetCount").isNull()) {
-                            targetCount = item.get("targetCount").asInt();
-                        }
-
-                        List<MilestoneDef> milestones = null;
-                        if (item.has("milestones") && item.get("milestones").isArray()) {
-                            milestones = new ArrayList<>();
-                            for (JsonNode mNode : item.get("milestones")) {
-                                if (mNode.has("trips")) {
-                                    int mTrips = mNode.get("trips").asInt();
-                                    BigDecimal mReward = mNode.has("reward")
-                                            ? new BigDecimal(mNode.get("reward").asText("0"))
-                                            : (mNode.has("rewardAmount") ? new BigDecimal(mNode.get("rewardAmount").asText("0")) : BigDecimal.ZERO);
-                                    milestones.add(new MilestoneDef(mTrips, mReward));
+                    for (var it = zoneConfigs.fieldNames(); it.hasNext(); ) {
+                        String zKey = it.next();
+                        if (isZoneMatch(zKey, partnerZoneId)) {
+                            JsonNode zNode = zoneConfigs.get(zKey);
+                            if (zNode.has("incentives") && zNode.get("incentives").isArray()) {
+                                configFound = true;
+                                for (JsonNode item : zNode.get("incentives")) {
+                                    IncentiveRuleDef rule = parseRuleFromJson(item, zKey);
+                                    if (rule != null) {
+                                        // Include only if rule belongs to this matching zone
+                                        if (rule.zoneId() == null || rule.zoneId().isBlank() || isZoneMatch(rule.zoneId(), partnerZoneId)) {
+                                            zoneRules.add(rule);
+                                        }
+                                    }
                                 }
                             }
-                        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
-                            milestones = List.of(
-                                    new MilestoneDef(6, new BigDecimal("50.00")),
-                                    new MilestoneDef(9, new BigDecimal("75.00")),
-                                    new MilestoneDef(13, new BigDecimal("120.00")),
-                                    new MilestoneDef(18, new BigDecimal("190.00"))
-                            );
-                        }
-
-                        List<ConditionDef> conditions = null;
-                        if (item.has("conditions") && item.get("conditions").isArray()) {
-                            conditions = new ArrayList<>();
-                            for (JsonNode cNode : item.get("conditions")) {
-                                String cId = cNode.has("id") ? cNode.get("id").asText() : UUID.randomUUID().toString();
-                                String cType = cNode.has("type") ? cNode.get("type").asText() : "CUSTOM";
-                                String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
-                                String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
-                                String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
-                                String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
-                                String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
-                                Integer cMinDur = cNode.has("minDurationMinutes") ? cNode.get("minDurationMinutes").asInt() : null;
-                                Integer cMaxRej = cNode.has("maxRejections") ? cNode.get("maxRejections").asInt() : null;
-                                conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
-                            }
-                        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
-                            conditions = List.of(
-                                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
-                                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
-                            );
-                        }
-
-                        if (!id.isBlank()) {
-                            rules.add(new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions));
                         }
                     }
                 }
+
+                // 3. Merge: Super Admin universal incentives + partner's Zone-specific incentives
+                // Zone-specific rules override universal rules with matching ID for that zone;
+                // new zone-specific incentives are added to the list.
+                Map<String, IncentiveRuleDef> merged = new LinkedHashMap<>();
+                for (IncentiveRuleDef uRule : universalRules) {
+                    merged.put(uRule.id(), uRule);
+                }
+                for (IncentiveRuleDef zRule : zoneRules) {
+                    merged.put(zRule.id(), zRule);
+                }
+
+                rules.addAll(merged.values());
             }
         } catch (Exception e) {
             log.warn("Failed to parse incentive rules from configData: {}", e.getMessage());
         }
 
-        if (rules.isEmpty()) {
+        if (rules.isEmpty() && !configFound) {
             rules.addAll(defaultRules());
         }
         return rules;

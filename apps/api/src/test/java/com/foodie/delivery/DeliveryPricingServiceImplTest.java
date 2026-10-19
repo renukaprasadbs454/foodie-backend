@@ -80,4 +80,48 @@ class DeliveryPricingServiceImplTest {
         assertThat(updated.moneyPerKm()).isEqualByComparingTo("12.50");
         assertThat(updated.updatedBy()).isEqualTo(resolvedAdminUserId);
     }
+
+    @Test
+    void updatePricingConfig_zoneAdminPreservesUniversalConfig() {
+        defaultConfig.update(
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "UNIVERSAL",
+                """
+                {
+                  "universalConfig": {
+                    "incentives": [{"id": "superAdminBonus", "value": "100.00"}]
+                  },
+                  "zoneConfigs": {}
+                }
+                """,
+                UUID.randomUUID()
+        );
+        when(configRepository.findById(any())).thenReturn(Optional.of(defaultConfig));
+        when(configRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID zoneAdminCredentialId = UUID.randomUUID();
+        when(adminIdentityQueryPort.findRoleNameByUserCredentialId(zoneAdminCredentialId))
+                .thenReturn(Optional.of("OPS"));
+        when(adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(zoneAdminCredentialId))
+                .thenReturn(Optional.of("dz-tumkur"));
+
+        UpdateDeliveryPricingRequestDto request = new UpdateDeliveryPricingRequestDto(
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "ZONE",
+                java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "corruptedUniversal"))),
+                java.util.Map.of("dz-tumkur", java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "tumkurIncentive")))),
+                null,
+                null
+        );
+
+        DeliveryPricingConfigResponseDto result = pricingService.updatePricingConfig(zoneAdminCredentialId, request);
+
+        assertThat(result.universalConfig()).isNotNull();
+        String json = result.configData();
+        assertThat(json).contains("superAdminBonus");
+        assertThat(json).doesNotContain("corruptedUniversal");
+        assertThat(json).contains("tumkurIncentive");
+    }
 }

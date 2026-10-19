@@ -71,22 +71,48 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<DeliveryShiftResponseDto> getAllAdminShifts() {
-        return shiftRepository.findAllByOrderByCreatedAtDesc()
-                .stream()
+        List<DeliveryShift> shifts = shiftRepository.findAllByOrderByCreatedAtDesc();
+        if (shifts.isEmpty()) {
+            List<DeliveryShift> defaults = List.of(
+                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE"),
+                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE"),
+                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE"),
+                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE"),
+                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE")
+            );
+            try {
+                shifts = shiftRepository.saveAll(defaults);
+            } catch (Exception e) {
+                shifts = defaults;
+            }
+        }
+        return shifts.stream()
                 .filter(s -> !"DEACTIVATED".equalsIgnoreCase(s.getStatus()))
                 .map(this::mapToDto)
                 .toList();
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<DeliveryShiftResponseDto> getAvailableShifts() {
-        return shiftRepository.findByStatusOrderByCreatedAtDesc("ACTIVE")
-                .stream()
-                .map(this::mapToDto)
-                .toList();
+        List<DeliveryShift> active = shiftRepository.findByStatusOrderByCreatedAtDesc("ACTIVE");
+        if (active.isEmpty()) {
+            List<DeliveryShift> defaults = List.of(
+                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE"),
+                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE"),
+                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE"),
+                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE"),
+                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE")
+            );
+            try {
+                active = shiftRepository.saveAll(defaults);
+            } catch (Exception e) {
+                active = defaults;
+            }
+        }
+        return active.stream().map(this::mapToDto).toList();
     }
 
     @Override
