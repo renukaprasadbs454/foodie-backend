@@ -1002,4 +1002,267 @@ class DeliveryIncentiveServiceImplTest {
         assertThat(incentiveService.isZoneMatch(null, "dz-tumkur")).isFalse();
         assertThat(incentiveService.isZoneMatch("dz-tumkur", null)).isFalse();
     }
+
+    @Test
+    void zoneWiseIncentives_processDeliveryCompletion_awardsZoneSpecificIncentiveOnlyToMatchingZonePartner() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        String json = """
+        {
+          "universalConfig": { "incentives": [] },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "tumkurSpecialBonus",
+                  "title": "Tumkur Special Bonus",
+                  "value": "80.00",
+                  "active": true,
+                  "zoneId": "dz-tumkur",
+                  "type": "PER_ORDER"
+                }
+              ]
+            },
+            "dz-bangalore": {
+              "incentives": [
+                {
+                  "id": "bangaloreSpecialBonus",
+                  "title": "Bangalore Special Bonus",
+                  "value": "110.00",
+                  "active": true,
+                  "zoneId": "dz-bangalore",
+                  "type": "PER_ORDER"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+        when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Partner assigned to Tumkur
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Tumkur partner is awarded Tumkur bonus (₹80.00)
+        verify(walletService).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("80.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+
+        // Bangalore bonus (₹110.00) is NEVER awarded to Tumkur partner
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("110.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void zoneWiseIncentives_processDeliveryCompletion_bangalorePartnerReceivesOnlyBangaloreIncentive() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        String json = """
+        {
+          "universalConfig": { "incentives": [] },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "tumkurSpecialBonus",
+                  "title": "Tumkur Special Bonus",
+                  "value": "80.00",
+                  "active": true,
+                  "zoneId": "dz-tumkur",
+                  "type": "PER_ORDER"
+                }
+              ]
+            },
+            "dz-bangalore": {
+              "incentives": [
+                {
+                  "id": "bangaloreSpecialBonus",
+                  "title": "Bangalore Special Bonus",
+                  "value": "110.00",
+                  "active": true,
+                  "zoneId": "dz-bangalore",
+                  "type": "PER_ORDER"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+        when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Partner assigned to Bangalore
+        partner.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Bangalore partner is awarded Bangalore bonus (₹110.00)
+        verify(walletService).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("110.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+
+        // Tumkur bonus (₹80.00) is NEVER awarded to Bangalore partner
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("80.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void zoneWiseIncentives_processDeliveryCompletion_superAdminGlobalIncentiveAwardedToAllZones() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "superAdminGlobalPerOrder",
+                "title": "Super Admin Pan-Zone Per Order Bonus",
+                "value": "30.00",
+                "active": true,
+                "scope": "GLOBAL",
+                "creatorRole": "SUPER_ADMIN",
+                "type": "PER_ORDER"
+              }
+            ]
+          },
+          "zoneConfigs": {}
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+        when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Test with Bangalore partner
+        partner.verifyZone("dz-bangalore", "Bangalore Zone", 12.9716, 77.5946);
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        verify(walletService).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("30.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void zoneWiseIncentives_disabledIncentiveNotAwardedOnCompletion() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        String json = """
+        {
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "disabledSuperAdminBonus",
+                "title": "Disabled Bonus",
+                "value": "100.00",
+                "active": false,
+                "type": "PER_ORDER"
+              }
+            ]
+          },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "disabledTumkurBonus",
+                  "title": "Disabled Tumkur Bonus",
+                  "value": "75.00",
+                  "active": false,
+                  "zoneId": "dz-tumkur",
+                  "type": "PER_ORDER"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Neither disabled bonus is credited
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void zoneWiseIncentives_preventsDuplicatePayoutsWhenAlreadyEarned() {
+        UUID orderId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        String json = """
+        {
+          "universalConfig": { "incentives": [] },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "tumkurSpecialBonus",
+                  "title": "Tumkur Special Bonus",
+                  "value": "80.00",
+                  "active": true,
+                  "zoneId": "dz-tumkur",
+                  "type": "PER_ORDER"
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        // Already earned for this referenceId
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), eq("tumkurSpecialBonus"), any(), any())).thenReturn(true);
+
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Cannot payout duplicate
+        verify(walletService, never()).credit(any(), any(), any(), any(), any());
+    }
 }

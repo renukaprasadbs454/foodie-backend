@@ -123,5 +123,94 @@ class DeliveryPricingServiceImplTest {
         assertThat(json).contains("superAdminBonus");
         assertThat(json).doesNotContain("corruptedUniversal");
         assertThat(json).contains("tumkurIncentive");
+        assertThat(json).contains("\"creatorRole\":\"ZONE_ADMIN\"");
+        assertThat(json).contains("\"scope\":\"ZONE\"");
+    }
+
+    @Test
+    void updatePricingConfig_superAdminTagsUniversalAndZoneIncentivesCorrectly() {
+        defaultConfig.update(
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "UNIVERSAL",
+                "{}",
+                UUID.randomUUID()
+        );
+        when(configRepository.findById(any())).thenReturn(Optional.of(defaultConfig));
+        when(configRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID superAdminCredentialId = UUID.randomUUID();
+        when(adminIdentityQueryPort.findRoleNameByUserCredentialId(superAdminCredentialId))
+                .thenReturn(Optional.of("SUPER_ADMIN"));
+
+        UpdateDeliveryPricingRequestDto request = new UpdateDeliveryPricingRequestDto(
+                new BigDecimal("150.00"),
+                new BigDecimal("20.00"),
+                "ZONE",
+                java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "superAdminUniversal"))),
+                java.util.Map.of("dz-bangalore", java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "superAdminBlr")))),
+                null,
+                null
+        );
+
+        DeliveryPricingConfigResponseDto result = pricingService.updatePricingConfig(superAdminCredentialId, request);
+
+        String json = result.configData();
+        assertThat(json).contains("superAdminUniversal");
+        assertThat(json).contains("superAdminBlr");
+        assertThat(json).contains("\"creatorRole\":\"SUPER_ADMIN\"");
+        assertThat(json).contains("\"scope\":\"GLOBAL\"");
+    }
+
+    @Test
+    void updatePricingConfig_zoneAdminCannotTouchOtherZones() {
+        defaultConfig.update(
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "ZONE",
+                """
+                {
+                  "universalConfig": { "incentives": [] },
+                  "zoneConfigs": {
+                    "dz-bangalore": {
+                      "incentives": [{"id": "bangaloreProtectedIncentive", "value": "100.00"}]
+                    }
+                  }
+                }
+                """,
+                UUID.randomUUID()
+        );
+        when(configRepository.findById(any())).thenReturn(Optional.of(defaultConfig));
+        when(configRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID tumkurAdminCredentialId = UUID.randomUUID();
+        when(adminIdentityQueryPort.findRoleNameByUserCredentialId(tumkurAdminCredentialId))
+                .thenReturn(Optional.of("OPS"));
+        when(adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(tumkurAdminCredentialId))
+                .thenReturn(Optional.of("dz-tumkur"));
+
+        // Tumkur Admin attempts to modify both Tumkur and Bangalore zones
+        UpdateDeliveryPricingRequestDto request = new UpdateDeliveryPricingRequestDto(
+                new BigDecimal("200.00"),
+                new BigDecimal("25.00"),
+                "ZONE",
+                null,
+                java.util.Map.of(
+                        "dz-tumkur", java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "tumkurBonus"))),
+                        "dz-bangalore", java.util.Map.of("incentives", java.util.List.of(java.util.Map.of("id", "hackedBangaloreBonus")))
+                ),
+                null,
+                null
+        );
+
+        DeliveryPricingConfigResponseDto result = pricingService.updatePricingConfig(tumkurAdminCredentialId, request);
+        String json = result.configData();
+
+        // Tumkur incentive added
+        assertThat(json).contains("tumkurBonus");
+        // Existing Bangalore protected incentive preserved
+        assertThat(json).contains("bangaloreProtectedIncentive");
+        // Hacked Bangalore incentive blocked
+        assertThat(json).doesNotContain("hackedBangaloreBonus");
     }
 }

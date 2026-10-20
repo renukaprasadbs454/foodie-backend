@@ -29,14 +29,14 @@ public class AdminDeliveryPricingController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN', 'FINANCE', 'OPERATIONS_ADMIN', 'FINANCE_ADMIN')")
     @Operation(summary = "Get delivery partner pricing rules (Min price vs Money/KM)")
     public ResponseEntity<ApiResponse<DeliveryPricingConfigResponseDto>> getPricingConfig() {
         return ResponseEntity.ok(ApiResponse.success(deliveryPricingService.getPricingConfig()));
     }
 
     @PutMapping
-    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN', 'FINANCE', 'OPERATIONS_ADMIN', 'FINANCE_ADMIN')")
     @Operation(summary = "Update delivery partner pricing rules (Min price vs Money/KM)")
     public ResponseEntity<ApiResponse<DeliveryPricingConfigResponseDto>> updatePricingConfig(
             @AuthenticationPrincipal AuthPrincipal principal,

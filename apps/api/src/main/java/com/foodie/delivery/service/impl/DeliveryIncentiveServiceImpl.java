@@ -183,7 +183,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             Integer targetCount,
             List<MilestoneDef> milestones,
             List<ConditionDef> conditions,
-            String zoneId
+            String zoneId,
+            String creatorRole,
+            String scope
     ) {
         public IncentiveRuleDef(
                 String id,
@@ -195,7 +197,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String category,
                 String condition
         ) {
-            this(id, title, value, unit, active, description, category, condition, null, null, null, null);
+            this(id, title, value, unit, active, description, category, condition, null, null, null, null, null, null);
         }
 
         public IncentiveRuleDef(
@@ -210,7 +212,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 Integer targetCount,
                 List<MilestoneDef> milestones
         ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null, null);
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null, null, null, null);
         }
 
         public IncentiveRuleDef(
@@ -226,7 +228,24 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 List<MilestoneDef> milestones,
                 List<ConditionDef> conditions
         ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, null);
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, null, null, null);
+        }
+
+        public IncentiveRuleDef(
+                String id,
+                String title,
+                BigDecimal value,
+                String unit,
+                boolean active,
+                String description,
+                String category,
+                String condition,
+                Integer targetCount,
+                List<MilestoneDef> milestones,
+                List<ConditionDef> conditions,
+                String zoneId
+        ) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, zoneId, null, null);
         }
     }
 
@@ -340,6 +359,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private void evaluateCustomRule(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId, LocalDate periodDate) {
+        if (rule.milestones() != null && !rule.milestones().isEmpty()) {
+            evaluateDailyTarget(partner, rule, periodDate);
+            return;
+        }
+        if (rule.targetCount() != null && rule.targetCount() > 1) {
+            evaluateDailyTarget(partner, rule, periodDate);
+            return;
+        }
         if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
         awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
     }
@@ -801,7 +828,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     isEarned,
                     rule.active(),
                     offerMilestones,
-                    offerConditions
+                    offerConditions,
+                    rule.creatorRole(),
+                    rule.scope(),
+                    rule.zoneId()
             ));
         }
 
@@ -1095,6 +1125,26 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         }
     }
 
+    private boolean matchZoneEntity(LocationZone z, String query) {
+        if (z == null || query == null || query.isBlank()) return false;
+        String q = query.trim().toLowerCase();
+        if (z.getId() != null && z.getId().trim().equalsIgnoreCase(q)) return true;
+        if (z.getZoneName() != null && z.getZoneName().trim().equalsIgnoreCase(q)) return true;
+        if (z.getCityName() != null && z.getCityName().trim().equalsIgnoreCase(q)) return true;
+
+        String cleanQ = q.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim();
+        String cleanId = z.getId() != null ? z.getId().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
+        String cleanName = z.getZoneName() != null ? z.getZoneName().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
+        String cleanCity = z.getCityName() != null ? z.getCityName().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
+
+        if (!cleanQ.isEmpty()) {
+            if (cleanQ.equalsIgnoreCase(cleanId) || cleanQ.equalsIgnoreCase(cleanName) || cleanQ.equalsIgnoreCase(cleanCity)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isZoneMatch(String ruleZone, String partnerZone) {
         if (ruleZone == null || partnerZone == null) return false;
         String r = ruleZone.trim().toLowerCase();
@@ -1105,16 +1155,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         if (locationZoneRepository != null) {
             try {
                 List<LocationZone> zones = locationZoneRepository.findAll();
-                LocationZone rZone = zones.stream()
-                        .filter(z -> (z.getId() != null && z.getId().equalsIgnoreCase(r))
-                                || (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(r)))
-                        .findFirst().orElse(null);
-                LocationZone pZone = zones.stream()
-                        .filter(z -> (z.getId() != null && z.getId().equalsIgnoreCase(p))
-                                || (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(p)))
-                        .findFirst().orElse(null);
-                if (rZone != null && pZone != null && rZone.getId().equalsIgnoreCase(pZone.getId())) {
-                    return true;
+                LocationZone rZone = zones.stream().filter(z -> matchZoneEntity(z, r)).findFirst().orElse(null);
+                LocationZone pZone = zones.stream().filter(z -> matchZoneEntity(z, p)).findFirst().orElse(null);
+                if (rZone != null && pZone != null) {
+                    return rZone.getId().equalsIgnoreCase(pZone.getId());
                 }
             } catch (Exception ignored) {}
         }
@@ -1126,6 +1170,20 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         }
 
         return AdminAccess.areZonesEquivalent(r, p);
+    }
+
+    public String resolvePartnerZone(DeliveryPartner partner) {
+        if (partner == null) return null;
+        if (partner.getZoneId() != null && !partner.getZoneId().isBlank()) {
+            return partner.getZoneId().trim();
+        }
+        if (partner.getZoneName() != null && !partner.getZoneName().isBlank()) {
+            return partner.getZoneName().trim();
+        }
+        if (partner.getCity() != null && !partner.getCity().isBlank()) {
+            return partner.getCity().trim();
+        }
+        return null;
     }
 
     private IncentiveRuleDef parseRuleFromJson(JsonNode item, String fallbackZoneId) {
@@ -1150,6 +1208,23 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         String ruleZoneId = item.has("zoneId") && !item.get("zoneId").isNull() && !item.get("zoneId").asText().isBlank()
                 ? item.get("zoneId").asText().trim()
                 : fallbackZoneId;
+
+        String creatorRole = item.has("creatorRole") && !item.get("creatorRole").isNull() && !item.get("creatorRole").asText().isBlank()
+                ? item.get("creatorRole").asText().trim()
+                : null;
+        String scope = item.has("scope") && !item.get("scope").isNull() && !item.get("scope").asText().isBlank()
+                ? item.get("scope").asText().trim()
+                : null;
+
+        if (scope == null) {
+            scope = (ruleZoneId != null && !ruleZoneId.isBlank() && !"ALL".equalsIgnoreCase(ruleZoneId)) ? "ZONE" : "GLOBAL";
+        }
+        if (creatorRole == null) {
+            creatorRole = "ZONE".equalsIgnoreCase(scope) ? "ZONE_ADMIN" : "SUPER_ADMIN";
+        }
+        if ("GLOBAL".equalsIgnoreCase(scope) && (ruleZoneId == null || "ALL".equalsIgnoreCase(ruleZoneId))) {
+            ruleZoneId = null;
+        }
 
         Integer targetCount = null;
         if (item.has("targetCount") && !item.get("targetCount").isNull()) {
@@ -1199,7 +1274,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             );
         }
 
-        return new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions, ruleZoneId);
+        return new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions, ruleZoneId, creatorRole, scope);
     }
 
     private List<IncentiveRuleDef> loadActiveRules() {
@@ -1214,9 +1289,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             if (config != null && config.getConfigData() != null && !config.getConfigData().isBlank()) {
                 JsonNode root = objectMapper.readTree(config.getConfigData());
 
-                String partnerZoneId = (partner != null && partner.getZoneId() != null && !partner.getZoneId().isBlank())
-                        ? partner.getZoneId().trim()
-                        : null;
+                String partnerZoneId = resolvePartnerZone(partner);
 
                 // 1. Universal Incentives (Created by Super Admin, displayed across all zones)
                 List<IncentiveRuleDef> universalRules = new ArrayList<>();
@@ -1235,7 +1308,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         if (rule != null) {
                             // If an individual rule in universal has a specific zone assigned, only show to partners in that zone
                             if (rule.zoneId() != null && !rule.zoneId().isBlank()
-                                    && !"ALL".equalsIgnoreCase(rule.zoneId()) && !"UNIVERSAL".equalsIgnoreCase(rule.zoneId())) {
+                                    && !"ALL".equalsIgnoreCase(rule.zoneId()) && !"UNIVERSAL".equalsIgnoreCase(rule.zoneId()) && !"GLOBAL".equalsIgnoreCase(rule.scope())) {
                                 if (partnerZoneId != null && isZoneMatch(rule.zoneId(), partnerZoneId)) {
                                     universalRules.add(rule);
                                 }
@@ -1295,8 +1368,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     private List<IncentiveRuleDef> defaultRules() {
         return List.of(
-                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null, null),
-                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null, null),
+                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
                 new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day", true, "Bonus awarded upon completing daily order targets.", "Target & Mileage", "DAILY_TARGET", 15,
                         List.of(
                                 new MilestoneDef(6, new BigDecimal("50.00")),
@@ -1307,13 +1380,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         List.of(
                                 new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
                                 new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
-                        )
+                        ),
+                        null, "SUPER_ADMIN", "GLOBAL"
                 ),
-                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null, null),
-                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null, null),
-                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null, null),
-                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null, null),
-                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null, null)
+                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL")
         );
     }
 

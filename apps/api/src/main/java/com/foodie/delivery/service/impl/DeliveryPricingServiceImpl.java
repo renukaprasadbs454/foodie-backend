@@ -10,7 +10,9 @@ import com.foodie.delivery.service.DeliveryPricingService;
 import com.foodie.shared.contract.AdminIdentityQueryPort;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -61,8 +63,9 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
             actorZoneId = adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(actorCredentialId).orElse(null);
         }
 
-        boolean isZoneAdmin = (actorRole != null && !"SUPER_ADMIN".equalsIgnoreCase(actorRole) && actorZoneId != null && !actorZoneId.isBlank())
-                || "ZONE".equalsIgnoreCase(request.pricingBasis());
+        boolean isSuperAdmin = (actorRole != null && "SUPER_ADMIN".equalsIgnoreCase(actorRole))
+                || (actorRole == null && (actorZoneId == null || actorZoneId.isBlank()));
+        boolean isZoneAdmin = !isSuperAdmin && (actorZoneId != null && !actorZoneId.isBlank());
 
         String pricingBasis = request.pricingBasis() != null && !request.pricingBasis().isBlank()
                 ? request.pricingBasis()
@@ -85,23 +88,61 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
 
                 // Universal config can only be updated by Super Admin (not Zone Admin)
                 if (!isZoneAdmin && request.universalConfig() != null) {
-                    payload.put("universalConfig", request.universalConfig());
-                    if (request.universalConfig() instanceof Map<?, ?> map && map.containsKey("incentives")) {
-                        payload.put("incentives", map.get("incentives"));
+                    Map<String, Object> universalCopy = new HashMap<>();
+                    if (request.universalConfig() instanceof Map<?, ?> uMap) {
+                        universalCopy.putAll((Map<String, Object>) uMap);
+                        if (uMap.containsKey("incentives")) {
+                            List<Map<String, Object>> taggedIncentives = tagIncentives(uMap.get("incentives"), "SUPER_ADMIN", "GLOBAL", null);
+                            if (taggedIncentives != null) {
+                                universalCopy.put("incentives", taggedIncentives);
+                                payload.put("incentives", taggedIncentives);
+                            }
+                        }
                     }
+                    payload.put("universalConfig", universalCopy);
                 }
+
+                // Zone config handling with strict zone isolation
                 if (request.zoneConfigs() != null) {
                     Object existingZones = payload.get("zoneConfigs");
+                    Map<String, Object> mergedZones = new HashMap<>();
                     if (existingZones instanceof Map<?, ?> existingZoneMap) {
-                        Map<String, Object> mergedZones = new HashMap<>((Map<String, Object>) existingZoneMap);
-                        if (request.zoneConfigs() instanceof Map<?, ?> newZones) {
-                            mergedZones.putAll((Map<String, Object>) newZones);
-                        }
-                        payload.put("zoneConfigs", mergedZones);
-                    } else {
-                        payload.put("zoneConfigs", request.zoneConfigs());
+                        mergedZones.putAll((Map<String, Object>) existingZoneMap);
                     }
+
+                    if (request.zoneConfigs() instanceof Map<?, ?> newZones) {
+                        for (Map.Entry<?, ?> entry : newZones.entrySet()) {
+                            String zKey = String.valueOf(entry.getKey());
+                            Object zVal = entry.getValue();
+
+                            // Zone Admin may ONLY modify their assigned zone!
+                            if (isZoneAdmin && !isZoneEquivalent(zKey, actorZoneId)) {
+                                log.warn("Zone Admin {} (zone {}) attempted unauthorized modification of zone {}",
+                                        actorCredentialId, actorZoneId, zKey);
+                                continue;
+                            }
+
+                            String creatorRole = isZoneAdmin ? "ZONE_ADMIN" : "SUPER_ADMIN";
+                            String targetZoneId = isZoneAdmin ? actorZoneId : zKey;
+
+                            if (zVal instanceof Map<?, ?> zMap) {
+                                Map<String, Object> zMapCopy = new HashMap<>((Map<String, Object>) zMap);
+                                if (zMap.containsKey("incentives")) {
+                                    List<Map<String, Object>> taggedZoneIncentives = tagIncentives(
+                                            zMap.get("incentives"), creatorRole, "ZONE", targetZoneId);
+                                    if (taggedZoneIncentives != null) {
+                                        zMapCopy.put("incentives", taggedZoneIncentives);
+                                    }
+                                }
+                                mergedZones.put(zKey, zMapCopy);
+                            } else {
+                                mergedZones.put(zKey, zVal);
+                            }
+                        }
+                    }
+                    payload.put("zoneConfigs", mergedZones);
                 }
+
                 if (request.zones() != null) payload.put("zones", request.zones());
                 configDataJson = objectMapper.writeValueAsString(payload);
             } catch (Exception e) {
@@ -118,6 +159,37 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
         );
         DeliveryPricingConfig saved = configRepository.save(config);
         return toDto(saved);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> tagIncentives(Object incentivesObj, String creatorRole, String scope, String zoneId) {
+        if (!(incentivesObj instanceof List<?> list)) {
+            return null;
+        }
+        List<Map<String, Object>> taggedList = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> itemMap) {
+                Map<String, Object> copy = new HashMap<>((Map<String, Object>) itemMap);
+                copy.put("creatorRole", creatorRole);
+                copy.put("scope", scope);
+                if (zoneId != null) {
+                    copy.put("zoneId", zoneId);
+                }
+                taggedList.add(copy);
+            }
+        }
+        return taggedList;
+    }
+
+    private boolean isZoneEquivalent(String zoneA, String zoneB) {
+        if (zoneA == null || zoneB == null) return false;
+        String a = zoneA.trim().toLowerCase();
+        String b = zoneB.trim().toLowerCase();
+        if (a.equals(b)) return true;
+        String cleanA = a.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim();
+        String cleanB = b.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim();
+        if (!cleanA.isEmpty() && cleanA.equalsIgnoreCase(cleanB)) return true;
+        return com.foodie.admin.security.AdminAccess.areZonesEquivalent(a, b);
     }
 
     @Override
