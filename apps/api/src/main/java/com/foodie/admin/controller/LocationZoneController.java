@@ -454,9 +454,21 @@ public class LocationZoneController {
     @DeleteMapping("/cities/{cityId}")
     @Transactional
     public ResponseEntity<ApiResponse<Boolean>> deleteCity(@PathVariable String cityId) {
-        if (!cityRepository.existsById(cityId))
-            return ResponseEntity.notFound().build();
-        cityRepository.deleteById(cityId);
+        String lowerId = cityId.toLowerCase().trim();
+        List<City> cities = cityRepository.findAll();
+        for (City c : cities) {
+            String cId = c.getId() != null ? c.getId().toLowerCase().trim() : "";
+            String cName = c.getCityName() != null ? c.getCityName().toLowerCase().trim() : "";
+            if (cId.equals(lowerId) || cName.equals(lowerId) ||
+                (lowerId.contains("bangalore") && (cName.contains("bangalore") || cName.contains("bengalu"))) ||
+                (lowerId.contains("tumkur") && (cName.contains("tumkur") || cName.contains("tumakuru")))) {
+                cityRepository.delete(c);
+            }
+        }
+        if (cityRepository.existsById(cityId)) {
+            cityRepository.deleteById(cityId);
+        }
+        cityRepository.flush();
         return ResponseEntity.ok(ApiResponse.success(true));
     }
 
