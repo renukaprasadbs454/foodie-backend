@@ -27,17 +27,16 @@ public class DeliveryShiftController {
     private static final UUID DEFAULT_DEV_PARTNER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private final DeliveryShiftService shiftService;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+    private final com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
 
     public DeliveryShiftController(DeliveryShiftService shiftService) {
-        this.shiftService = shiftService;
+        this(shiftService, null);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public DeliveryShiftController(
             DeliveryShiftService shiftService,
-            com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository
     ) {
         this.shiftService = shiftService;
         this.deliveryPartnerRepository = deliveryPartnerRepository;

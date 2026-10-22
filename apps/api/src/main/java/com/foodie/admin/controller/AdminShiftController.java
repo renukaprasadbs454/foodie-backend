@@ -41,30 +41,24 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminShiftController {
 
     private final DeliveryShiftService shiftService;
-
-    @Autowired(required = false)
-    private AdminAccess adminAccess;
-
-    @Autowired(required = false)
-    private DeliveryShiftRepository shiftRepository;
-
-    @Autowired(required = false)
-    private LocationZoneRepository locationZoneRepository;
+    private final AdminAccess adminAccess;
+    private final DeliveryShiftRepository shiftRepository;
+    private final LocationZoneRepository locationZoneRepository;
 
     public AdminShiftController(DeliveryShiftService shiftService) {
-        this.shiftService = shiftService;
+        this(shiftService, null, null, null);
     }
 
     public AdminShiftController(DeliveryShiftService shiftService, AdminAccess adminAccess) {
-        this.shiftService = shiftService;
-        this.adminAccess = adminAccess;
+        this(shiftService, adminAccess, null, null);
     }
 
+    @Autowired
     public AdminShiftController(
             DeliveryShiftService shiftService,
-            AdminAccess adminAccess,
-            DeliveryShiftRepository shiftRepository,
-            LocationZoneRepository locationZoneRepository
+            @Autowired(required = false) AdminAccess adminAccess,
+            @Autowired(required = false) DeliveryShiftRepository shiftRepository,
+            @Autowired(required = false) LocationZoneRepository locationZoneRepository
     ) {
         this.shiftService = shiftService;
         this.adminAccess = adminAccess;
