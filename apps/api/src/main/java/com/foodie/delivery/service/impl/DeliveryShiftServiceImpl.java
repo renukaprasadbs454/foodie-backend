@@ -44,13 +44,29 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
         String shiftName = request.shiftName().trim();
         String startTime = request.startTime().trim();
         String endTime = request.endTime().trim();
+        String reqZoneId = (request.zoneId() != null && !request.zoneId().isBlank()) ? request.zoneId().trim() : null;
+        String reqZoneName = (request.zoneName() != null && !request.zoneName().isBlank()) ? request.zoneName().trim() : null;
 
-        if (shiftRepository.existsByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
-                shiftName, startTime, endTime, "DEACTIVATED")) {
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "An active shift with name '" + shiftName + "' (" + startTime + " – " + endTime + ") already exists."
-            );
+        if (reqZoneId == null || reqZoneId.isBlank() || reqZoneId.equalsIgnoreCase("ALL")) {
+            if (shiftRepository.existsByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
+                    shiftName, startTime, endTime, "DEACTIVATED")) {
+                throw new BadRequestException(
+                        ErrorCode.VALIDATION_FAILED,
+                        "An active shift with name '" + shiftName + "' (" + startTime + " – " + endTime + ") already exists."
+                );
+            }
+        } else {
+            List<DeliveryShift> matching = shiftRepository.findByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
+                    shiftName, startTime, endTime, "DEACTIVATED");
+            boolean hasDuplicateInZone = matching != null && matching.stream().anyMatch(s ->
+                    s.getZoneId() != null && isZoneMatch(s.getZoneId(), reqZoneId));
+            if (hasDuplicateInZone) {
+                throw new BadRequestException(
+                        ErrorCode.VALIDATION_FAILED,
+                        "An active shift with name '" + shiftName + "' (" + startTime + " – " + endTime + ") already exists in " +
+                                (reqZoneName != null ? reqZoneName : reqZoneId) + "."
+                );
+            }
         }
 
         String duration = calculateDuration(startTime, endTime);
@@ -60,27 +76,47 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
                 startTime,
                 endTime,
                 duration,
-                "ACTIVE"
+                "ACTIVE",
+                reqZoneId,
+                reqZoneName
         );
 
         DeliveryShift saved = shiftRepository.save(shift);
-        log.info("Created new delivery shift: id={}, name='{}', times='{} - {}', duration='{}'",
-                saved.getId(), saved.getShiftName(), saved.getStartTime(), saved.getEndTime(), saved.getDurationHours());
+        log.info("Created new delivery shift: id={}, name='{}', times='{} - {}', zone='{}', duration='{}'",
+                saved.getId(), saved.getShiftName(), saved.getStartTime(), saved.getEndTime(), saved.getZoneId(), saved.getDurationHours());
 
         return mapToDto(saved);
+    }
+
+    public static boolean isZoneMatch(String shiftZoneId, String targetZoneId) {
+        if (shiftZoneId == null || targetZoneId == null) return false;
+        String a = shiftZoneId.trim().toLowerCase();
+        String b = targetZoneId.trim().toLowerCase();
+        if (a.equals(b)) return true;
+        String normA = a.startsWith("dz-") ? a.substring(3) : a;
+        String normB = b.startsWith("dz-") ? b.substring(3) : b;
+        return normA.equals(normB);
     }
 
     @Override
     @Transactional
     public List<DeliveryShiftResponseDto> getAllAdminShifts() {
+        return getAllAdminShifts(null);
+    }
+
+    @Override
+    @Transactional
+    public List<DeliveryShiftResponseDto> getAllAdminShifts(String zoneId) {
         List<DeliveryShift> shifts = shiftRepository.findAllByOrderByCreatedAtDesc();
         if (shifts.isEmpty()) {
             List<DeliveryShift> defaults = List.of(
-                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE"),
-                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE"),
-                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE"),
-                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE"),
-                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE")
+                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Tumkur Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE", "dz-tumkur", "Tumkur Zone"),
+                    new DeliveryShift("Tumkur Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE", "dz-tumkur", "Tumkur Zone")
             );
             try {
                 shifts = shiftRepository.saveAll(defaults);
@@ -88,23 +124,33 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
                 shifts = defaults;
             }
         }
-        return shifts.stream()
-                .filter(s -> !"DEACTIVATED".equalsIgnoreCase(s.getStatus()))
-                .map(this::mapToDto)
-                .toList();
+        var stream = shifts.stream().filter(s -> !"DEACTIVATED".equalsIgnoreCase(s.getStatus()));
+        if (zoneId != null && !zoneId.isBlank() && !zoneId.equalsIgnoreCase("ALL")) {
+            String clean = zoneId.trim();
+            stream = stream.filter(s -> s.getZoneId() != null && isZoneMatch(s.getZoneId(), clean));
+        }
+        return stream.map(this::mapToDto).toList();
     }
 
     @Override
     @Transactional
     public List<DeliveryShiftResponseDto> getAvailableShifts() {
+        return getAvailableShiftsForZone(null);
+    }
+
+    @Override
+    @Transactional
+    public List<DeliveryShiftResponseDto> getAvailableShiftsForZone(String zoneId) {
         List<DeliveryShift> active = shiftRepository.findByStatusOrderByCreatedAtDesc("ACTIVE");
         if (active.isEmpty()) {
             List<DeliveryShift> defaults = List.of(
-                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE"),
-                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE"),
-                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE"),
-                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE"),
-                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE")
+                    new DeliveryShift("Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Afternoon Shift", "12:00 PM", "05:00 PM", "5h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Night Owl", "08:00 PM", "12:00 AM", "4h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Late Night", "11:00 PM", "04:00 AM", "5h", "ACTIVE", "dz-bangalore", "Bangalore Zone"),
+                    new DeliveryShift("Tumkur Morning Shift", "06:00 AM", "12:00 PM", "6h", "ACTIVE", "dz-tumkur", "Tumkur Zone"),
+                    new DeliveryShift("Tumkur Evening Rush", "05:00 PM", "11:00 PM", "6h", "ACTIVE", "dz-tumkur", "Tumkur Zone")
             );
             try {
                 active = shiftRepository.saveAll(defaults);
@@ -112,7 +158,13 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
                 active = defaults;
             }
         }
-        return active.stream().map(this::mapToDto).toList();
+        var stream = active.stream();
+        if (zoneId != null && !zoneId.isBlank() && !zoneId.equalsIgnoreCase("ALL")) {
+            String clean = zoneId.trim();
+            // Return shifts that match the delivery partner's zone or universal (null) shifts
+            stream = stream.filter(s -> s.getZoneId() == null || isZoneMatch(s.getZoneId(), clean));
+        }
+        return stream.map(this::mapToDto).toList();
     }
 
     @Override
@@ -136,9 +188,15 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
         shift.setEndTime(endTime);
         shift.setDurationHours(duration);
         shift.setStatus(status);
+        if (request.zoneId() != null) {
+            shift.setZoneId(request.zoneId().isBlank() ? null : request.zoneId().trim());
+        }
+        if (request.zoneName() != null) {
+            shift.setZoneName(request.zoneName().isBlank() ? null : request.zoneName().trim());
+        }
 
         DeliveryShift saved = shiftRepository.save(shift);
-        log.info("Updated delivery shift: id={}, status='{}'", saved.getId(), saved.getStatus());
+        log.info("Updated delivery shift: id={}, status='{}', zone='{}'", saved.getId(), saved.getStatus(), saved.getZoneId());
 
         return mapToDto(saved);
     }
@@ -292,6 +350,8 @@ public class DeliveryShiftServiceImpl implements DeliveryShiftService {
                 s.getEndTime(),
                 s.getDurationHours(),
                 s.getStatus(),
+                s.getZoneId(),
+                s.getZoneName(),
                 s.getCreatedAt(),
                 s.getUpdatedAt()
         );

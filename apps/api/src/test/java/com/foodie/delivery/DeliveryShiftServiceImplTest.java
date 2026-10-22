@@ -146,4 +146,54 @@ class DeliveryShiftServiceImplTest {
         assertThat(list.get(0).shiftName()).isEqualTo("Shift 1");
         assertThat(list.get(1).shiftName()).isEqualTo("Shift 2");
     }
+
+    @Test
+    @DisplayName("Zone Isolation: Shifts created for a specific zone are isolated to that zone")
+    void createShift_withZone_assignsZoneAndPermitsDuplicateAcrossDifferentZones() {
+        CreateShiftRequestDto bangaloreRequest = new CreateShiftRequestDto(
+                "Peak Rush", "06:00 PM", "11:00 PM", "dz-bangalore", "Bangalore Zone"
+        );
+
+        when(shiftRepository.save(any(DeliveryShift.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DeliveryShiftResponseDto bangaloreShift = shiftService.createShift(bangaloreRequest);
+        assertThat(bangaloreShift.zoneId()).isEqualTo("dz-bangalore");
+        assertThat(bangaloreShift.zoneName()).isEqualTo("Bangalore Zone");
+
+        // Same shift name in a DIFFERENT zone (Tumkur) is allowed and not blocked by Bangalore shift
+        CreateShiftRequestDto tumkurRequest = new CreateShiftRequestDto(
+                "Peak Rush", "06:00 PM", "11:00 PM", "dz-tumkur", "Tumkur Zone"
+        );
+        DeliveryShift existingBangaloreShift = new DeliveryShift("Peak Rush", "06:00 PM", "11:00 PM", "5h", "ACTIVE", "dz-bangalore", "Bangalore Zone");
+        when(shiftRepository.findByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
+                "Peak Rush", "06:00 PM", "11:00 PM", "DEACTIVATED"))
+                .thenReturn(List.of(existingBangaloreShift));
+
+        DeliveryShiftResponseDto tumkurShift = shiftService.createShift(tumkurRequest);
+        assertThat(tumkurShift.zoneId()).isEqualTo("dz-tumkur");
+        assertThat(tumkurShift.zoneName()).isEqualTo("Tumkur Zone");
+    }
+
+    @Test
+    @DisplayName("Zone Visibility: Delivery partners in Tumkur only receive shifts available in Tumkur zone")
+    void getAvailableShiftsForZone_onlyReturnsShiftsMatchingPartnerZone() {
+        DeliveryShift blrShift = new DeliveryShift("BLR Morning", "06:00 AM", "12:00 PM", "6h", "ACTIVE", "dz-bangalore", "Bangalore Zone");
+        DeliveryShift tmkShift = new DeliveryShift("TMK Morning", "07:00 AM", "01:00 PM", "6h", "ACTIVE", "dz-tumkur", "Tumkur Zone");
+        DeliveryShift universalShift = new DeliveryShift("Universal Express", "12:00 PM", "05:00 PM", "5h", "ACTIVE", null, null);
+
+        when(shiftRepository.findByStatusOrderByCreatedAtDesc("ACTIVE"))
+                .thenReturn(List.of(blrShift, tmkShift, universalShift));
+
+        // Delivery Partner in Tumkur queries available shifts
+        List<DeliveryShiftResponseDto> tumkurAvailable = shiftService.getAvailableShiftsForZone("dz-tumkur");
+        assertThat(tumkurAvailable).extracting(DeliveryShiftResponseDto::shiftName)
+                .contains("TMK Morning", "Universal Express")
+                .doesNotContain("BLR Morning");
+
+        // Delivery Partner in Bangalore queries available shifts
+        List<DeliveryShiftResponseDto> blrAvailable = shiftService.getAvailableShiftsForZone("dz-bangalore");
+        assertThat(blrAvailable).extracting(DeliveryShiftResponseDto::shiftName)
+                .contains("BLR Morning", "Universal Express")
+                .doesNotContain("TMK Morning");
+    }
 }

@@ -28,20 +28,65 @@ public class DeliveryShiftController {
 
     private final DeliveryShiftService shiftService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+
     public DeliveryShiftController(DeliveryShiftService shiftService) {
         this.shiftService = shiftService;
     }
 
+    public DeliveryShiftController(
+            DeliveryShiftService shiftService,
+            com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository
+    ) {
+        this.shiftService = shiftService;
+        this.deliveryPartnerRepository = deliveryPartnerRepository;
+    }
+
     @GetMapping
     @Operation(summary = "List all active shifts available for delivery partners (alias)")
+    public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getShifts(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Delivery-Partner-Id", required = false) String customPartnerIdHeader,
+            @RequestHeader(value = "X-Zone-Id", required = false) String xZoneId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "zoneId", required = false) String zoneIdParam
+    ) {
+        return getAvailableShifts(principal, customPartnerIdHeader, xZoneId, zoneIdParam);
+    }
+
     public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getShifts() {
-        return getAvailableShifts();
+        return ResponseEntity.ok(ApiResponse.success(shiftService.getAvailableShifts()));
+    }
+
+    public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getAvailableShifts() {
+        return ResponseEntity.ok(ApiResponse.success(shiftService.getAvailableShifts()));
     }
 
     @GetMapping("/available")
     @Operation(summary = "List all active shifts available for delivery partners")
-    public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getAvailableShifts() {
-        List<DeliveryShiftResponseDto> available = shiftService.getAvailableShifts();
+    public ResponseEntity<ApiResponse<List<DeliveryShiftResponseDto>>> getAvailableShifts(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Delivery-Partner-Id", required = false) String customPartnerIdHeader,
+            @RequestHeader(value = "X-Zone-Id", required = false) String xZoneId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "zoneId", required = false) String zoneIdParam
+    ) {
+        String partnerZoneId = (xZoneId != null && !xZoneId.isBlank())
+                ? xZoneId.trim()
+                : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
+
+        if (partnerZoneId == null || partnerZoneId.isBlank()) {
+            UUID partnerId = resolvePartnerId(principal, customPartnerIdHeader);
+            if (partnerId != null && deliveryPartnerRepository != null) {
+                partnerZoneId = deliveryPartnerRepository.findById(partnerId)
+                        .map(com.foodie.delivery.entity.DeliveryPartner::getZoneId)
+                        .or(() -> deliveryPartnerRepository.findByUserCredentialId(partnerId).map(com.foodie.delivery.entity.DeliveryPartner::getZoneId))
+                        .orElse(null);
+            }
+        }
+
+        List<DeliveryShiftResponseDto> available = (partnerZoneId != null && !partnerZoneId.isBlank() && !partnerZoneId.equalsIgnoreCase("ALL"))
+                ? shiftService.getAvailableShiftsForZone(partnerZoneId)
+                : shiftService.getAvailableShifts();
         return ResponseEntity.ok(ApiResponse.success(available));
     }
 

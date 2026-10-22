@@ -24,14 +24,26 @@ public class DeliveryShift extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
+    @Column(name = "zone_name", length = 200)
+    private String zoneName;
+
     protected DeliveryShift() {}
 
     public DeliveryShift(String shiftName, String startTime, String endTime, String durationHours, String status) {
+        this(shiftName, startTime, endTime, durationHours, status, null, null);
+    }
+
+    public DeliveryShift(String shiftName, String startTime, String endTime, String durationHours, String status, String zoneId, String zoneName) {
         this.shiftName = shiftName;
         this.startTime = startTime;
         this.endTime = endTime;
         this.durationHours = durationHours;
         this.status = (status != null && !status.isBlank()) ? status : "ACTIVE";
+        this.zoneId = zoneId;
+        this.zoneName = zoneName;
     }
 
     public String getShiftName() {
@@ -72,5 +84,21 @@ public class DeliveryShift extends BaseEntity {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
+    }
+
+    public String getZoneName() {
+        return zoneName;
+    }
+
+    public void setZoneName(String zoneName) {
+        this.zoneName = zoneName;
     }
 }

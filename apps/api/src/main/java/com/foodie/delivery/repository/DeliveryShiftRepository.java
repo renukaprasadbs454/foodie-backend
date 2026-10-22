@@ -14,6 +14,13 @@ public interface DeliveryShiftRepository extends JpaRepository<DeliveryShift, UU
 
     List<DeliveryShift> findByStatusOrderByCreatedAtDesc(String status);
 
+    List<DeliveryShift> findByZoneIdAndStatusOrderByCreatedAtDesc(String zoneId, String status);
+
+    List<DeliveryShift> findByZoneIdOrderByCreatedAtDesc(String zoneId);
+
+    List<DeliveryShift> findByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
+            String shiftName, String startTime, String endTime, String status);
+
     boolean existsByShiftNameIgnoreCaseAndStartTimeAndEndTimeAndStatusNot(
             String shiftName, String startTime, String endTime, String status);
 

@@ -12,5 +12,13 @@ public record UpdateShiftRequestDto(
         @NotBlank(message = "End time is required.")
         String endTime,
 
-        String status
-) {}
+        String status,
+
+        String zoneId,
+
+        String zoneName
+) {
+    public UpdateShiftRequestDto(String shiftName, String startTime, String endTime, String status) {
+        this(shiftName, startTime, endTime, status, null, null);
+    }
+}

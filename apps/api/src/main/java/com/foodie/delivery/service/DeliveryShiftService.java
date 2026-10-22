@@ -13,7 +13,11 @@ public interface DeliveryShiftService {
 
     List<DeliveryShiftResponseDto> getAllAdminShifts();
 
+    List<DeliveryShiftResponseDto> getAllAdminShifts(String zoneId);
+
     List<DeliveryShiftResponseDto> getAvailableShifts();
+
+    List<DeliveryShiftResponseDto> getAvailableShiftsForZone(String zoneId);
 
     DeliveryShiftResponseDto updateShift(UUID id, UpdateShiftRequestDto request);
 

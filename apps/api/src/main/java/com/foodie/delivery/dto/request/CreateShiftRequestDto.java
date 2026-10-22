@@ -10,5 +10,13 @@ public record CreateShiftRequestDto(
         String startTime,
 
         @NotBlank(message = "End time is required.")
-        String endTime
-) {}
+        String endTime,
+
+        String zoneId,
+
+        String zoneName
+) {
+    public CreateShiftRequestDto(String shiftName, String startTime, String endTime) {
+        this(shiftName, startTime, endTime, null, null);
+    }
+}
