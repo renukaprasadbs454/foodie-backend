@@ -12,11 +12,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/admin/users")
@@ -63,17 +69,17 @@ public class AdminUserController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN')")
     @Operation(summary = "List all provisioned admin users")
-    public ResponseEntity<ApiResponse<java.util.List<AdminUserResponseDto>>> listAll() {
+    public ResponseEntity<ApiResponse<List<AdminUserResponseDto>>> listAll() {
         var users = adminService.listAllAdminUsers().stream()
                 .map(adminService::toResponse)
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(users));
     }
 
     @DeleteMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN')")
     @Operation(summary = "Permanently delete an admin user and their credentials")
-    public ResponseEntity<ApiResponse<Boolean>> deleteUser(@PathVariable java.util.UUID userId) {
+    public ResponseEntity<ApiResponse<Boolean>> deleteUser(@PathVariable UUID userId) {
         adminService.deleteAdminUser(userId);
         return ResponseEntity.ok(ApiResponse.success(true));
     }
