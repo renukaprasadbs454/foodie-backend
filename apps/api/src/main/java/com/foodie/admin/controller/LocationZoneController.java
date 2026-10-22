@@ -43,6 +43,9 @@ public class LocationZoneController {
     private AdminUserRepository adminUserRepository;
 
     @Autowired(required = false)
+    private com.foodie.admin.service.AdminService adminService;
+
+    @Autowired(required = false)
     private RestaurantAddressRepository restaurantAddressRepository;
 
     @Autowired(required = false)
@@ -339,8 +342,15 @@ public class LocationZoneController {
             }
         }
 
-        // Delete user credentials associated with this zone
-        if (adminUserRepository != null) {
+        // Delete user credentials permanently associated with this zone
+        if (adminService != null) {
+            adminService.deleteAdminUsersByZoneId(zoneId);
+            adminService.deleteAdminUsersByZoneId(zIdLower);
+            for (LocationZone zone : toDelete) {
+                if (zone.getId() != null) adminService.deleteAdminUsersByZoneId(zone.getId());
+                if (zone.getZoneName() != null) adminService.deleteAdminUsersByZoneId(zone.getZoneName());
+            }
+        } else if (adminUserRepository != null) {
             List<AdminUser> usersToDelete = adminUserRepository.findAll().stream()
                     .filter(u -> {
                         if (u.getAssignedZoneId() == null) return false;

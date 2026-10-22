@@ -72,4 +72,27 @@ public class AdminCredentialPortImpl implements AdminCredentialPort {
         }
         return userCredentialRepository.save(newCred).getId();
     }
+
+    @Override
+    @Transactional
+    public void deleteAdminCredential(UUID userCredentialId) {
+        if (userCredentialId != null && userCredentialRepository.existsById(userCredentialId)) {
+            userCredentialRepository.deleteById(userCredentialId);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findEmailByUserCredentialId(UUID userCredentialId) {
+        if (userCredentialId == null) return Optional.empty();
+        return userCredentialRepository.findById(userCredentialId).map(UserCredential::getEmail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findPhoneNumberByUserCredentialId(UUID userCredentialId) {
+        if (userCredentialId == null) return Optional.empty();
+        return userCredentialRepository.findById(userCredentialId).map(UserCredential::getPhoneNumber);
+    }
 }
+

@@ -148,6 +148,53 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.List<AdminUserView> listAllAdminUsers() {
+        return adminUserRepository.findAll().stream()
+                .map(this::toView)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void deleteAdminUser(UUID adminUserId) {
+        if (adminUserId == null) return;
+        AdminUser admin = adminUserRepository.findById(adminUserId)
+                .or(() -> adminUserRepository.findByUserCredentialId(adminUserId))
+                .orElse(null);
+        if (admin != null) {
+            UUID credId = admin.getUserCredentialId();
+            adminUserRepository.delete(admin);
+            if (credId != null) {
+                adminCredentialPort.deleteAdminCredential(credId);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteAdminUsersByZoneId(String zoneId) {
+        if (zoneId == null || zoneId.isBlank()) return;
+        String clean = zoneId.trim().toLowerCase();
+        java.util.List<AdminUser> toDelete = adminUserRepository.findAll().stream()
+                .filter(u -> {
+                    if (u.getAssignedZoneId() == null) return false;
+                    String uZone = u.getAssignedZoneId().trim().toLowerCase();
+                    return uZone.equalsIgnoreCase(clean) ||
+                            uZone.contains(clean) ||
+                            clean.contains(uZone);
+                })
+                .collect(java.util.stream.Collectors.toList());
+        for (AdminUser admin : toDelete) {
+            UUID credId = admin.getUserCredentialId();
+            adminUserRepository.delete(admin);
+            if (credId != null) {
+                adminCredentialPort.deleteAdminCredential(credId);
+            }
+        }
+    }
+
+    @Override
     public AdminUserResponseDto toResponse(AdminUserView view) {
         return new AdminUserResponseDto(
                 view.adminUserId(),
@@ -155,18 +202,28 @@ public class AdminServiceImpl implements AdminService {
                 view.fullName(),
                 view.role(),
                 view.profileImageKey(),
-                view.assignedZoneId()
+                view.assignedZoneId(),
+                view.email(),
+                view.phoneNumber()
         );
     }
 
     private AdminUserView toView(AdminUser admin) {
+        String email = admin.getUserCredentialId() != null
+                ? adminCredentialPort.findEmailByUserCredentialId(admin.getUserCredentialId()).orElse(null)
+                : null;
+        String phone = admin.getUserCredentialId() != null
+                ? adminCredentialPort.findPhoneNumberByUserCredentialId(admin.getUserCredentialId()).orElse(null)
+                : null;
         return new AdminUserView(
                 admin.getId(),
                 admin.getUserCredentialId(),
                 admin.getFullName(),
                 admin.getRole().getName(),
                 admin.getProfileImageKey(),
-                admin.getAssignedZoneId()
+                admin.getAssignedZoneId(),
+                email,
+                phone
         );
     }
 

@@ -9,8 +9,21 @@ public record AdminUserResponseDto(
         String fullName,
         AdminRoleName role,
         String profileImageKey,
-        String assignedZoneId
+        String assignedZoneId,
+        String email,
+        String phoneNumber
 ) {
+    public AdminUserResponseDto(
+            UUID adminUserId,
+            UUID userCredentialId,
+            String fullName,
+            AdminRoleName role,
+            String profileImageKey,
+            String assignedZoneId
+    ) {
+        this(adminUserId, userCredentialId, fullName, role, profileImageKey, assignedZoneId, null, null);
+    }
+
     public AdminUserResponseDto(
             UUID adminUserId,
             UUID userCredentialId,
@@ -18,6 +31,6 @@ public record AdminUserResponseDto(
             AdminRoleName role,
             String profileImageKey
     ) {
-        this(adminUserId, userCredentialId, fullName, role, profileImageKey, null);
+        this(adminUserId, userCredentialId, fullName, role, profileImageKey, null, null, null);
     }
 }

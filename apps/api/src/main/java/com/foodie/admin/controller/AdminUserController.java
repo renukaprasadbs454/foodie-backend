@@ -59,4 +59,22 @@ public class AdminUserController {
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(adminService.toResponse(view)));
     }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN')")
+    @Operation(summary = "List all provisioned admin users")
+    public ResponseEntity<ApiResponse<java.util.List<AdminUserResponseDto>>> listAll() {
+        var users = adminService.listAllAdminUsers().stream()
+                .map(adminService::toResponse)
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+
+    @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'SUPER_ADMIN')")
+    @Operation(summary = "Permanently delete an admin user and their credentials")
+    public ResponseEntity<ApiResponse<Boolean>> deleteUser(@PathVariable java.util.UUID userId) {
+        adminService.deleteAdminUser(userId);
+        return ResponseEntity.ok(ApiResponse.success(true));
+    }
 }

@@ -36,8 +36,21 @@ public interface AdminService {
             String fullName,
             AdminRoleName role,
             String profileImageKey,
-            String assignedZoneId
+            String assignedZoneId,
+            String email,
+            String phoneNumber
     ) {
+        public AdminUserView(
+                UUID adminUserId,
+                UUID userCredentialId,
+                String fullName,
+                AdminRoleName role,
+                String profileImageKey,
+                String assignedZoneId
+        ) {
+            this(adminUserId, userCredentialId, fullName, role, profileImageKey, assignedZoneId, null, null);
+        }
+
         public AdminUserView(
                 UUID adminUserId,
                 UUID userCredentialId,
@@ -45,11 +58,17 @@ public interface AdminService {
                 AdminRoleName role,
                 String profileImageKey
         ) {
-            this(adminUserId, userCredentialId, fullName, role, profileImageKey, null);
+            this(adminUserId, userCredentialId, fullName, role, profileImageKey, null, null, null);
         }
     }
 
     AdminUserView createAdminUser(CreateAdminUserCommand cmd, ActorContext creator);
+
+    java.util.List<AdminUserView> listAllAdminUsers();
+
+    void deleteAdminUser(UUID adminUserId);
+
+    void deleteAdminUsersByZoneId(String zoneId);
 
     boolean hasPermission(UUID adminUserId, String resource, String action);
 
