@@ -30,6 +30,7 @@ import com.foodie.common.enums.OrderStatus;
 import com.foodie.menu.repository.MenuItemRepository;
 import com.foodie.order.entity.Order;
 import com.foodie.order.repository.OrderRepository;
+import com.foodie.restaurant.dto.response.RestaurantAddressResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantBankDetailsResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDashboardSummaryResponseDto;
 import com.foodie.restaurant.dto.response.RestaurantDetailResponseDto;
@@ -434,14 +435,44 @@ public class RestaurantServiceImpl implements RestaurantService {
         RestaurantAddress address = restaurantAddressRepository.save(toAddress(request.address()));
         // commissionPct from client is ignored — platform default only (API Contracts
         // §3.3).
-        Restaurant restaurant = restaurantRepository.save(Restaurant.createPending(
+        Restaurant restaurant = Restaurant.createPending(
                 ownerCredentialId,
                 request.name(),
                 request.description(),
                 toCuisineArray(request.cuisineTypes()),
                 request.restaurantType(),
                 address,
-                defaultCommissionPct));
+                defaultCommissionPct);
+
+        String zoneId = request.zoneId();
+        String zoneName = request.zoneName();
+        if (zoneId != null && !zoneId.isBlank()) {
+            LocationZone z = locationZoneRepository.findById(zoneId.trim()).orElse(null);
+            if (z != null) {
+                zoneId = z.getId();
+                zoneName = z.getZoneName();
+            }
+        }
+        if (zoneId == null || zoneId.isBlank()) {
+            LocationZone matched = findActiveZoneForCoordinates(
+                    request.address().latitude().doubleValue(),
+                    request.address().longitude().doubleValue());
+            if (matched != null) {
+                zoneId = matched.getId();
+                zoneName = matched.getZoneName();
+            } else {
+                RestaurantAddressResponseDto addrDto = new RestaurantAddressResponseDto(
+                        address.getLine1(), address.getLine2(), address.getLandmark(), address.getCity(),
+                        address.getState(), address.getCountry(), address.getPincode(), address.getFormattedAddress(),
+                        address.getLatitude(), address.getLongitude());
+                zoneId = RestaurantDetailResponseDto.deriveZoneId(addrDto, address.getLatitude(), address.getLongitude());
+                zoneName = RestaurantDetailResponseDto.deriveZoneName(addrDto, address.getLatitude(), address.getLongitude());
+            }
+        }
+        restaurant.setZoneId(zoneId);
+        restaurant.setZoneName(zoneName);
+        restaurant = restaurantRepository.save(restaurant);
+
         eventPublisher.publishEvent(RestaurantCreatedEvent.of(
                 restaurant.getId(), ownerCredentialId, restaurant.getName()));
         restaurantCacheService.evictAllListCaches();
@@ -502,6 +533,12 @@ public class RestaurantServiceImpl implements RestaurantService {
                 request.latitude(),
                 request.longitude());
         restaurant.syncGeoFromAddress();
+        LocationZone matchedZone = findActiveZoneForCoordinates(request.latitude().doubleValue(), request.longitude().doubleValue());
+        if (matchedZone != null) {
+            restaurant.setZoneId(matchedZone.getId());
+            restaurant.setZoneName(matchedZone.getZoneName());
+        }
+        restaurantRepository.save(restaurant);
         restaurantCacheService.evictRestaurant(restaurant.getId());
         restaurantCacheService.evictAllListCaches();
         return restaurantMapper.toLocation(restaurant);

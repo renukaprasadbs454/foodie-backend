@@ -97,6 +97,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     @org.springframework.beans.factory.annotation.Autowired
     private LocationZoneRepository locationZoneRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
@@ -654,19 +657,72 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .map(a -> a.getDeliveryPartner().getId())
                 .toList();
 
-        // Strict Zone Isolation: Resolve order operating zone from restaurant coordinates
+        // 1. Resolve restaurant operating zone strictly
         LocationZone orderZone = null;
-        try {
-            List<LocationZone> allZones = locationZoneRepository.findAll();
+        String restZoneId = pickup.zoneId();
+        String restZoneName = pickup.zoneName();
+
+        List<LocationZone> allZones = locationZoneRepository != null
+                ? locationZoneRepository.findAll()
+                : java.util.Collections.emptyList();
+
+        // 1a. Match by restaurant entity's configured zone
+        if (restZoneId != null && !restZoneId.isBlank()) {
+            for (LocationZone z : allZones) {
+                if ("ACTIVE".equalsIgnoreCase(z.getStatus())
+                        && (isZoneEquivalent(z.getId(), restZoneId) || isZoneEquivalent(z.getZoneName(), restZoneId))) {
+                    orderZone = z;
+                    break;
+                }
+            }
+        }
+        if (orderZone == null && restZoneName != null && !restZoneName.isBlank()) {
+            for (LocationZone z : allZones) {
+                if ("ACTIVE".equalsIgnoreCase(z.getStatus())
+                        && (isZoneEquivalent(z.getId(), restZoneName) || isZoneEquivalent(z.getZoneName(), restZoneName))) {
+                    orderZone = z;
+                    break;
+                }
+            }
+        }
+
+        // 1b. Match by coordinates inside active zone
+        if (orderZone == null) {
             for (LocationZone z : allZones) {
                 if ("ACTIVE".equalsIgnoreCase(z.getStatus()) && isPointInsideZone(restaurantLat, restaurantLng, z)) {
                     orderZone = z;
                     break;
                 }
             }
-        } catch (Exception ex) {
-            log.warn("Failed resolving order operating zone: {}", ex.getMessage());
         }
+
+        // 1c. Match by restaurant address city
+        if (orderZone == null && pickup.city() != null && !pickup.city().isBlank()) {
+            for (LocationZone z : allZones) {
+                if ("ACTIVE".equalsIgnoreCase(z.getStatus()) && isZoneEquivalent(pickup.city(), z.getCityName())) {
+                    orderZone = z;
+                    break;
+                }
+            }
+        }
+
+        // 1d. Canonical fallback based on city or coordinates
+        if (orderZone == null) {
+            String fallbackZoneId = (pickup.city() != null && (pickup.city().toLowerCase().contains("tumkur") || pickup.city().toLowerCase().contains("tumakuru")))
+                    || (restaurantLat > 13.2 && restaurantLat < 13.5) ? "dz-tumkur" : "dz-bangalore";
+            for (LocationZone z : allZones) {
+                if (isZoneEquivalent(z.getId(), fallbackZoneId)) {
+                    orderZone = z;
+                    break;
+                }
+            }
+        }
+
+        final String finalOrderZoneId = orderZone != null ? orderZone.getId() : (restZoneId != null ? restZoneId : "dz-bangalore");
+        final String finalOrderZoneName = orderZone != null ? orderZone.getZoneName() : (restZoneName != null ? restZoneName : "Operating Zone");
+
+        log.info("createAssignmentForOrder for order {}: restaurant='{}', zoneId='{}', zoneName='{}'",
+                orderId, pickup.restaurantName(), finalOrderZoneId, finalOrderZoneName);
 
         // Get partner ID that previously was offered this assignment
         UUID previousPartnerId = existingAssignmentOpt.map(a -> a.getDeliveryPartner().getId()).orElse(null);
@@ -684,13 +740,16 @@ public class DeliveryServiceImpl implements DeliveryService {
                         && candidate.get().getKycStatus() == KycStatus.VERIFIED
                         && !candidate.get().isCashLimitExceeded()) {
                     DeliveryPartner p = candidate.get();
-                    if (orderZone != null && p.getZoneId() != null && !p.getZoneId().isBlank()) {
-                        if (!orderZone.getId().equalsIgnoreCase(p.getZoneId().trim())) {
-                            continue; // Partner selected a different zone in KYC form
-                        }
+                    // STRICT REQUIREMENT: Only assign if delivery partner selected zone matches restaurant zone!
+                    if (!isPartnerInSameZone(p, finalOrderZoneId, finalOrderZoneName)) {
+                        log.debug("Skipping geo candidate {} because partner zone '{}/{}' does not match order zone '{}/{}'",
+                                p.getId(), p.getZoneId(), p.getZoneName(), finalOrderZoneId, finalOrderZoneName);
+                        continue;
                     }
                     selectedPartner = candidate;
                     selectedDistance = hit.distanceKm();
+                    log.info("Selected nearby geo delivery partner {} ({}) in matching zone '{}' for order {}",
+                            p.getId(), p.getFullName(), finalOrderZoneName, orderId);
                     break;
                 }
             }
@@ -703,30 +762,55 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (selectedPartner.isEmpty()) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
             log.info(
-                    "createAssignmentForOrder candidate search for order {}: busyPartnerIds={}, previousPartnerId={}, onlineList={}",
-                    orderId, busyPartnerIds, previousPartnerId,
-                    onlineList.stream().map(p -> p.getId() + ":" + p.getFullName() + ":kyc=" + p.getKycStatus()
+                    "createAssignmentForOrder candidate search for order {}: targetZone='{}'/'{}', busyPartnerIds={}, previousPartnerId={}, onlineList={}",
+                    orderId, finalOrderZoneId, finalOrderZoneName, busyPartnerIds, previousPartnerId,
+                    onlineList.stream().map(p -> p.getId() + ":" + p.getFullName() + ":zone=" + p.getZoneId() + ":kyc=" + p.getKycStatus()
                             + ":cashExceeded=" + p.isCashLimitExceeded()).toList());
+
+            // First pass: find available partner not previously offered
             for (DeliveryPartner candidate : onlineList) {
                 if (candidate.isOnline()
                         && candidate.getKycStatus() == KycStatus.VERIFIED
                         && !candidate.isCashLimitExceeded()
-                        && !busyPartnerIds.contains(candidate.getId())
-                        && !candidate.getId().equals(previousPartnerId)) {
-                    if (orderZone != null && candidate.getZoneId() != null && !candidate.getZoneId().isBlank()) {
-                        if (!orderZone.getId().equalsIgnoreCase(candidate.getZoneId().trim())) {
-                            continue; // Partner selected a different zone in KYC form
-                        }
+                        && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))
+                        && (previousPartnerId == null || !previousPartnerId.equals(candidate.getId()))) {
+                    // STRICT REQUIREMENT: Partner must have selected the SAME zone in KYC!
+                    if (!isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
+                        log.info("Partner {} ({}) skipped: zone '{}/{}' does not match order zone '{}/{}'",
+                                candidate.getId(), candidate.getFullName(), candidate.getZoneId(), candidate.getZoneName(),
+                                finalOrderZoneId, finalOrderZoneName);
+                        continue;
                     }
                     selectedPartner = Optional.of(candidate);
                     selectedDistance = 2.5;
+                    log.info("Selected online delivery partner {} ({}) in matching zone '{}' for order {}",
+                                candidate.getId(), candidate.getFullName(), finalOrderZoneName, orderId);
                     break;
+                }
+            }
+
+            // Second pass: if only previousPartnerId was available in this zone and not busy, re-offer to them
+            if (selectedPartner.isEmpty() && previousPartnerId != null) {
+                for (DeliveryPartner candidate : onlineList) {
+                    if (java.util.Objects.equals(candidate.getId(), previousPartnerId)
+                            && candidate.isOnline()
+                            && candidate.getKycStatus() == KycStatus.VERIFIED
+                            && !candidate.isCashLimitExceeded()
+                            && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))) {
+                        if (isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
+                            selectedPartner = Optional.of(candidate);
+                            selectedDistance = 2.5;
+                            log.info("Re-offering order {} to only available partner {} ({}) in matching zone '{}'",
+                                    orderId, candidate.getId(), candidate.getFullName(), finalOrderZoneName);
+                            break;
+                        }
+                    }
                 }
             }
         }
 
         if (selectedPartner.isEmpty()) {
-            log.warn("No online verified delivery partner available for order {}", orderId);
+            log.warn("No online verified delivery partner available in matching zone '{}' for order {}", finalOrderZoneName, orderId);
             orderDeliveryPort.updateStatus(orderId, OrderStatus.WAITING_FOR_DELIVERY_PARTNER);
             return;
         }
@@ -1589,7 +1673,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         zones.sort(java.util.Comparator.comparing(LocationZone::getId, java.util.Comparator.nullsLast(String::compareTo)));
 
         for (LocationZone zone : zones) {
-            if (isPointInsideZone(lat, lng, zone)) {
+            if (zone.isDeliveryPartnerEnabled() && (zone.getStatus() == null || "ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) && isPointInsideZone(lat, lng, zone)) {
                 return new DeliveryZoneVerificationResponseDto(
                         true,
                         zone.getId(),
@@ -1614,7 +1698,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private boolean isPointInsideZone(double lat, double lng, LocationZone zone) {
-        if (zone == null || !zone.isDeliveryPartnerEnabled()) {
+        if (zone == null) {
             return false;
         }
         if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) {
@@ -1637,6 +1721,69 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         return false;
+    }
+
+    private boolean isPartnerInSameZone(DeliveryPartner partner, String orderZoneId, String orderZoneName) {
+        if (partner == null) {
+            return false;
+        }
+        String pZoneId = partner.getZoneId();
+        String pZoneName = partner.getZoneName();
+        if ((pZoneId == null || pZoneId.isBlank()) && (pZoneName == null || pZoneName.isBlank())) {
+            // Strict zone requirement: unzoned delivery partners cannot receive orders
+            return false;
+        }
+        if ((orderZoneId == null || orderZoneId.isBlank()) && (orderZoneName == null || orderZoneName.isBlank())) {
+            return false;
+        }
+
+        return isZoneEquivalent(pZoneId, orderZoneId)
+                || isZoneEquivalent(pZoneId, orderZoneName)
+                || isZoneEquivalent(pZoneName, orderZoneId)
+                || isZoneEquivalent(pZoneName, orderZoneName);
+    }
+
+    private boolean isZoneEquivalent(String z1, String z2) {
+        if (z1 == null || z2 == null) {
+            return false;
+        }
+        String s1 = z1.trim();
+        String s2 = z2.trim();
+        if (s1.isEmpty() || s2.isEmpty()) {
+            return false;
+        }
+        if (s1.equalsIgnoreCase(s2)) {
+            return true;
+        }
+
+        String c1 = canonicalizeZoneString(s1);
+        String c2 = canonicalizeZoneString(s2);
+        if (c1.isEmpty() || c2.isEmpty()) {
+            return false;
+        }
+        if (c1.equals(c2)) {
+            return true;
+        }
+        if ((c1.length() >= 4 && c2.contains(c1)) || (c2.length() >= 4 && c1.contains(c2))) {
+            return true;
+        }
+        return false;
+    }
+
+    private String canonicalizeZoneString(String val) {
+        if (val == null) return "";
+        String clean = val.toLowerCase()
+                .replaceAll("(?i)\\bdz-", "")
+                .replaceAll("(?i)\\bzone\\b", "")
+                .replaceAll("[^a-z0-9]", "")
+                .trim();
+        if ("tumakuru".equals(clean) || "tumkur".equals(clean)) {
+            return "tumkur";
+        }
+        if ("bengaluru".equals(clean) || "bangalore".equals(clean)) {
+            return "bangalore";
+        }
+        return clean;
     }
 
     @Override

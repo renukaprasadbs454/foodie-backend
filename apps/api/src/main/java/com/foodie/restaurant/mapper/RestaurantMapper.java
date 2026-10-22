@@ -95,7 +95,9 @@ public class RestaurantMapper {
                                 restaurant.getOpenDays() != null ? Arrays.asList(restaurant.getOpenDays()) : null,
                                 contactPhone,
                                 contactPhone,
-                                finalReviewCount);
+                                finalReviewCount,
+                                restaurant.getZoneId(),
+                                restaurant.getZoneName());
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {

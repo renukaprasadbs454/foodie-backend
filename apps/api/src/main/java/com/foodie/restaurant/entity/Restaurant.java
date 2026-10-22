@@ -93,6 +93,12 @@ public class Restaurant extends BaseEntity {
     @Column(name = "top_position")
     private Integer topPosition;
 
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
+    @Column(name = "zone_name", length = 200)
+    private String zoneName;
+
     protected Restaurant() {
     }
 
@@ -307,5 +313,21 @@ public class Restaurant extends BaseEntity {
 
     public void setTopPosition(Integer topPosition) {
         this.topPosition = topPosition;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
+    }
+
+    public String getZoneName() {
+        return zoneName;
+    }
+
+    public void setZoneName(String zoneName) {
+        this.zoneName = zoneName;
     }
 }

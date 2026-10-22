@@ -33,6 +33,19 @@ public class RestaurantPickupQueryImpl implements RestaurantPickupQuery {
                     lng = java.math.BigDecimal.valueOf(77.1173);
                 }
             }
+            String zoneId = restaurant.getZoneId();
+            String zoneName = restaurant.getZoneName();
+            if (zoneId == null || zoneId.isBlank()) {
+                String city = address.getCity() != null ? address.getCity().toLowerCase() : "";
+                if (city.contains("tumkur") || city.contains("tumakuru") || (lat.doubleValue() > 13.2 && lat.doubleValue() < 13.5)) {
+                    zoneId = "dz-tumkur";
+                    zoneName = "Tumkur Zone";
+                } else {
+                    zoneId = "dz-bangalore";
+                    zoneName = "Bangalore Zone";
+                }
+            }
+
             return new PickupLocation(
                     restaurant.getId(),
                     restaurant.getName(),
@@ -41,7 +54,9 @@ public class RestaurantPickupQueryImpl implements RestaurantPickupQuery {
                     address.getCity(),
                     address.getPincode(),
                     lat,
-                    lng
+                    lng,
+                    zoneId,
+                    zoneName
             );
         });
     }

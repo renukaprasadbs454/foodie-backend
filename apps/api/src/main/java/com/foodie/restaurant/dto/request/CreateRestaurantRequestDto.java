@@ -24,7 +24,11 @@ public record CreateRestaurantRequestDto(
                  * Accepted for OpenAPI completeness only — ignored server-side (API Contracts
                  * §3.3).
                  */
-                BigDecimal commissionPct) {
+                BigDecimal commissionPct,
+
+                String zoneId,
+
+                String zoneName) {
 
         public CreateRestaurantRequestDto(
                         String name,
@@ -33,6 +37,16 @@ public record CreateRestaurantRequestDto(
                         RestaurantAddressRequestDto address,
                         BigDecimal commissionPct) {
                 this(name, description, cuisineTypes, com.foodie.common.enums.RestaurantType.BOTH, address,
-                                commissionPct);
+                                commissionPct, null, null);
+        }
+
+        public CreateRestaurantRequestDto(
+                        String name,
+                        String description,
+                        List<CuisineType> cuisineTypes,
+                        com.foodie.common.enums.RestaurantType restaurantType,
+                        RestaurantAddressRequestDto address,
+                        BigDecimal commissionPct) {
+                this(name, description, cuisineTypes, restaurantType, address, commissionPct, null, null);
         }
 }

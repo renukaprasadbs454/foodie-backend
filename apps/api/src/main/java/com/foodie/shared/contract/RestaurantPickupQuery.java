@@ -17,8 +17,22 @@ public interface RestaurantPickupQuery {
             String city,
             String pincode,
             BigDecimal latitude,
-            BigDecimal longitude
+            BigDecimal longitude,
+            String zoneId,
+            String zoneName
     ) {
+        public PickupLocation(
+                UUID restaurantId,
+                String restaurantName,
+                String line1,
+                String line2,
+                String city,
+                String pincode,
+                BigDecimal latitude,
+                BigDecimal longitude
+        ) {
+            this(restaurantId, restaurantName, line1, line2, city, pincode, latitude, longitude, null, null);
+        }
         public String formattedAddress() {
             StringBuilder sb = new StringBuilder(line1);
             if (line2 != null && !line2.isBlank()) {
