@@ -1,4 +1,4 @@
-- V68: Add zone_id to support_conversation and support_message for dynamic zone isolation
+-- V68: Add zone_id to support_conversation and support_message for dynamic zone isolation
 ALTER TABLE support_conversation ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100);
 ALTER TABLE support_message ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100);
 
