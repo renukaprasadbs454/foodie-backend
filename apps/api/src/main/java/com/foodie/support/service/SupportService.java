@@ -26,6 +26,112 @@ public class SupportService {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
+    @Autowired(required = false)
+    private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+
+    @Autowired(required = false)
+    private com.foodie.order.repository.OrderRepository orderRepository;
+
+    @Autowired(required = false)
+    private com.foodie.user.repository.AddressRepository addressRepository;
+
+    @Autowired(required = false)
+    private com.foodie.admin.service.AdminZoneService adminZoneService;
+
+    @Autowired(required = false)
+    private com.foodie.admin.repository.LocationZoneRepository locationZoneRepository;
+
+    public String resolveZoneId(UUID restaurantId, String orderId, String customerId, String category) {
+        // 1. Restaurant
+        if (restaurantId != null && restaurantRepository != null) {
+            var r = restaurantRepository.findById(restaurantId).orElse(null);
+            if (r != null) {
+                String zoneId = findZoneForCoordinatesOrCity(
+                        r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                        r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                        r.getAddress() != null ? r.getAddress().getCity() : null);
+                if (zoneId != null) return zoneId;
+            }
+        }
+
+        // 2. Order
+        if (orderId != null && !orderId.isBlank() && orderRepository != null) {
+            com.foodie.order.entity.Order order = null;
+            try {
+                order = orderRepository.findById(UUID.fromString(orderId)).orElse(null);
+            } catch (Exception ignored) {
+                order = orderRepository.findByOrderNumber(orderId).orElse(null);
+            }
+            if (order != null) {
+                if (order.getRestaurantId() != null && restaurantRepository != null) {
+                    var r = restaurantRepository.findById(order.getRestaurantId()).orElse(null);
+                    if (r != null) {
+                        String zoneId = findZoneForCoordinatesOrCity(
+                                r.getLatitude() != null ? r.getLatitude().doubleValue() : null,
+                                r.getLongitude() != null ? r.getLongitude().doubleValue() : null,
+                                r.getAddress() != null ? r.getAddress().getCity() : null);
+                        if (zoneId != null) return zoneId;
+                    }
+                }
+                if (order.getAddressId() != null && addressRepository != null) {
+                    var addr = addressRepository.findById(order.getAddressId()).orElse(null);
+                    if (addr != null) {
+                        String zoneId = findZoneForCoordinatesOrCity(
+                                addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null,
+                                addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null,
+                                addr.getCity());
+                        if (zoneId != null) return zoneId;
+                    }
+                }
+            }
+        }
+
+        // 3. Delivery partner
+        if (("DELIVERY".equalsIgnoreCase(category) || (customerId != null && (customerId.startsWith("DRV-") || customerId.contains("rider")))) && deliveryPartnerRepository != null && customerId != null) {
+            try {
+                UUID dpUid = UUID.fromString(customerId);
+                var dp = deliveryPartnerRepository.findByUserCredentialId(dpUid)
+                        .or(() -> deliveryPartnerRepository.findById(dpUid))
+                        .orElse(null);
+                if (dp != null && dp.getZoneId() != null && !dp.getZoneId().isBlank()) {
+                    return dp.getZoneId();
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // 4. Customer addresses
+        if (customerId != null && addressRepository != null) {
+            try {
+                UUID custUid = UUID.fromString(customerId);
+                var addrs = addressRepository.findByCustomerIdOrderByCreatedAtAsc(custUid);
+                for (var addr : addrs) {
+                    String zoneId = findZoneForCoordinatesOrCity(
+                            addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null,
+                            addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null,
+                            addr.getCity());
+                    if (zoneId != null) return zoneId;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        return null;
+    }
+
+    public String findZoneForCoordinatesOrCity(Double lat, Double lng, String city) {
+        if (locationZoneRepository == null || adminZoneService == null) return null;
+        List<com.foodie.admin.entity.LocationZone> zones = locationZoneRepository.findAll();
+        for (var zone : zones) {
+            if ("DELETED".equalsIgnoreCase(zone.getStatus())) continue;
+            if (adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                return zone.getId();
+            }
+        }
+        return null;
+    }
+
     @Transactional
     public SupportConversation getOrCreateConversation(String customerId, String category, String subject,
             String orderId) {
@@ -46,6 +152,7 @@ public class SupportService {
         conv.setCategory(category);
         conv.setSubject(subject);
         conv.setOrderId(orderId);
+        conv.setZoneId(resolveZoneId(null, orderId, customerId, category));
 
         SupportConversation saved = conversationRepository.save(conv);
         broadcastConversationUpdate(saved);
@@ -54,6 +161,20 @@ public class SupportService {
 
     public List<SupportConversation> getAllAdminConversations() {
         return conversationRepository.findAllByOrderByUpdatedAtDesc();
+    }
+
+    public List<SupportConversation> getAllAdminConversations(String zoneId) {
+        if (zoneId == null || zoneId.isBlank() || zoneId.equalsIgnoreCase("ALL")) {
+            return conversationRepository.findAllByOrderByUpdatedAtDesc();
+        }
+        return conversationRepository.findByZoneIdOrderByUpdatedAtDesc(zoneId);
+    }
+
+    public List<SupportMessage> getAllAdminMessages(String zoneId) {
+        if (zoneId == null || zoneId.isBlank() || zoneId.equalsIgnoreCase("ALL")) {
+            return messageRepository.findAll();
+        }
+        return messageRepository.findByZoneIdOrderByCreatedAtDesc(zoneId);
     }
 
     public List<SupportConversation> getCustomerConversations(String customerId) {
@@ -74,6 +195,13 @@ public class SupportService {
         SupportConversation conv = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        if (conv.getZoneId() == null || conv.getZoneId().isBlank()) {
+            String resolvedZone = resolveZoneId(conv.getRestaurantId(), conv.getOrderId(), conv.getCustomerId(), conv.getCategory());
+            if (resolvedZone != null) {
+                conv.setZoneId(resolvedZone);
+            }
+        }
+
         SupportMessage msg = new SupportMessage();
         msg.setId("MSG-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         msg.setConversationId(conversationId);
@@ -82,6 +210,7 @@ public class SupportService {
         msg.setSenderName(senderName);
         msg.setMessageType("TEXT");
         msg.setContent(content);
+        msg.setZoneId(conv.getZoneId());
 
         SupportMessage savedMsg = messageRepository.save(msg);
 
@@ -171,6 +300,7 @@ public class SupportService {
         conv.setOrderId(orderId);
         conv.setCreatedAt(Instant.now());
         conv.setUpdatedAt(Instant.now());
+        conv.setZoneId(resolveZoneId(restaurantId, orderId, restaurantId.toString(), "RESTAURANT"));
 
         SupportConversation saved = conversationRepository.save(conv);
 

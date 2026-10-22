@@ -335,6 +335,17 @@ public class AdminZoneServiceImpl implements AdminZoneService {
                 if (c.contains("tumkur") || c.contains("tumakuru")) {
                     return true;
                 }
+            } else {
+                if (!zCity.isEmpty() && (c.contains(zCity) || zCity.contains(c))) {
+                    return true;
+                }
+                if (!zName.isEmpty() && (c.contains(zName) || zName.contains(c))) {
+                    return true;
+                }
+                String cleanZId = zone.getId() != null ? zone.getId().toLowerCase().replace("dz-", "") : "";
+                if (!cleanZId.isEmpty() && c.contains(cleanZId)) {
+                    return true;
+                }
             }
         }
         if (lat != null && lng != null && zone.getLatitude() != null && zone.getLongitude() != null && zone.getRadiusKm() != null) {

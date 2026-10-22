@@ -44,6 +44,9 @@ public class SupportMessage {
     @Column(name = "read_status")
     private Boolean readStatus = false;
 
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
     public SupportMessage() {
     }
 
@@ -129,4 +132,6 @@ public class SupportMessage {
     public void setReadStatus(Boolean readStatus) {
         this.readStatus = readStatus;
     }
+    public String getZoneId() { return zoneId; }
+    public void setZoneId(String zoneId) { this.zoneId = zoneId; }
 }

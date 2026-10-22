@@ -14,6 +14,10 @@ import org.springframework.data.repository.query.Param;
 public interface SupportMessageRepository extends JpaRepository<SupportMessage, String> {
     List<SupportMessage> findByConversationIdOrderByCreatedAtAsc(String conversationId);
 
+    List<SupportMessage> findByZoneIdOrderByCreatedAtAsc(String zoneId);
+
+    List<SupportMessage> findByZoneIdOrderByCreatedAtDesc(String zoneId);
+
     long countByConversationIdAndSenderTypeNotAndReadAtIsNull(String conversationId, String senderType);
 
     @Modifying

@@ -17,4 +17,6 @@ public interface SupportConversationRepository extends JpaRepository<SupportConv
     List<SupportConversation> findByCategoryOrderByUpdatedAtDesc(String category);
 
     List<SupportConversation> findAllByOrderByUpdatedAtDesc();
+
+    List<SupportConversation> findByZoneIdOrderByUpdatedAtDesc(String zoneId);
 }

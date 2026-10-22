@@ -41,6 +41,9 @@ public class SupportConversation {
     @Column(name = "order_id")
     private String orderId;
 
+    @Column(name = "zone_id", length = 100)
+    private String zoneId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
@@ -102,4 +105,6 @@ public class SupportConversation {
     
     public Instant getClosedAt() { return closedAt; }
     public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+    public String getZoneId() { return zoneId; }
+    public void setZoneId(String zoneId) { this.zoneId = zoneId; }
 }
