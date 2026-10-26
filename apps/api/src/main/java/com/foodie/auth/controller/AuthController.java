@@ -130,12 +130,15 @@ public class AuthController {
         for (LocationZone z : activeZones) {
             String zId = z.getId();
             String zName = z.getZoneName() != null ? z.getZoneName() : zId;
+            String checkStr = ((zId != null ? zId : "") + " " + (zName != null ? zName : "")).toLowerCase();
+            if (checkStr.contains("customer")) {
+                continue;
+            }
             AdminUser assignedUser = zoneAdminMap.get(zId.toLowerCase());
             String role = (assignedUser != null && assignedUser.getRole() != null)
                     ? assignedUser.getRole().getName().name()
                     : "OPS";
             String email = null;
-            String checkStr = ((zId != null ? zId : "") + " " + (zName != null ? zName : "")).toLowerCase();
             if (checkStr.contains("bangalore") || checkStr.contains("bengaluru")) {
                 email = "ops@foodie.local";
             } else if (checkStr.contains("tumkur") || checkStr.contains("tumakuru")) {

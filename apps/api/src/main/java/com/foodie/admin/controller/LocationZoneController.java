@@ -52,6 +52,49 @@ public class LocationZoneController {
     private com.foodie.admin.security.AdminAccess adminAccess;
 
     private final ConcurrentHashMap<String, UnserviceableRequestDto> unserviceableRequests = new ConcurrentHashMap<>();
+
+    @Autowired(required = false)
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    private void saveUnserviceableRequestsToFile() {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper om = objectMapper != null ? objectMapper : new com.fasterxml.jackson.databind.ObjectMapper();
+            om.findAndRegisterModules();
+            for (String p : List.of("./data", "apps/api/data")) {
+                java.io.File dir = new java.io.File(p);
+                if (dir.exists()) {
+                    java.io.File file = new java.io.File(dir, "unserviceable_requests.json");
+                    om.writerWithDefaultPrettyPrinter().writeValue(file, new ArrayList<>(unserviceableRequests.values()));
+                }
+            }
+        } catch (Exception e) {
+            // Best-effort file persist
+        }
+    }
+
+    private void loadUnserviceableRequestsFromFile() {
+        try {
+            java.io.File file = new java.io.File("./data/unserviceable_requests.json");
+            if (!file.exists()) {
+                file = new java.io.File("apps/api/data/unserviceable_requests.json");
+            }
+            if (file.exists() && file.length() > 0) {
+                com.fasterxml.jackson.databind.ObjectMapper om = objectMapper != null ? objectMapper : new com.fasterxml.jackson.databind.ObjectMapper();
+                om.findAndRegisterModules();
+                List<UnserviceableRequestDto> list = om.readValue(file, new com.fasterxml.jackson.core.type.TypeReference<List<UnserviceableRequestDto>>() {});
+                if (list != null) {
+                    for (UnserviceableRequestDto req : list) {
+                        if (req.getId() != null) {
+                            unserviceableRequests.put(req.getId(), req);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Best-effort file load
+        }
+    }
+
     private final ConcurrentHashMap<String, ServiceAreaDto> serviceAreas = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, DeliveryChargesDto> zoneDeliveryCharges = new ConcurrentHashMap<>();
@@ -186,9 +229,11 @@ public class LocationZoneController {
             serviceAreas.put("sa-4", new ServiceAreaDto("sa-4", "Siddaganga Ext & Batwadi", "Tumkur", "572102", "FULL_COVERAGE", 48));
         }
 
+        loadUnserviceableRequestsFromFile();
         if (unserviceableRequests.isEmpty()) {
             unserviceableRequests.put("req-1", new UnserviceableRequestDto("req-1", "Kengeri Biryani Hub", "Suresh Kumar", "suresh@kengeribiryani.com", "+919876543210", "Kengeri Satellite Town", "Bangalore", 12.9177, 77.4838, "PENDING", Instant.now().minusSeconds(86400)));
             unserviceableRequests.put("req-2", new UnserviceableRequestDto("req-2", "Pavithra Thatte Idli", "Manjunath T", "manju@pavithraidli.com", "+919876543211", "Kyatsandra Main Road", "Tumkur", 13.3150, 77.1650, "PENDING", Instant.now().minusSeconds(43200)));
+            saveUnserviceableRequestsToFile();
         }
     }
 
@@ -492,17 +537,94 @@ public class LocationZoneController {
         return ResponseEntity.ok(ApiResponse.success(list));
     }
 
-    @PostMapping("/unserviceable-requests")
+    @PostMapping({"/unserviceable-requests", "/customer/unserviceable-requests"})
     public ResponseEntity<ApiResponse<UnserviceableRequestDto>> createUnserviceableRequest(
             @RequestBody UnserviceableRequestDto dto) {
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("req-" + UUID.randomUUID().toString().substring(0, 6));
         }
-        dto.setStatus("PENDING");
+        if (dto.getStatus() == null || dto.getStatus().isBlank()) {
+            dto.setStatus("PENDING");
+        }
         if (dto.getCreatedAt() == null) {
             dto.setCreatedAt(Instant.now());
         }
+
+        String rawName = dto.getRestaurantName() != null ? dto.getRestaurantName().trim() : "";
+        String rawContact = dto.getContactPerson() != null ? dto.getContactPerson().trim() : "";
+        if (dto.getRequestSource() == null || dto.getRequestSource().isBlank()) {
+            if (rawName.toLowerCase().contains("[customer]") || rawName.toLowerCase().startsWith("customer:") || rawContact.toLowerCase().contains("customer")) {
+                dto.setRequestSource("CUSTOMER");
+            } else if (rawName.toLowerCase().contains("[delivery") || rawContact.toLowerCase().contains("driver")) {
+                dto.setRequestSource("DELIVERY_PARTNER");
+            } else {
+                dto.setRequestSource("CUSTOMER");
+            }
+        }
+
+        if (dto.getRequesterName() == null || dto.getRequesterName().isBlank()) {
+            dto.setRequesterName(!rawContact.isBlank() ? rawContact : (!rawName.isBlank() ? rawName : "Customer User"));
+        }
+
+        if (dto.getRequestedArea() == null || dto.getRequestedArea().isBlank()) {
+            dto.setRequestedArea(dto.getAddress() != null ? dto.getAddress() : "Customer Location");
+        }
+
+        if (dto.getRestaurantName() == null || dto.getRestaurantName().isBlank() || dto.getRestaurantName().equalsIgnoreCase(dto.getRequesterName())) {
+            if ("CUSTOMER".equalsIgnoreCase(dto.getRequestSource())) {
+                dto.setRestaurantName("[Customer] " + dto.getRequesterName());
+            } else if ("DELIVERY_PARTNER".equalsIgnoreCase(dto.getRequestSource())) {
+                dto.setRestaurantName("[Delivery Partner] " + dto.getRequesterName());
+            }
+        }
+
+        if (dto.getCityName() == null || dto.getCityName().isBlank()) {
+            String addr = dto.getAddress() != null ? dto.getAddress().toLowerCase() : "";
+            if (addr.contains("tumkur") || addr.contains("tumakuru")) {
+                dto.setCityName("Tumkur");
+            } else if (addr.contains("mumbai")) {
+                dto.setCityName("Mumbai");
+            } else if (addr.contains("delhi")) {
+                dto.setCityName("Delhi-NCR");
+            } else {
+                dto.setCityName("Bangalore");
+            }
+        }
+
+        // Deduplicate: if an existing pending request exists for similar coords & contact, update it
+        UnserviceableRequestDto existing = null;
+        for (UnserviceableRequestDto r : unserviceableRequests.values()) {
+            if (!"PENDING".equalsIgnoreCase(r.getStatus())) continue;
+            boolean sameEmail = dto.getContactEmail() != null && !dto.getContactEmail().isBlank() && dto.getContactEmail().equalsIgnoreCase(r.getContactEmail());
+            boolean samePhone = dto.getContactPhone() != null && !dto.getContactPhone().isBlank() && dto.getContactPhone().equalsIgnoreCase(r.getContactPhone());
+            boolean sameCoords = dto.getLatitude() != null && dto.getLongitude() != null && r.getLatitude() != null && r.getLongitude() != null &&
+                    Math.abs(dto.getLatitude() - r.getLatitude()) < 0.02 && Math.abs(dto.getLongitude() - r.getLongitude()) < 0.02;
+
+            if ((sameEmail || samePhone) && sameCoords) {
+                existing = r;
+                break;
+            }
+        }
+
+        if (existing != null) {
+            if (dto.getAddress() != null && !dto.getAddress().isBlank()) {
+                existing.setAddress(dto.getAddress());
+            }
+            if (dto.getRequestedArea() != null && !dto.getRequestedArea().isBlank()) {
+                existing.setRequestedArea(dto.getRequestedArea());
+            }
+            if (dto.getLatitude() != null && dto.getLongitude() != null) {
+                existing.setLatitude(dto.getLatitude());
+                existing.setLongitude(dto.getLongitude());
+            }
+            existing.setCreatedAt(Instant.now());
+            unserviceableRequests.put(existing.getId(), existing);
+            saveUnserviceableRequestsToFile();
+            return ResponseEntity.ok(ApiResponse.success(existing));
+        }
+
         unserviceableRequests.put(dto.getId(), dto);
+        saveUnserviceableRequestsToFile();
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
@@ -517,6 +639,7 @@ public class LocationZoneController {
         }
         req.setStatus(status);
         unserviceableRequests.put(requestId, req);
+        saveUnserviceableRequestsToFile();
         return ResponseEntity.ok(ApiResponse.success(req));
     }
 
@@ -530,6 +653,7 @@ public class LocationZoneController {
         }
         req.setStatus("APPROVED");
         unserviceableRequests.put(requestId, req);
+        saveUnserviceableRequestsToFile();
 
         LocationZoneDto newZone = new LocationZoneDto();
         newZone.setId("dz-" + UUID.randomUUID().toString().substring(0, 6));
@@ -537,11 +661,11 @@ public class LocationZoneController {
         newZone.setCityName(req.getCityName() != null ? req.getCityName() : "Bangalore");
         newZone.setLatitude(req.getLatitude() != null ? req.getLatitude() : 12.9716);
         newZone.setLongitude(req.getLongitude() != null ? req.getLongitude() : 77.5946);
-        newZone.setRadiusKm(4.0);
+        newZone.setRadiusKm(15.0);
         newZone.setPolygonCoordinates(String.format("%.4f,%.4f | %.4f,%.4f | %.4f,%.4f",
                 newZone.getLatitude(), newZone.getLongitude(),
-                newZone.getLatitude() + 0.01, newZone.getLongitude() + 0.01,
-                newZone.getLatitude() - 0.01, newZone.getLongitude() - 0.01));
+                newZone.getLatitude() + 0.05, newZone.getLongitude() + 0.05,
+                newZone.getLatitude() - 0.05, newZone.getLongitude() - 0.05));
         newZone.setStatus("ACTIVE");
         newZone.setSurgeMultiplier(new BigDecimal("1.00"));
         newZone.setRestaurantEnabled(true);

@@ -16,6 +16,12 @@ public class UnserviceableRequestDto {
     private String status; // PENDING, APPROVED, REJECTED
     private Instant createdAt;
 
+    private String requestSource; // CUSTOMER, DELIVERY_PARTNER, RESTAURANT
+    private String requesterName;
+    private String requestedArea;
+    private String zoneId;
+    private String zoneName;
+
     public UnserviceableRequestDto() {}
 
     public UnserviceableRequestDto(
@@ -129,5 +135,45 @@ public class UnserviceableRequestDto {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getRequestSource() {
+        return requestSource;
+    }
+
+    public void setRequestSource(String requestSource) {
+        this.requestSource = requestSource;
+    }
+
+    public String getRequesterName() {
+        return requesterName;
+    }
+
+    public void setRequesterName(String requesterName) {
+        this.requesterName = requesterName;
+    }
+
+    public String getRequestedArea() {
+        return requestedArea;
+    }
+
+    public void setRequestedArea(String requestedArea) {
+        this.requestedArea = requestedArea;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
+
+    public void setZoneId(String zoneId) {
+        this.zoneId = zoneId;
+    }
+
+    public String getZoneName() {
+        return zoneName;
+    }
+
+    public void setZoneName(String zoneName) {
+        this.zoneName = zoneName;
     }
 }
