@@ -204,6 +204,7 @@ class DeliveryFaceVerificationTest {
     void testSetAvailability_AllowOnlineWhenVerified() {
         partner.verifyKyc();
         partner.setProfileImageKey("delivery-partners/1/profile/photo.jpg");
+        partner.setZoneVerified(true);
 
         when(deliveryPartnerRepository.findByUserCredentialId(userCredentialId))
                 .thenReturn(Optional.of(partner));
