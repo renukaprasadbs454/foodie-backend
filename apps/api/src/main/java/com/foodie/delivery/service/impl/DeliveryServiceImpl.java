@@ -177,6 +177,20 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Autowired(required = false)
     private DeliveryShiftBookingRepository shiftBookingRepository;
 
+    @Autowired(required = false)
+    private com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService;
+
+    public void setUnserviceableRequestService(com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService) {
+        this.unserviceableRequestService = unserviceableRequestService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.auth.repository.UserCredentialRepository userCredentialRepository;
+
+    public void setUserCredentialRepository(com.foodie.auth.repository.UserCredentialRepository userCredentialRepository) {
+        this.userCredentialRepository = userCredentialRepository;
+    }
+
     public void setOnlineSessionRepository(DeliveryOnlineSessionRepository onlineSessionRepository) {
         this.onlineSessionRepository = onlineSessionRepository;
     }
@@ -240,20 +254,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
 
-        if (!partner.isZoneVerified() || partner.getLatitude() == null || partner.getLongitude() == null) {
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
-        }
-        DeliveryZoneVerificationResponseDto zoneCheck = (partner.getZoneId() != null && !partner.getZoneId().isBlank())
-                ? verifyCoordinates(partner.getLatitude(), partner.getLongitude(), partner.getZoneId())
-                : verifyCoordinates(partner.getLatitude(), partner.getLongitude());
-        if (!zoneCheck.verified()) {
-            partner.invalidateZone(partner.getLatitude(), partner.getLongitude());
-            deliveryPartnerRepository.save(partner);
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        // Allow delivery partner to upload documents even if outside delivery zone
+        // (their unserviceable area request will be reviewed by admin)
+        if (partner.getLatitude() == null || partner.getLongitude() == null) {
+            log.info("Delivery partner {} uploading document without initial GPS coordinates", partner.getId());
         }
 
         byte[] bytes = readBytes(file, MAX_DOCUMENT_BYTES, "Document must be at most 10 MB.");
@@ -270,6 +274,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 })
                 .orElseGet(() -> deliveryPartnerDocumentRepository.save(
                         DeliveryPartnerDocument.create(partner, docType, key)));
+        if (!partner.isZoneVerified()) {
+            syncDeliveryPartnerUnserviceableRequest(partner, userCredentialId, partner.getLatitude(), partner.getLongitude(), partner.getAddressLine1(), partner.getZoneId());
+        }
         return deliveryMapper.toDocument(document);
     }
 
@@ -285,20 +292,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                         com.foodie.common.enums.VehicleType.BIKE,
                         null)));
 
-        if (!partner.isZoneVerified() || partner.getLatitude() == null || partner.getLongitude() == null) {
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
-        }
-        DeliveryZoneVerificationResponseDto zoneCheck = (partner.getZoneId() != null && !partner.getZoneId().isBlank())
-                ? verifyCoordinates(partner.getLatitude(), partner.getLongitude(), partner.getZoneId())
-                : verifyCoordinates(partner.getLatitude(), partner.getLongitude());
-        if (!zoneCheck.verified()) {
-            partner.invalidateZone(partner.getLatitude(), partner.getLongitude());
-            deliveryPartnerRepository.save(partner);
-            throw new BadRequestException(
-                    ErrorCode.VALIDATION_FAILED,
-                    "You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        // Allow delivery partner to upload documents even if outside delivery zone
+        // (their unserviceable area request will be reviewed by admin)
+        if (partner.getLatitude() == null || partner.getLongitude() == null) {
+            log.info("Delivery partner {} uploading document without initial GPS coordinates", partner.getId());
         }
         byte[] bytes = readBytes(file, 5 * 1024 * 1024, "Image must be at most 5 MB.");
         ImageMagicBytes.DetectedImage detected = ImageMagicBytes.detect(header(bytes), file.getContentType());
@@ -318,6 +315,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 detected.contentType());
         partner.setProfileImageKey(key);
         deliveryPartnerRepository.save(partner);
+        if (!partner.isZoneVerified()) {
+            syncDeliveryPartnerUnserviceableRequest(partner, userCredentialId, partner.getLatitude(), partner.getLongitude(), partner.getAddressLine1(), partner.getZoneId());
+        }
         return new DeliveryProfileImageResponseDto(key, java.time.Instant.now().toString());
     }
 
@@ -333,6 +333,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                         "KYC must be verified before going online.");
             }
         }
+        if (isGoingOnline && !partner.isZoneVerified()) { throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Your delivery zone location request is pending Super Admin approval. You cannot receive deliveries until approved."); }
         partner.setOnline(isGoingOnline);
         deliveryPartnerRepository.save(partner);
 
@@ -1580,16 +1581,122 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         if (result.verified()) {
             partner.verifyZone(result.zoneId(), result.zoneName(), request.latitude(), request.longitude());
+            partner.setLocationApprovalStatus("APPROVED");
             if (request.address() != null && !request.address().isBlank()
                     && (partner.getAddressLine1() == null || partner.getAddressLine1().isBlank())) {
                 partner.setAddressLine1(request.address().trim());
             }
         } else {
             partner.invalidateZone(request.latitude(), request.longitude());
+            partner.setLocationApprovalStatus("PENDING");
+            
+            if (request.address() != null && !request.address().isBlank()) {
+                partner.setAddressLine1(request.address().trim());
+            }
+            syncDeliveryPartnerUnserviceableRequest(
+                    partner,
+                    userCredentialId,
+                    request.latitude(),
+                    request.longitude(),
+                    request.address() != null ? request.address() : partner.getAddressLine1(),
+                    request.zoneId()
+            );
         }
 
         deliveryPartnerRepository.save(partner);
         return result;
+    }
+
+    public com.foodie.admin.dto.UnserviceableRequestDto syncDeliveryPartnerUnserviceableRequest(
+            DeliveryPartner partner,
+            UUID userCredentialId,
+            Double latitude,
+            Double longitude,
+            String address,
+            String zoneId) {
+        if (unserviceableRequestService == null || partner == null) {
+            return null;
+        }
+
+        String targetZoneId = (zoneId != null && !zoneId.isBlank()) ? zoneId.trim() : partner.getZoneId();
+        LocationZone targetZone = null;
+        if (targetZoneId != null && !targetZoneId.isBlank()) {
+            targetZone = locationZoneRepository.findById(targetZoneId).orElse(null);
+        }
+        String zName = targetZone != null ? targetZone.getZoneName() : partner.getZoneName();
+        String cName = targetZone != null ? targetZone.getCityName() : "Bangalore";
+
+        String phone = "";
+        String email = "";
+        if (userCredentialRepository != null && userCredentialId != null) {
+            com.foodie.auth.entity.UserCredential cred = userCredentialRepository.findById(userCredentialId).orElse(null);
+            if (cred != null) {
+                phone = cred.getPhoneNumber() != null ? cred.getPhoneNumber() : "";
+                email = cred.getEmail() != null ? cred.getEmail() : "";
+            }
+        }
+
+        java.util.List<String> docs = new java.util.ArrayList<>();
+        if (partner.getProfileImageKey() != null && !partner.getProfileImageKey().isBlank()) {
+            docs.add("Profile Selfie");
+        }
+        if (partner.getId() != null) {
+            java.util.List<com.foodie.delivery.entity.DeliveryPartnerDocument> partnerDocs =
+                    deliveryPartnerDocumentRepository.findByDeliveryPartnerId(partner.getId());
+            for (com.foodie.delivery.entity.DeliveryPartnerDocument doc : partnerDocs) {
+                docs.add(doc.getDocType().name());
+            }
+        }
+
+        Double lat = latitude != null ? latitude : partner.getLatitude();
+        Double lng = longitude != null ? longitude : partner.getLongitude();
+        String addr = (address != null && !address.isBlank()) ? address : partner.getAddressLine1();
+
+        return unserviceableRequestService.logDeliveryPartnerUnserviceableRequest(
+                partner.getId() != null ? partner.getId().toString() : (userCredentialId != null ? userCredentialId.toString() : null),
+                partner.getFullName(),
+                phone,
+                email,
+                lat,
+                lng,
+                addr,
+                targetZoneId,
+                zName,
+                cName,
+                docs
+        );
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.admin.dto.UnserviceableRequestDto logUnserviceableAreaRequest(
+            UUID userCredentialId,
+            com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request) {
+        DeliveryPartner partner = deliveryPartnerRepository.findByUserCredentialId(userCredentialId)
+                .orElseGet(() -> deliveryPartnerRepository.save(DeliveryPartner.create(
+                        userCredentialId,
+                        DEFAULT_FULL_NAME,
+                        com.foodie.common.enums.VehicleType.BIKE,
+                        null)));
+
+        if (request != null && request.latitude() != null && request.longitude() != null) {
+            partner.invalidateZone(request.latitude(), request.longitude());
+            partner.setLocationApprovalStatus("PENDING");
+            
+            if (request.address() != null && !request.address().isBlank()) {
+                partner.setAddressLine1(request.address().trim());
+            }
+            deliveryPartnerRepository.save(partner);
+        }
+
+        return syncDeliveryPartnerUnserviceableRequest(
+                partner,
+                userCredentialId,
+                request != null ? request.latitude() : partner.getLatitude(),
+                request != null ? request.longitude() : partner.getLongitude(),
+                request != null ? request.address() : partner.getAddressLine1(),
+                request != null ? request.zoneId() : partner.getZoneId()
+        );
     }
 
     @Override
@@ -1724,7 +1831,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private boolean isPartnerInSameZone(DeliveryPartner partner, String orderZoneId, String orderZoneName) {
-        if (partner == null) {
+        if (partner == null || !partner.isZoneVerified()) {
             return false;
         }
         String pZoneId = partner.getZoneId();

@@ -1,10 +1,12 @@
 package com.foodie.admin.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 public class UnserviceableRequestDto {
 
     private String id;
+    private String deliveryPartnerId;
     private String restaurantName;
     private String contactPerson;
     private String contactEmail;
@@ -15,12 +17,12 @@ public class UnserviceableRequestDto {
     private Double longitude;
     private String status; // PENDING, APPROVED, REJECTED
     private Instant createdAt;
-
     private String requestSource; // CUSTOMER, DELIVERY_PARTNER, RESTAURANT
     private String requesterName;
     private String requestedArea;
     private String zoneId;
     private String zoneName;
+    private List<String> submittedDocuments;
 
     public UnserviceableRequestDto() {}
 
@@ -49,12 +51,45 @@ public class UnserviceableRequestDto {
         this.createdAt = createdAt;
     }
 
+    public UnserviceableRequestDto(
+            String id,
+            String restaurantName,
+            String contactPerson,
+            String contactEmail,
+            String contactPhone,
+            String address,
+            String cityName,
+            Double latitude,
+            Double longitude,
+            String status,
+            Instant createdAt,
+            String requestSource,
+            String requesterName,
+            String requestedArea,
+            String zoneId,
+            String zoneName) {
+        this(id, restaurantName, contactPerson, contactEmail, contactPhone, address, cityName, latitude, longitude, status, createdAt);
+        this.requestSource = requestSource;
+        this.requesterName = requesterName;
+        this.requestedArea = requestedArea;
+        this.zoneId = zoneId;
+        this.zoneName = zoneName;
+    }
+
     public String getId() {
         return id;
     }
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getDeliveryPartnerId() {
+        return deliveryPartnerId;
+    }
+
+    public void setDeliveryPartnerId(String deliveryPartnerId) {
+        this.deliveryPartnerId = deliveryPartnerId;
     }
 
     public String getRestaurantName() {
@@ -175,5 +210,13 @@ public class UnserviceableRequestDto {
 
     public void setZoneName(String zoneName) {
         this.zoneName = zoneName;
+    }
+
+    public List<String> getSubmittedDocuments() {
+        return submittedDocuments;
+    }
+
+    public void setSubmittedDocuments(List<String> submittedDocuments) {
+        this.submittedDocuments = submittedDocuments;
     }
 }

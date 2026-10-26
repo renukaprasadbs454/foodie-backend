@@ -54,6 +54,15 @@ public class DeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.getOrCreateProfile(principal.userId())));
     }
 
+    @PostMapping(value = {"/unserviceable-request", "/me/unserviceable-request"})
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Log an unserviceable area request when delivery partner is outside delivery zone")
+    public ResponseEntity<ApiResponse<com.foodie.admin.dto.UnserviceableRequestDto>> logUnserviceableRequest(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestBody com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request) {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.logUnserviceableAreaRequest(principal.userId(), request)));
+    }
+
     @PostMapping(value = {"/verify-zone", "/me/verify-zone"})
     @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     @Operation(summary = "Verify if delivery partner location falls inside an active admin-configured delivery zone")

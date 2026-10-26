@@ -82,7 +82,10 @@ public interface DeliveryService {
 
         DeliveryNavigationResponseDto getNavigationDetails(UUID userCredentialId, UUID assignmentId);
 
-        com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyZone(
+        com.foodie.admin.dto.UnserviceableRequestDto logUnserviceableAreaRequest(
+            UUID userCredentialId, com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request);
+
+    com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyZone(
                 UUID userCredentialId, com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto request);
 
         com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto verifyCoordinates(

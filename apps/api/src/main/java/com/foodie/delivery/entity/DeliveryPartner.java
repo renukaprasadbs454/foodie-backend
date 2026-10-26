@@ -88,6 +88,9 @@ public class DeliveryPartner extends BaseEntity {
     @Column(name = "zone_verified", nullable = false)
     private boolean zoneVerified = false;
 
+    @Column(name = "location_approval_status", length = 50)
+    private String locationApprovalStatus = "NONE";
+
     protected DeliveryPartner() {
     }
 
@@ -322,5 +325,14 @@ public class DeliveryPartner extends BaseEntity {
         this.latitude = latitude;
         this.longitude = longitude;
         this.zoneVerified = false;
+            this.locationApprovalStatus = "PENDING";
+    }
+
+    public String getLocationApprovalStatus() {
+        return locationApprovalStatus;
+    }
+
+    public void setLocationApprovalStatus(String locationApprovalStatus) {
+        this.locationApprovalStatus = locationApprovalStatus;
     }
 }

@@ -51,6 +51,9 @@ public class LocationZoneController {
     @Autowired(required = false)
     private com.foodie.admin.security.AdminAccess adminAccess;
 
+    @Autowired(required = false)
+    private com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService;
+
     private final ConcurrentHashMap<String, UnserviceableRequestDto> unserviceableRequests = new ConcurrentHashMap<>();
 
     @Autowired(required = false)
@@ -525,7 +528,7 @@ public class LocationZoneController {
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
 
-        List<UnserviceableRequestDto> list = new ArrayList<>(unserviceableRequests.values());
+        List<UnserviceableRequestDto> list = unserviceableRequestService != null ? unserviceableRequestService.getAllRequests() : new ArrayList<>(unserviceableRequests.values());
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
             String lower = activeZoneId.toLowerCase();
             if (lower.contains("tumkur")) {
@@ -540,6 +543,9 @@ public class LocationZoneController {
     @PostMapping({"/unserviceable-requests", "/customer/unserviceable-requests"})
     public ResponseEntity<ApiResponse<UnserviceableRequestDto>> createUnserviceableRequest(
             @RequestBody UnserviceableRequestDto dto) {
+        if (unserviceableRequestService != null) {
+            return ResponseEntity.ok(ApiResponse.success(unserviceableRequestService.saveRequest(dto)));
+        }
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("req-" + UUID.randomUUID().toString().substring(0, 6));
         }
@@ -633,6 +639,12 @@ public class LocationZoneController {
             @PathVariable String requestId,
             @RequestParam String status) {
 
+        if (unserviceableRequestService != null) {
+            UnserviceableRequestDto updated = unserviceableRequestService.updateStatus(requestId, status);
+            if (updated == null) return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(ApiResponse.success(updated));
+        }
+
         UnserviceableRequestDto req = unserviceableRequests.get(requestId);
         if (req == null) {
             return ResponseEntity.notFound().build();
@@ -647,17 +659,24 @@ public class LocationZoneController {
     @Transactional
     public ResponseEntity<ApiResponse<LocationZoneDto>> approveUnserviceableRequest(
             @PathVariable String requestId) {
-        UnserviceableRequestDto req = unserviceableRequests.get(requestId);
+        UnserviceableRequestDto req = unserviceableRequestService != null ? unserviceableRequestService.getRequest(requestId) : unserviceableRequests.get(requestId);
         if (req == null) {
             return ResponseEntity.notFound().build();
         }
         req.setStatus("APPROVED");
+        if (unserviceableRequestService != null) {
+            unserviceableRequestService.updateStatus(requestId, "APPROVED");
+        }
         unserviceableRequests.put(requestId, req);
         saveUnserviceableRequestsToFile();
 
+        String displayName = (req.getRequesterName() != null && !req.getRequesterName().isBlank())
+                ? req.getRequesterName().replaceFirst("^\\[.*?\\]\\s*", "")
+                : (req.getRestaurantName() != null ? req.getRestaurantName().replaceFirst("^\\[.*?\\]\\s*", "") : "New Area");
+
         LocationZoneDto newZone = new LocationZoneDto();
         newZone.setId("dz-" + UUID.randomUUID().toString().substring(0, 6));
-        newZone.setZoneName(req.getRestaurantName() + " Dedicated Zone");
+        newZone.setZoneName(displayName + " Dedicated Zone");
         newZone.setCityName(req.getCityName() != null ? req.getCityName() : "Bangalore");
         newZone.setLatitude(req.getLatitude() != null ? req.getLatitude() : 12.9716);
         newZone.setLongitude(req.getLongitude() != null ? req.getLongitude() : 77.5946);

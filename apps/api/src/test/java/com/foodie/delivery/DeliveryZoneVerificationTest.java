@@ -8,6 +8,7 @@ import com.foodie.common.exception.BadRequestException;
 import com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto;
 import com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto;
 import com.foodie.delivery.entity.DeliveryPartner;
+import com.foodie.delivery.entity.DeliveryPartnerDocument;
 import com.foodie.delivery.mapper.DeliveryMapper;
 import com.foodie.delivery.repository.DeliveryPartnerDocumentRepository;
 import com.foodie.delivery.repository.DeliveryPartnerRepository;
@@ -226,33 +227,38 @@ class DeliveryZoneVerificationTest {
     }
 
     @Test
-    void uploadDocument_throwsBadRequestWhenZoneNotVerified() {
+    void uploadDocument_allowsUploadWhenZoneNotVerified() {
         partner.setZoneVerified(false);
         when(deliveryPartnerRepository.findByUserCredentialId(userCredentialId)).thenReturn(Optional.of(partner));
+        DeliveryPartnerDocument mockDoc = DeliveryPartnerDocument.create(partner, DeliveryDocType.LICENSE, "key-123");
+        when(deliveryPartnerDocumentRepository.findByDeliveryPartnerIdAndDocType(any(), any()))
+                .thenReturn(Optional.of(mockDoc));
+        when(deliveryPartnerDocumentRepository.save(any()))
+                .thenReturn(mockDoc);
 
         MockMultipartFile file = new MockMultipartFile(
                 "file", "license.pdf", "application/pdf", "%PDF-1.4 sample content".getBytes());
 
-        assertThatThrownBy(() -> deliveryService.uploadDocument(userCredentialId, DeliveryDocType.LICENSE, file))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("You are outside the delivery zone. Please move to an active delivery zone and try again.");
+        var doc = deliveryService.uploadDocument(userCredentialId, DeliveryDocType.LICENSE, file);
+        assertThat(doc).isNotNull();
     }
 
     @Test
-    void uploadDocument_revalidatesAgainstActiveZonesBeforeAllowing() {
-        // Partner was verified previously, but moved outside or zone changed
+    void uploadDocument_allowsUploadEvenIfCoordinatesOutsideActiveZone() {
+        // Partner is outside zone or zone unverified, document upload is still permitted
         partner.verifyZone("dz-tumkur", "Tumkur Central", 28.6139, 77.2090); // Outside coords!
         when(deliveryPartnerRepository.findByUserCredentialId(userCredentialId)).thenReturn(Optional.of(partner));
-        when(locationZoneRepository.findAll()).thenReturn(List.of(activeRadiusZone));
+        DeliveryPartnerDocument mockDoc = DeliveryPartnerDocument.create(partner, DeliveryDocType.LICENSE, "key-123");
+        when(deliveryPartnerDocumentRepository.findByDeliveryPartnerIdAndDocType(any(), any()))
+                .thenReturn(Optional.of(mockDoc));
+        when(deliveryPartnerDocumentRepository.save(any()))
+                .thenReturn(mockDoc);
 
         MockMultipartFile file = new MockMultipartFile(
                 "file", "license.pdf", "application/pdf", "%PDF-1.4 sample content".getBytes());
 
-        assertThatThrownBy(() -> deliveryService.uploadDocument(userCredentialId, DeliveryDocType.LICENSE, file))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("You are outside the delivery zone. Please move to an active delivery zone and try again.");
-
-        assertThat(partner.isZoneVerified()).isFalse();
+        var doc = deliveryService.uploadDocument(userCredentialId, DeliveryDocType.LICENSE, file);
+        assertThat(doc).isNotNull();
     }
 
     @Test

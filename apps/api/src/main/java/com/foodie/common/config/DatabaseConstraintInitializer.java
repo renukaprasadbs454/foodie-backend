@@ -92,6 +92,34 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
             jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100)");
             jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_name VARCHAR(200)");
             jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_verified BOOLEAN DEFAULT FALSE");
+            jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS location_approval_status VARCHAR(50) DEFAULT 'NONE'");
+            jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"location_approval_status\" VARCHAR(50) DEFAULT 'NONE'");
         } catch (Exception ignored) {}
+
+        try {
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS \"unserviceable_request\" (" +
+                "\"id\" VARCHAR(100) PRIMARY KEY, " +
+                "\"delivery_partner_id\" UUID, " +
+                "\"restaurant_name\" VARCHAR(255), " +
+                "\"contact_person\" VARCHAR(255), " +
+                "\"contact_email\" VARCHAR(255), " +
+                "\"contact_phone\" VARCHAR(50), " +
+                "\"address\" TEXT, " +
+                "\"city_name\" VARCHAR(100), " +
+                "\"latitude\" DOUBLE PRECISION, " +
+                "\"longitude\" DOUBLE PRECISION, " +
+                "\"status\" VARCHAR(50) NOT NULL DEFAULT 'PENDING', " +
+                "\"created_at\" TIMESTAMP WITH TIME ZONE, " +
+                "\"updated_at\" TIMESTAMP WITH TIME ZONE, " +
+                "\"request_source\" VARCHAR(50) NOT NULL DEFAULT 'CUSTOMER', " +
+                "\"requester_name\" VARCHAR(255), " +
+                "\"requested_area\" TEXT, " +
+                "\"zone_id\" VARCHAR(100), " +
+                "\"zone_name\" VARCHAR(200), " +
+                "\"submitted_documents\" TEXT)");
+            log.info("Ensured \"unserviceable_request\" table exists.");
+        } catch (Exception e) {
+            log.warn("Could not ensure \"unserviceable_request\" table: {}", e.getMessage());
+        }
     }
 }
