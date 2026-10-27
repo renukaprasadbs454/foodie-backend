@@ -26,6 +26,14 @@ public class UnserviceableRequestService {
     @org.springframework.context.annotation.Lazy
     private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private com.foodie.restaurant.repository.RestaurantDocumentRepository restaurantDocumentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private com.foodie.delivery.repository.DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
+
     public UnserviceableRequestService(
             UnserviceableRequestRepository repository,
             DeliveryPartnerRepository deliveryPartnerRepository) {
@@ -376,14 +384,32 @@ public class UnserviceableRequestService {
         dto.setZoneName(entity.getZoneName());
         dto.setDistanceFromZoneKm(entity.getDistanceFromZoneKm());
 
+        List<String> docs = new ArrayList<>();
         if (entity.getSubmittedDocuments() != null && !entity.getSubmittedDocuments().isBlank()) {
-            dto.setSubmittedDocuments(Arrays.stream(entity.getSubmittedDocuments().split(","))
+            docs = Arrays.stream(entity.getSubmittedDocuments().split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toList()));
-        } else {
-            dto.setSubmittedDocuments(new ArrayList<>());
+                    .collect(Collectors.toList());
         }
+        if (docs.isEmpty() && entity.getRestaurantId() != null && restaurantDocumentRepository != null) {
+            try {
+                docs = restaurantDocumentRepository.findAllByRestaurantId(entity.getRestaurantId()).stream()
+                        .map(d -> d.getDocType() != null ? d.getDocType().name() : "")
+                        .filter(s -> !s.isBlank())
+                        .distinct()
+                        .collect(Collectors.toList());
+            } catch (Exception ignored) {}
+        }
+        if (docs.isEmpty() && entity.getDeliveryPartnerId() != null && deliveryPartnerDocumentRepository != null) {
+            try {
+                docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(entity.getDeliveryPartnerId()).stream()
+                        .map(d -> d.getDocType() != null ? d.getDocType().name() : "")
+                        .filter(s -> !s.isBlank())
+                        .distinct()
+                        .collect(Collectors.toList());
+            } catch (Exception ignored) {}
+        }
+        dto.setSubmittedDocuments(docs);
         return dto;
     }
 
