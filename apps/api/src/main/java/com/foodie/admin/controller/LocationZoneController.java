@@ -542,7 +542,16 @@ public class LocationZoneController {
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
 
-        List<UnserviceableRequestDto> list = unserviceableRequestService != null ? unserviceableRequestService.getAllRequests() : new ArrayList<>(unserviceableRequests.values());
+        List<UnserviceableRequestDto> list;
+        if (unserviceableRequestService != null) {
+            try {
+                list = unserviceableRequestService.getAllRequests();
+            } catch (Exception ex) {
+                list = new ArrayList<>(unserviceableRequests.values());
+            }
+        } else {
+            list = new ArrayList<>(unserviceableRequests.values());
+        }
 
         // Remove mock/dummy requests
         list = list.stream()
@@ -609,7 +618,14 @@ public class LocationZoneController {
     public ResponseEntity<ApiResponse<UnserviceableRequestDto>> createUnserviceableRequest(
             @RequestBody UnserviceableRequestDto dto) {
         if (unserviceableRequestService != null) {
-            return ResponseEntity.ok(ApiResponse.success(unserviceableRequestService.saveRequest(dto)));
+            try {
+                UnserviceableRequestDto saved = unserviceableRequestService.saveRequest(dto);
+                unserviceableRequests.put(saved.getId(), saved);
+                saveUnserviceableRequestsToFile();
+                return ResponseEntity.ok(ApiResponse.success(saved));
+            } catch (Exception ex) {
+                // fall through to in-memory persistence
+            }
         }
         if (dto.getId() == null || dto.getId().isBlank()) {
             dto.setId("req-" + UUID.randomUUID().toString().substring(0, 6));

@@ -116,21 +116,30 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
                 "\"requested_area\" TEXT, " +
                 "\"zone_id\" VARCHAR(100), " +
                 "\"zone_name\" VARCHAR(200), " +
+                "\"restaurant_id\" UUID, " +
+                "\"distance_from_zone_km\" DOUBLE PRECISION, " +
                 "\"submitted_documents\" TEXT)");
             log.info("Ensured \"unserviceable_request\" table exists.");
         } catch (Exception e) {
             log.warn("Could not ensure \"unserviceable_request\" table: {}", e.getMessage());
         }
 
-        try {
-            jdbcTemplate.execute("ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS out_of_zone BOOLEAN DEFAULT FALSE");
-            jdbcTemplate.execute("ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS nearest_zone_distance_km DOUBLE PRECISION");
-            jdbcTemplate.execute("ALTER TABLE \"restaurant\" ADD COLUMN IF NOT EXISTS \"out_of_zone\" BOOLEAN DEFAULT FALSE");
-            jdbcTemplate.execute("ALTER TABLE \"restaurant\" ADD COLUMN IF NOT EXISTS \"nearest_zone_distance_km\" DOUBLE PRECISION");
-            jdbcTemplate.execute("ALTER TABLE unserviceable_request ADD COLUMN IF NOT EXISTS restaurant_id UUID");
-            jdbcTemplate.execute("ALTER TABLE unserviceable_request ADD COLUMN IF NOT EXISTS distance_from_zone_km DOUBLE PRECISION");
-            jdbcTemplate.execute("ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS \"restaurant_id\" UUID");
-            jdbcTemplate.execute("ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS \"distance_from_zone_km\" DOUBLE PRECISION");
-        } catch (Exception ignored) {}
+        String[] alterStatements = new String[] {
+            "ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS out_of_zone BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE restaurant ADD COLUMN IF NOT EXISTS nearest_zone_distance_km DOUBLE PRECISION",
+            "ALTER TABLE \"restaurant\" ADD COLUMN IF NOT EXISTS \"out_of_zone\" BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE \"restaurant\" ADD COLUMN IF NOT EXISTS \"nearest_zone_distance_km\" DOUBLE PRECISION",
+            "ALTER TABLE unserviceable_request ADD COLUMN IF NOT EXISTS restaurant_id UUID",
+            "ALTER TABLE unserviceable_request ADD COLUMN IF NOT EXISTS distance_from_zone_km DOUBLE PRECISION",
+            "ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS \"restaurant_id\" UUID",
+            "ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS \"distance_from_zone_km\" DOUBLE PRECISION",
+            "ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS distance_from_zone_km DOUBLE PRECISION",
+            "ALTER TABLE \"unserviceable_request\" ADD COLUMN IF NOT EXISTS restaurant_id UUID"
+        };
+        for (String sql : alterStatements) {
+            try {
+                jdbcTemplate.execute(sql);
+            } catch (Exception ignored) {}
+        }
     }
 }
