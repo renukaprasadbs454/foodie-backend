@@ -385,31 +385,73 @@ public class UnserviceableRequestService {
         dto.setDistanceFromZoneKm(entity.getDistanceFromZoneKm());
 
         List<String> docs = new ArrayList<>();
+        List<UnserviceableRequestDto.DocumentDetailDto> docDetails = new ArrayList<>();
+
+        if (entity.getRestaurantId() != null && restaurantDocumentRepository != null) {
+            try {
+                var restaurantDocs = restaurantDocumentRepository.findAllByRestaurantId(entity.getRestaurantId());
+                for (var rd : restaurantDocs) {
+                    String dt = rd.getDocType() != null ? rd.getDocType().name() : "DOCUMENT";
+                    String s3 = rd.getS3Key();
+                    String url = (s3 != null && !s3.isBlank())
+                            ? (s3.startsWith("http://") || s3.startsWith("https://") || s3.startsWith("/") ? s3 : "/api/v1/storage/" + s3)
+                            : null;
+                    docDetails.add(new UnserviceableRequestDto.DocumentDetailDto(
+                            rd.getId() != null ? rd.getId().toString() : null,
+                            dt,
+                            dt.replace("_", " "),
+                            url,
+                            s3));
+                    if (!docs.contains(dt)) docs.add(dt);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (entity.getDeliveryPartnerId() != null && deliveryPartnerDocumentRepository != null) {
+            try {
+                var partnerDocs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(entity.getDeliveryPartnerId());
+                for (var pd : partnerDocs) {
+                    String dt = pd.getDocType() != null ? pd.getDocType().name() : "DOCUMENT";
+                    String s3 = pd.getS3Key();
+                    String url = (s3 != null && !s3.isBlank())
+                            ? (s3.startsWith("http://") || s3.startsWith("https://") || s3.startsWith("/") ? s3 : "/api/v1/storage/" + s3)
+                            : null;
+                    docDetails.add(new UnserviceableRequestDto.DocumentDetailDto(
+                            pd.getId() != null ? pd.getId().toString() : null,
+                            dt,
+                            dt.replace("_", " "),
+                            url,
+                            s3));
+                    if (!docs.contains(dt)) docs.add(dt);
+                }
+            } catch (Exception ignored) {}
+        }
+
         if (entity.getSubmittedDocuments() != null && !entity.getSubmittedDocuments().isBlank()) {
-            docs = Arrays.stream(entity.getSubmittedDocuments().split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toList());
+            String[] parts = entity.getSubmittedDocuments().split(",");
+            for (String part : parts) {
+                String clean = part.trim();
+                if (!clean.isEmpty()) {
+                    if (!docs.contains(clean)) docs.add(clean);
+                    boolean alreadyPresent = docDetails.stream().anyMatch(d -> clean.equalsIgnoreCase(d.getDocType()));
+                    if (!alreadyPresent) {
+                        String url = null;
+                        if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("/")) {
+                            url = clean;
+                        }
+                        docDetails.add(new UnserviceableRequestDto.DocumentDetailDto(
+                                java.util.UUID.randomUUID().toString(),
+                                clean,
+                                clean.replace("_", " "),
+                                url,
+                                null));
+                    }
+                }
+            }
         }
-        if (docs.isEmpty() && entity.getRestaurantId() != null && restaurantDocumentRepository != null) {
-            try {
-                docs = restaurantDocumentRepository.findAllByRestaurantId(entity.getRestaurantId()).stream()
-                        .map(d -> d.getDocType() != null ? d.getDocType().name() : "")
-                        .filter(s -> !s.isBlank())
-                        .distinct()
-                        .collect(Collectors.toList());
-            } catch (Exception ignored) {}
-        }
-        if (docs.isEmpty() && entity.getDeliveryPartnerId() != null && deliveryPartnerDocumentRepository != null) {
-            try {
-                docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(entity.getDeliveryPartnerId()).stream()
-                        .map(d -> d.getDocType() != null ? d.getDocType().name() : "")
-                        .filter(s -> !s.isBlank())
-                        .distinct()
-                        .collect(Collectors.toList());
-            } catch (Exception ignored) {}
-        }
+
         dto.setSubmittedDocuments(docs);
+        dto.setDocumentDetails(docDetails);
         return dto;
     }
 

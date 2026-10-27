@@ -25,6 +25,65 @@ public class UnserviceableRequestDto {
     private String restaurantId;
     private Double distanceFromZoneKm;
     private List<String> submittedDocuments;
+    private List<DocumentDetailDto> documentDetails;
+
+    public static class DocumentDetailDto {
+        private String documentId;
+        private String docType;
+        private String name;
+        private String fileUrl;
+        private String s3Key;
+
+        public DocumentDetailDto() {}
+
+        public DocumentDetailDto(String documentId, String docType, String name, String fileUrl, String s3Key) {
+            this.documentId = documentId;
+            this.docType = docType;
+            this.name = name;
+            this.fileUrl = fileUrl;
+            this.s3Key = s3Key;
+        }
+
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public void setDocumentId(String documentId) {
+            this.documentId = documentId;
+        }
+
+        public String getDocType() {
+            return docType;
+        }
+
+        public void setDocType(String docType) {
+            this.docType = docType;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getFileUrl() {
+            return fileUrl;
+        }
+
+        public void setFileUrl(String fileUrl) {
+            this.fileUrl = fileUrl;
+        }
+
+        public String getS3Key() {
+            return s3Key;
+        }
+
+        public void setS3Key(String s3Key) {
+            this.s3Key = s3Key;
+        }
+    }
 
     public UnserviceableRequestDto() {}
 
@@ -236,5 +295,13 @@ public class UnserviceableRequestDto {
 
     public void setDistanceFromZoneKm(Double distanceFromZoneKm) {
         this.distanceFromZoneKm = distanceFromZoneKm;
+    }
+
+    public List<DocumentDetailDto> getDocumentDetails() {
+        return documentDetails;
+    }
+
+    public void setDocumentDetails(List<DocumentDetailDto> documentDetails) {
+        this.documentDetails = documentDetails;
     }
 }
