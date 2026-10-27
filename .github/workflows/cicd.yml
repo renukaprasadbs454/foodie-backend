@@ -38,6 +38,7 @@ jobs:
     name: Deploy Foodie Backend
     needs: build-test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     # Deploy only for pushes to main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -49,6 +50,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 20m
 
           script: |
             set -e
@@ -92,7 +94,8 @@ jobs:
             sleep 5
 
             echo "Cleaning any stale/failed Flyway migration history entries..."
-            docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34', '50', '51', '52');" 2>/dev/null || true
+            docker exec foodie-postgres psql -U foodie -d foodie -c "SELECT pg_advisory_unlock_all();" 2>/dev/null || true
+            docker exec foodie-postgres psql -U foodie -d foodie -c "DELETE FROM flyway_schema_history WHERE success = false OR version IN ('28', '29', '30', '31', '32', '33', '34', '50', '51', '52', '70', '71');" 2>/dev/null || true
 
             echo "Starting Foodie backend stack..."
             $COMPOSE_CMD build --no-cache backend
