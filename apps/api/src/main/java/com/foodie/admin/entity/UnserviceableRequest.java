@@ -66,6 +66,12 @@ public class UnserviceableRequest {
     @Column(name = "zone_name", length = 200)
     private String zoneName;
 
+    @Column(name = "restaurant_id")
+    private UUID restaurantId;
+
+    @Column(name = "distance_from_zone_km")
+    private Double distanceFromZoneKm;
+
     @Column(name = "submitted_documents", columnDefinition = "TEXT")
     private String submittedDocuments;
 
@@ -222,5 +228,21 @@ public class UnserviceableRequest {
 
     public void setSubmittedDocuments(String submittedDocuments) {
         this.submittedDocuments = submittedDocuments;
+    }
+
+    public UUID getRestaurantId() {
+        return restaurantId;
+    }
+
+    public void setRestaurantId(UUID restaurantId) {
+        this.restaurantId = restaurantId;
+    }
+
+    public Double getDistanceFromZoneKm() {
+        return distanceFromZoneKm;
+    }
+
+    public void setDistanceFromZoneKm(Double distanceFromZoneKm) {
+        this.distanceFromZoneKm = distanceFromZoneKm;
     }
 }

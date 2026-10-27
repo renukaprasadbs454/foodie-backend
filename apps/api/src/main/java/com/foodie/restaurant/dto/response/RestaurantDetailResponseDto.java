@@ -36,7 +36,46 @@ public record RestaurantDetailResponseDto(
                 String contactPhone,
                 Long reviewCount,
                 String zoneId,
+                String zoneName,
+                Boolean outOfZone,
+                Double nearestZoneDistanceKm) {
+
+        public RestaurantDetailResponseDto(
+                UUID restaurantId,
+                String name,
+                String description,
+                List<String> cuisineTypes,
+                RestaurantAddressResponseDto address,
+                BigDecimal latitude,
+                BigDecimal longitude,
+                String logoImageUrl,
+                String coverImageUrl,
+                BigDecimal avgRating,
+                String status,
+                com.foodie.common.enums.RestaurantType restaurantType,
+                String rejectionReason,
+                BigDecimal commissionPct,
+                UUID ownerUserCredentialId,
+                RestaurantLegalDetailResponseDto legalDetails,
+                List<RestaurantDocumentResponseDto> documents,
+                Boolean isOpen,
+                Integer topPosition,
+                String openTime,
+                String closeTime,
+                List<String> openDays,
+                String phone,
+                String contactPhone,
+                Long reviewCount,
+                String zoneId,
                 String zoneName) {
+            this(
+                    restaurantId, name, description, cuisineTypes, address,
+                    latitude, longitude, logoImageUrl, coverImageUrl, avgRating,
+                    status, restaurantType, rejectionReason, commissionPct,
+                    ownerUserCredentialId, legalDetails, documents, isOpen, topPosition,
+                    openTime, closeTime, openDays, phone, contactPhone, reviewCount,
+                    zoneId, zoneName, Boolean.FALSE, null);
+        }
 
         @JsonProperty("averageRating")
         public BigDecimal getAverageRating() {

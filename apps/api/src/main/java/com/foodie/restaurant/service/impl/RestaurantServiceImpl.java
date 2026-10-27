@@ -111,6 +111,9 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Autowired(required = false)
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
+    @Autowired(required = false)
+    private com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService;
+
     @Autowired
     public RestaurantServiceImpl(
             RestaurantRepository restaurantRepository,
@@ -367,6 +370,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             result = restaurantRepository.findByStatusNot(com.foodie.common.enums.RestaurantStatus.ONBOARDING, pageable);
         }
         List<RestaurantDetailResponseDto> items = result.getContent().stream()
+                .filter(r -> !Boolean.TRUE.equals(r.getOutOfZone()) || r.getStatus() == com.foodie.common.enums.RestaurantStatus.APPROVED)
                 .map(r -> buildDetail(r, true))
                 .toList();
         PaginationMeta pagination = new PaginationMeta(
@@ -453,10 +457,8 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (request.address() == null || request.address().city() == null) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Address cannot be null.");
         }
-        if (!isLocationWithinActiveZone(request.address().latitude(), request.address().longitude())) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
-                    "The provided coordinates are outside of our active service operating areas limit boundaries.");
-        }
+
+        boolean withinZone = isLocationWithinActiveZone(request.address().latitude(), request.address().longitude());
 
         RestaurantAddress address = restaurantAddressRepository.save(toAddress(request.address()));
         // commissionPct from client is ignored — platform default only (API Contracts
@@ -472,32 +474,101 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         String zoneId = request.zoneId();
         String zoneName = request.zoneName();
-        if (zoneId != null && !zoneId.isBlank()) {
-            LocationZone z = locationZoneRepository.findById(zoneId.trim()).orElse(null);
-            if (z != null) {
-                zoneId = z.getId();
-                zoneName = z.getZoneName();
+        LocationZone nearestZone = null;
+        double minDistanceKm = 0.0;
+
+        if (withinZone) {
+            restaurant.setOutOfZone(false);
+            restaurant.setNearestZoneDistanceKm(0.0);
+            if (zoneId != null && !zoneId.isBlank()) {
+                LocationZone z = locationZoneRepository.findById(zoneId.trim()).orElse(null);
+                if (z != null) {
+                    zoneId = z.getId();
+                    zoneName = z.getZoneName();
+                }
             }
-        }
-        if (zoneId == null || zoneId.isBlank()) {
-            LocationZone matched = findActiveZoneForCoordinates(
-                    request.address().latitude().doubleValue(),
-                    request.address().longitude().doubleValue());
-            if (matched != null) {
-                zoneId = matched.getId();
-                zoneName = matched.getZoneName();
-            } else {
-                RestaurantAddressResponseDto addrDto = new RestaurantAddressResponseDto(
-                        address.getLine1(), address.getLine2(), address.getLandmark(), address.getCity(),
-                        address.getState(), address.getCountry(), address.getPincode(), address.getFormattedAddress(),
-                        address.getLatitude(), address.getLongitude());
-                zoneId = RestaurantDetailResponseDto.deriveZoneId(addrDto, address.getLatitude(), address.getLongitude());
-                zoneName = RestaurantDetailResponseDto.deriveZoneName(addrDto, address.getLatitude(), address.getLongitude());
+            if (zoneId == null || zoneId.isBlank()) {
+                LocationZone matched = findActiveZoneForCoordinates(
+                        request.address().latitude().doubleValue(),
+                        request.address().longitude().doubleValue());
+                if (matched != null) {
+                    zoneId = matched.getId();
+                    zoneName = matched.getZoneName();
+                } else {
+                    RestaurantAddressResponseDto addrDto = new RestaurantAddressResponseDto(
+                            address.getLine1(), address.getLine2(), address.getLandmark(), address.getCity(),
+                            address.getState(), address.getCountry(), address.getPincode(), address.getFormattedAddress(),
+                            address.getLatitude(), address.getLongitude());
+                    zoneId = RestaurantDetailResponseDto.deriveZoneId(addrDto, address.getLatitude(), address.getLongitude());
+                    zoneName = RestaurantDetailResponseDto.deriveZoneName(addrDto, address.getLatitude(), address.getLongitude());
+                }
             }
+        } else {
+            // Out-of-zone restaurant: calculate distance from nearest active zone and mark outOfZone
+            restaurant.setOutOfZone(true);
+            minDistanceKm = Double.MAX_VALUE;
+            List<LocationZone> allZones = locationZoneRepository.findAll();
+            for (LocationZone z : allZones) {
+                if (!"ACTIVE".equalsIgnoreCase(z.getStatus()) || Boolean.FALSE.equals(z.getRestaurantEnabled())) {
+                    continue;
+                }
+                if (z.getLatitude() != null && z.getLongitude() != null) {
+                    double dist = calculateDistance(request.address().latitude().doubleValue(), request.address().longitude().doubleValue(), z.getLatitude(), z.getLongitude());
+                    if (dist < minDistanceKm) {
+                        minDistanceKm = dist;
+                        nearestZone = z;
+                    }
+                }
+            }
+            if (nearestZone == null && !allZones.isEmpty()) {
+                nearestZone = allZones.get(0);
+                minDistanceKm = 5.0;
+            }
+            if (request.distanceFromNearestZone() != null && request.distanceFromNearestZone() > 0) {
+                minDistanceKm = request.distanceFromNearestZone();
+            }
+            if (nearestZone != null) {
+                zoneId = nearestZone.getId();
+                zoneName = nearestZone.getZoneName();
+            } else if (zoneId == null || zoneId.isBlank()) {
+                zoneId = "dz-out-of-zone";
+                zoneName = "Out of Zone";
+            }
+            restaurant.setNearestZoneDistanceKm(Math.max(0.1, Math.round(minDistanceKm * 10.0) / 10.0));
         }
+
         restaurant.setZoneId(zoneId);
         restaurant.setZoneName(zoneName);
         restaurant = restaurantRepository.save(restaurant);
+
+        // If out of zone, record into unserviceable requests for admin review
+        if (!withinZone && unserviceableRequestService != null) {
+            try {
+                String phone = null;
+                String email = null;
+                var credOpt = userCredentialRepository.findById(ownerCredentialId);
+                if (credOpt.isPresent()) {
+                    phone = credOpt.get().getPhoneNumber();
+                    email = credOpt.get().getEmail();
+                }
+                String fullAddress = address.getLine1() + (address.getLine2() != null ? ", " + address.getLine2() : "") + ", " + address.getCity();
+                unserviceableRequestService.logRestaurantUnserviceableRequest(
+                        restaurant.getId(),
+                        restaurant.getName(),
+                        phone,
+                        email,
+                        address.getLatitude().doubleValue(),
+                        address.getLongitude().doubleValue(),
+                        fullAddress,
+                        zoneId,
+                        zoneName,
+                        address.getCity(),
+                        restaurant.getNearestZoneDistanceKm(),
+                        List.of());
+            } catch (Exception ex) {
+                log.warn("Failed to log restaurant unserviceable request: {}", ex.getMessage());
+            }
+        }
 
         eventPublisher.publishEvent(RestaurantCreatedEvent.of(
                 restaurant.getId(), ownerCredentialId, restaurant.getName()));
@@ -542,10 +613,6 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (request.city() == null) {
             throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "Location city cannot be null.");
         }
-        if (!isLocationWithinActiveZone(request.latitude(), request.longitude())) {
-            throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
-                    "The provided coordinates are outside of our active service operating areas limit boundaries.");
-        }
 
         restaurant.getAddress().replace(
                 request.addressLine1(),
@@ -563,6 +630,37 @@ public class RestaurantServiceImpl implements RestaurantService {
         if (matchedZone != null) {
             restaurant.setZoneId(matchedZone.getId());
             restaurant.setZoneName(matchedZone.getZoneName());
+            restaurant.setOutOfZone(false);
+            restaurant.setNearestZoneDistanceKm(0.0);
+        } else {
+            restaurant.setOutOfZone(true);
+            double minDistanceKm = Double.MAX_VALUE;
+            LocationZone nearestZone = null;
+            List<LocationZone> allZones = locationZoneRepository.findAll();
+            for (LocationZone z : allZones) {
+                if (!"ACTIVE".equalsIgnoreCase(z.getStatus()) || Boolean.FALSE.equals(z.getRestaurantEnabled())) {
+                    continue;
+                }
+                if (z.getLatitude() != null && z.getLongitude() != null) {
+                    double dist = calculateDistance(request.latitude().doubleValue(), request.longitude().doubleValue(), z.getLatitude(), z.getLongitude());
+                    if (dist < minDistanceKm) {
+                        minDistanceKm = dist;
+                        nearestZone = z;
+                    }
+                }
+            }
+            if (nearestZone == null && !allZones.isEmpty()) {
+                nearestZone = allZones.get(0);
+                minDistanceKm = 5.0;
+            }
+            if (nearestZone != null) {
+                restaurant.setZoneId(nearestZone.getId());
+                restaurant.setZoneName(nearestZone.getZoneName());
+            } else {
+                restaurant.setZoneId("dz-out-of-zone");
+                restaurant.setZoneName("Out of Zone");
+            }
+            restaurant.setNearestZoneDistanceKm(Math.max(0.1, Math.round(minDistanceKm * 10.0) / 10.0));
         }
         restaurantRepository.save(restaurant);
         restaurantCacheService.evictRestaurant(restaurant.getId());
@@ -828,6 +926,40 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantDetailResponseDto submitRegistration(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
         restaurant.submitRegistration();
+        if (Boolean.TRUE.equals(restaurant.getOutOfZone()) && unserviceableRequestService != null) {
+            try {
+                String phone = null;
+                String email = null;
+                var credOpt = userCredentialRepository.findById(ownerCredentialId);
+                if (credOpt.isPresent()) {
+                    phone = credOpt.get().getPhoneNumber();
+                    email = credOpt.get().getEmail();
+                }
+                List<String> docTypes = restaurantDocumentRepository.findAllByRestaurantId(restaurant.getId()).stream()
+                        .map(d -> d.getDocType() != null ? d.getDocType().name() : "")
+                        .filter(s -> !s.isBlank())
+                        .toList();
+                String fullAddress = restaurant.getAddress() != null ? (restaurant.getAddress().getLine1() + ", " + restaurant.getAddress().getCity()) : "Address";
+                Double lat = restaurant.getLatitude() != null ? restaurant.getLatitude().doubleValue() : 0.0;
+                Double lng = restaurant.getLongitude() != null ? restaurant.getLongitude().doubleValue() : 0.0;
+                String city = restaurant.getAddress() != null ? restaurant.getAddress().getCity() : "Karnataka";
+                unserviceableRequestService.logRestaurantUnserviceableRequest(
+                        restaurant.getId(),
+                        restaurant.getName(),
+                        phone,
+                        email,
+                        lat,
+                        lng,
+                        fullAddress,
+                        restaurant.getZoneId(),
+                        restaurant.getZoneName(),
+                        city,
+                        restaurant.getNearestZoneDistanceKm(),
+                        docTypes);
+            } catch (Exception ex) {
+                log.warn("Failed to update unserviceable request on submit: {}", ex.getMessage());
+            }
+        }
         restaurantCacheService.evictRestaurant(restaurant.getId());
         restaurantCacheService.evictAllListCaches();
         return buildDetail(restaurant, true);

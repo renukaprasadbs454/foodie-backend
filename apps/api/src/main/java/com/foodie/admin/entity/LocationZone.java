@@ -47,9 +47,12 @@ public class LocationZone {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public boolean isRestaurantEnabled() { return restaurantEnabled; }
+    public boolean getRestaurantEnabled() { return restaurantEnabled; }
     public void setRestaurantEnabled(boolean restaurantEnabled) { this.restaurantEnabled = restaurantEnabled; }
     public boolean isDeliveryPartnerEnabled() { return deliveryPartnerEnabled; }
+    public boolean getDeliveryPartnerEnabled() { return deliveryPartnerEnabled; }
     public void setDeliveryPartnerEnabled(boolean deliveryPartnerEnabled) { this.deliveryPartnerEnabled = deliveryPartnerEnabled; }
     public boolean isCustomerOrderingEnabled() { return customerOrderingEnabled; }
+    public boolean getCustomerOrderingEnabled() { return customerOrderingEnabled; }
     public void setCustomerOrderingEnabled(boolean customerOrderingEnabled) { this.customerOrderingEnabled = customerOrderingEnabled; }
 }

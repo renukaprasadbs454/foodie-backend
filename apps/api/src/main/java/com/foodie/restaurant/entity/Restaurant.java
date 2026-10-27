@@ -99,6 +99,12 @@ public class Restaurant extends BaseEntity {
     @Column(name = "zone_name", length = 200)
     private String zoneName;
 
+    @Column(name = "out_of_zone")
+    private Boolean outOfZone = Boolean.FALSE;
+
+    @Column(name = "nearest_zone_distance_km")
+    private Double nearestZoneDistanceKm;
+
     protected Restaurant() {
     }
 
@@ -171,6 +177,7 @@ public class Restaurant extends BaseEntity {
 
     public void approve() {
         this.status = RestaurantStatus.APPROVED;
+        this.outOfZone = Boolean.FALSE;
         this.rejectionReason = null;
     }
 
@@ -329,5 +336,21 @@ public class Restaurant extends BaseEntity {
 
     public void setZoneName(String zoneName) {
         this.zoneName = zoneName;
+    }
+
+    public Boolean getOutOfZone() {
+        return outOfZone;
+    }
+
+    public void setOutOfZone(Boolean outOfZone) {
+        this.outOfZone = outOfZone;
+    }
+
+    public Double getNearestZoneDistanceKm() {
+        return nearestZoneDistanceKm;
+    }
+
+    public void setNearestZoneDistanceKm(Double nearestZoneDistanceKm) {
+        this.nearestZoneDistanceKm = nearestZoneDistanceKm;
     }
 }

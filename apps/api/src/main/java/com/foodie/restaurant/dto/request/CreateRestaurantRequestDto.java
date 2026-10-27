@@ -28,7 +28,24 @@ public record CreateRestaurantRequestDto(
 
                 String zoneId,
 
-                String zoneName) {
+                String zoneName,
+
+                Boolean isOutOfZone,
+
+                Double distanceFromNearestZone) {
+
+        public CreateRestaurantRequestDto(
+                        String name,
+                        String description,
+                        List<CuisineType> cuisineTypes,
+                        com.foodie.common.enums.RestaurantType restaurantType,
+                        RestaurantAddressRequestDto address,
+                        BigDecimal commissionPct,
+                        String zoneId,
+                        String zoneName) {
+                this(name, description, cuisineTypes, restaurantType, address,
+                                commissionPct, zoneId, zoneName, Boolean.FALSE, null);
+        }
 
         public CreateRestaurantRequestDto(
                         String name,
@@ -37,7 +54,7 @@ public record CreateRestaurantRequestDto(
                         RestaurantAddressRequestDto address,
                         BigDecimal commissionPct) {
                 this(name, description, cuisineTypes, com.foodie.common.enums.RestaurantType.BOTH, address,
-                                commissionPct, null, null);
+                                commissionPct, null, null, Boolean.FALSE, null);
         }
 
         public CreateRestaurantRequestDto(
@@ -47,6 +64,6 @@ public record CreateRestaurantRequestDto(
                         com.foodie.common.enums.RestaurantType restaurantType,
                         RestaurantAddressRequestDto address,
                         BigDecimal commissionPct) {
-                this(name, description, cuisineTypes, restaurantType, address, commissionPct, null, null);
+                this(name, description, cuisineTypes, restaurantType, address, commissionPct, null, null, Boolean.FALSE, null);
         }
 }

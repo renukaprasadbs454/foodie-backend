@@ -127,6 +127,16 @@ public class LocationZoneController {
             "GPS_ROAD"
     );
 
+    public static double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return 6371.0 * c;
+    }
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void seedInitialLocationDataIfEmpty() {
@@ -214,16 +224,15 @@ public class LocationZoneController {
             zoneRepository.saveAndFlush(tmk);
         }
 
-        // Deactivate duplicate legacy entries ("zone 1") without deleting historical data
+        // Clean up any mock or dummy zones
         List<LocationZone> all = zoneRepository.findAll();
         for (LocationZone z : all) {
-            if (z.getZoneName() != null && z.getZoneName().toLowerCase().contains("zone 1")) {
-                if ("ACTIVE".equalsIgnoreCase(z.getStatus())) {
-                    z.setStatus("INACTIVE");
-                    zoneRepository.saveAndFlush(z);
-                }
+            String zName = z.getZoneName() != null ? z.getZoneName().toLowerCase() : "";
+            if (zName.contains("zone 1") || zName.contains("mock") || zName.contains("dummy") || zName.contains("sample")) {
+                zoneRepository.delete(z);
             }
         }
+        zoneRepository.flush();
 
         if (serviceAreas.isEmpty()) {
             serviceAreas.put("sa-1", new ServiceAreaDto("sa-1", "Indiranagar & Domlur", "Bangalore", "560038", "FULL_COVERAGE", 120));
@@ -233,11 +242,16 @@ public class LocationZoneController {
         }
 
         loadUnserviceableRequestsFromFile();
-        if (unserviceableRequests.isEmpty()) {
-            unserviceableRequests.put("req-1", new UnserviceableRequestDto("req-1", "Kengeri Biryani Hub", "Suresh Kumar", "suresh@kengeribiryani.com", "+919876543210", "Kengeri Satellite Town", "Bangalore", 12.9177, 77.4838, "PENDING", Instant.now().minusSeconds(86400)));
-            unserviceableRequests.put("req-2", new UnserviceableRequestDto("req-2", "Pavithra Thatte Idli", "Manjunath T", "manju@pavithraidli.com", "+919876543211", "Kyatsandra Main Road", "Tumkur", 13.3150, 77.1650, "PENDING", Instant.now().minusSeconds(43200)));
-            saveUnserviceableRequestsToFile();
+        // Remove mock/dummy requests
+        unserviceableRequests.remove("req-1");
+        unserviceableRequests.remove("req-2");
+        if (unserviceableRequestService != null) {
+            try {
+                unserviceableRequestService.deleteRequest("req-1");
+                unserviceableRequestService.deleteRequest("req-2");
+            } catch (Exception ignored) {}
         }
+        saveUnserviceableRequestsToFile();
     }
 
     @GetMapping("/zones")
@@ -529,13 +543,64 @@ public class LocationZoneController {
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
 
         List<UnserviceableRequestDto> list = unserviceableRequestService != null ? unserviceableRequestService.getAllRequests() : new ArrayList<>(unserviceableRequests.values());
-        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
-            String lower = activeZoneId.toLowerCase();
-            if (lower.contains("tumkur")) {
-                list = list.stream().filter(r -> r.getCityName() != null && r.getCityName().equalsIgnoreCase("Tumkur")).collect(Collectors.toList());
-            } else if (lower.contains("bangalore") || lower.contains("bengaluru")) {
-                list = list.stream().filter(r -> r.getCityName() != null && (r.getCityName().equalsIgnoreCase("Bangalore") || r.getCityName().equalsIgnoreCase("Bengaluru"))).collect(Collectors.toList());
+
+        // Remove mock/dummy requests
+        list = list.stream()
+                .filter(r -> r.getId() != null && !r.getId().equalsIgnoreCase("req-1") && !r.getId().equalsIgnoreCase("req-2"))
+                .collect(Collectors.toList());
+
+        List<LocationZone> zones = zoneRepository.findAll().stream()
+                .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
+                .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
+                .collect(Collectors.toList());
+
+        // Calculate distance to nearest zone if not already set
+        for (UnserviceableRequestDto r : list) {
+            if (r.getLatitude() != null && r.getLongitude() != null && (r.getDistanceFromZoneKm() == null || r.getDistanceFromZoneKm() == 0)) {
+                double minDistance = Double.MAX_VALUE;
+                for (LocationZone z : zones) {
+                    if (z.getLatitude() != null && z.getLongitude() != null) {
+                        double d = calculateHaversineDistance(r.getLatitude(), r.getLongitude(), z.getLatitude(), z.getLongitude());
+                        if (d < minDistance) {
+                            minDistance = d;
+                        }
+                    }
+                }
+                if (minDistance != Double.MAX_VALUE) {
+                    r.setDistanceFromZoneKm(minDistance);
+                }
             }
+        }
+
+        if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+            final String filterZone = activeZoneId;
+            list = list.stream().filter(r -> {
+                if (r.getCityName() != null && com.foodie.admin.security.AdminAccess.areZonesEquivalent(r.getCityName(), filterZone)) {
+                    return true;
+                }
+                if (r.getZoneId() != null && com.foodie.admin.security.AdminAccess.areZonesEquivalent(r.getZoneId(), filterZone)) {
+                    return true;
+                }
+                if (r.getLatitude() != null && r.getLongitude() != null) {
+                    LocationZone nearest = null;
+                    double minDist = Double.MAX_VALUE;
+                    for (LocationZone z : zones) {
+                        if (z.getLatitude() != null && z.getLongitude() != null) {
+                            double d = calculateHaversineDistance(r.getLatitude(), r.getLongitude(), z.getLatitude(), z.getLongitude());
+                            if (d < minDist) {
+                                minDist = d;
+                                nearest = z;
+                            }
+                        }
+                    }
+                    if (nearest != null) {
+                        return com.foodie.admin.security.AdminAccess.areZonesEquivalent(nearest.getId(), filterZone) ||
+                               com.foodie.admin.security.AdminAccess.areZonesEquivalent(nearest.getZoneName(), filterZone) ||
+                               com.foodie.admin.security.AdminAccess.areZonesEquivalent(nearest.getCityName(), filterZone);
+                    }
+                }
+                return false;
+            }).collect(Collectors.toList());
         }
         return ResponseEntity.ok(ApiResponse.success(list));
     }
@@ -663,12 +728,42 @@ public class LocationZoneController {
         if (req == null) {
             return ResponseEntity.notFound().build();
         }
+
+        List<LocationZone> zones = zoneRepository.findAll().stream()
+                .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
+                .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
+                .collect(Collectors.toList());
+
+        LocationZone nearestZone = null;
+        double minDistance = Double.MAX_VALUE;
+        if (req.getLatitude() != null && req.getLongitude() != null) {
+            for (LocationZone z : zones) {
+                if (z.getLatitude() != null && z.getLongitude() != null) {
+                    double d = calculateHaversineDistance(req.getLatitude(), req.getLongitude(), z.getLatitude(), z.getLongitude());
+                    if (d < minDistance) {
+                        minDistance = d;
+                        nearestZone = z;
+                    }
+                }
+            }
+        }
+
+        if (nearestZone != null) {
+            req.setZoneId(nearestZone.getId());
+            req.setZoneName(nearestZone.getZoneName());
+        }
+
         req.setStatus("APPROVED");
         if (unserviceableRequestService != null) {
+            unserviceableRequestService.saveRequest(req);
             unserviceableRequestService.updateStatus(requestId, "APPROVED");
         }
         unserviceableRequests.put(requestId, req);
         saveUnserviceableRequestsToFile();
+
+        if (nearestZone != null) {
+            return ResponseEntity.ok(ApiResponse.success(mapToDto(nearestZone)));
+        }
 
         String displayName = (req.getRequesterName() != null && !req.getRequesterName().isBlank())
                 ? req.getRequesterName().replaceFirst("^\\[.*?\\]\\s*", "")
@@ -695,6 +790,66 @@ public class LocationZoneController {
         zoneRepository.saveAndFlush(entity);
 
         return ResponseEntity.ok(ApiResponse.success(newZone));
+    }
+
+    @PostMapping("/unserviceable-requests/{requestId}/extend-zone")
+    @Transactional
+    public ResponseEntity<ApiResponse<LocationZoneDto>> extendZoneForUnserviceableRequest(
+            @PathVariable String requestId) {
+        UnserviceableRequestDto req = unserviceableRequestService != null ? unserviceableRequestService.getRequest(requestId) : unserviceableRequests.get(requestId);
+        if (req == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        List<LocationZone> zones = zoneRepository.findAll().stream()
+                .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
+                .filter(z -> z.getZoneName() == null || !z.getZoneName().toLowerCase().contains("zone 1"))
+                .collect(Collectors.toList());
+
+        LocationZone nearestZone = null;
+        double minDistance = Double.MAX_VALUE;
+
+        if (req.getLatitude() != null && req.getLongitude() != null) {
+            for (LocationZone z : zones) {
+                if (z.getLatitude() != null && z.getLongitude() != null) {
+                    double d = calculateHaversineDistance(req.getLatitude(), req.getLongitude(), z.getLatitude(), z.getLongitude());
+                    if (d < minDistance) {
+                        minDistance = d;
+                        nearestZone = z;
+                    }
+                }
+            }
+        }
+
+        if (nearestZone == null && !zones.isEmpty()) {
+            nearestZone = zones.get(0);
+            minDistance = req.getDistanceFromZoneKm() != null ? req.getDistanceFromZoneKm() : 15.0;
+        }
+
+        if (nearestZone == null) {
+            return approveUnserviceableRequest(requestId);
+        }
+
+        // Extend zone radius to cover requested coordinates with 2 km buffer
+        double currentRadius = nearestZone.getRadiusKm() != null ? nearestZone.getRadiusKm() : 10.0;
+        double requiredRadius = Math.ceil(minDistance + 2.0);
+        if (requiredRadius > currentRadius) {
+            nearestZone.setRadiusKm(requiredRadius);
+            zoneRepository.saveAndFlush(nearestZone);
+        }
+
+        req.setZoneId(nearestZone.getId());
+        req.setZoneName(nearestZone.getZoneName());
+        req.setStatus("APPROVED");
+
+        if (unserviceableRequestService != null) {
+            unserviceableRequestService.saveRequest(req);
+            unserviceableRequestService.updateStatus(requestId, "APPROVED");
+        }
+        unserviceableRequests.put(requestId, req);
+        saveUnserviceableRequestsToFile();
+
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(nearestZone)));
     }
 
     @GetMapping("/service-areas")

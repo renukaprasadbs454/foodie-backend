@@ -22,6 +22,8 @@ public class UnserviceableRequestDto {
     private String requestedArea;
     private String zoneId;
     private String zoneName;
+    private String restaurantId;
+    private Double distanceFromZoneKm;
     private List<String> submittedDocuments;
 
     public UnserviceableRequestDto() {}
@@ -218,5 +220,21 @@ public class UnserviceableRequestDto {
 
     public void setSubmittedDocuments(List<String> submittedDocuments) {
         this.submittedDocuments = submittedDocuments;
+    }
+
+    public String getRestaurantId() {
+        return restaurantId;
+    }
+
+    public void setRestaurantId(String restaurantId) {
+        this.restaurantId = restaurantId;
+    }
+
+    public Double getDistanceFromZoneKm() {
+        return distanceFromZoneKm;
+    }
+
+    public void setDistanceFromZoneKm(Double distanceFromZoneKm) {
+        this.distanceFromZoneKm = distanceFromZoneKm;
     }
 }

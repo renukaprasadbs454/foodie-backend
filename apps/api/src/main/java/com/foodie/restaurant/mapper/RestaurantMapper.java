@@ -97,7 +97,9 @@ public class RestaurantMapper {
                                 contactPhone,
                                 finalReviewCount,
                                 restaurant.getZoneId(),
-                                restaurant.getZoneName());
+                                restaurant.getZoneName(),
+                                restaurant.getOutOfZone(),
+                                restaurant.getNearestZoneDistanceKm());
         }
 
         public RestaurantLocationResponseDto toLocation(Restaurant restaurant) {

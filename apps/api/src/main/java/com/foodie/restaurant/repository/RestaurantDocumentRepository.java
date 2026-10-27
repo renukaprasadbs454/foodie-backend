@@ -10,4 +10,6 @@ public interface RestaurantDocumentRepository extends JpaRepository<RestaurantDo
     Optional<RestaurantDocument> findByIdAndRestaurantId(UUID id, UUID restaurantId);
 
     java.util.List<RestaurantDocument> findByRestaurantId(UUID restaurantId);
+
+    java.util.List<RestaurantDocument> findAllByRestaurantId(UUID restaurantId);
 }

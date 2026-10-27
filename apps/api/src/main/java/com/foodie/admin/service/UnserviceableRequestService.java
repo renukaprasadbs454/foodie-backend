@@ -22,6 +22,10 @@ public class UnserviceableRequestService {
     private final UnserviceableRequestRepository repository;
     private final DeliveryPartnerRepository deliveryPartnerRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
     public UnserviceableRequestService(
             UnserviceableRequestRepository repository,
             DeliveryPartnerRepository deliveryPartnerRepository) {
@@ -38,6 +42,13 @@ public class UnserviceableRequestService {
     public UnserviceableRequestDto getRequest(String id) {
         if (id == null) return null;
         return repository.findById(id).map(this::mapToDto).orElse(null);
+    }
+
+    @Transactional
+    public void deleteRequest(String id) {
+        if (id != null && repository.existsById(id)) {
+            repository.deleteById(id);
+        }
     }
 
     @Transactional
@@ -74,8 +85,50 @@ public class UnserviceableRequestService {
 
         // Update corresponding DeliveryPartner in database if applicable
         syncDeliveryPartnerStatus(entity, cleanStatus);
+        syncRestaurantStatus(entity, cleanStatus);
 
         return mapToDto(saved);
+    }
+
+    private void syncRestaurantStatus(UnserviceableRequest entity, String cleanStatus) {
+        try {
+            if (restaurantRepository == null) return;
+            com.foodie.restaurant.entity.Restaurant restaurant = null;
+            if (entity.getRestaurantId() != null) {
+                restaurant = restaurantRepository.findById(entity.getRestaurantId()).orElse(null);
+            }
+            if (restaurant == null && entity.getContactPhone() != null && !entity.getContactPhone().isBlank()) {
+                List<com.foodie.restaurant.entity.Restaurant> all = restaurantRepository.findAll();
+                for (com.foodie.restaurant.entity.Restaurant r : all) {
+                    if (entity.getRestaurantName() != null && entity.getRestaurantName().equalsIgnoreCase(r.getName())) {
+                        restaurant = r;
+                        break;
+                    }
+                }
+            }
+
+            if (restaurant != null) {
+                if ("APPROVED".equalsIgnoreCase(cleanStatus)) {
+                    restaurant.setOutOfZone(false);
+                    restaurant.approve();
+                    if (entity.getZoneId() != null && !entity.getZoneId().isBlank()) {
+                        restaurant.setZoneId(entity.getZoneId().trim());
+                    }
+                    if (entity.getZoneName() != null && !entity.getZoneName().isBlank()) {
+                        restaurant.setZoneName(entity.getZoneName().trim());
+                    }
+                } else if ("REJECTED".equalsIgnoreCase(cleanStatus)) {
+                    restaurant.reject("Out of active zone onboarding application rejected by admin.");
+                } else if ("PENDING".equalsIgnoreCase(cleanStatus)) {
+                    restaurant.setOutOfZone(true);
+                    restaurant.resubmit();
+                }
+                restaurantRepository.save(restaurant);
+                log.info("Synced restaurant {} status to {}", restaurant.getId(), cleanStatus);
+            }
+        } catch (Exception e) {
+            log.error("Failed to sync restaurant status for request {}: {}", entity.getId(), e.getMessage());
+        }
     }
 
     private void syncDeliveryPartnerStatus(UnserviceableRequest entity, String cleanStatus) {
@@ -228,12 +281,83 @@ public class UnserviceableRequestService {
         return mapToDto(saved);
     }
 
+    @Transactional
+    public UnserviceableRequestDto logRestaurantUnserviceableRequest(
+            UUID restaurantId,
+            String restaurantName,
+            String phone,
+            String email,
+            Double latitude,
+            Double longitude,
+            String address,
+            String zoneId,
+            String zoneName,
+            String cityName,
+            Double distanceKm,
+            List<String> submittedDocuments) {
+
+        String displayName = (restaurantName != null && !restaurantName.isBlank()) ? restaurantName.trim() : "Restaurant Outlet";
+        String displayArea = (address != null && !address.isBlank()) ? address.trim() : (cityName != null ? cityName : "Unassigned Area");
+
+        Optional<UnserviceableRequest> existing = Optional.empty();
+        if (restaurantId != null) {
+            existing = repository.findFirstByRestaurantId(restaurantId);
+        }
+        if (existing.isEmpty() && phone != null && !phone.isBlank()) {
+            existing = repository.findFirstByContactPhoneAndRequestSource(phone, "RESTAURANT");
+        }
+        if (existing.isEmpty() && email != null && !email.isBlank()) {
+            existing = repository.findFirstByContactEmailAndRequestSource(email, "RESTAURANT");
+        }
+
+        UnserviceableRequest entity = existing.orElseGet(() -> {
+            UnserviceableRequest newReq = new UnserviceableRequest();
+            String idSuffix = restaurantId != null ? restaurantId.toString().substring(0, Math.min(8, restaurantId.toString().length())) : UUID.randomUUID().toString().substring(0, 8);
+            newReq.setId("req-rest-" + idSuffix);
+            newReq.setCreatedAt(Instant.now());
+            if (restaurantId != null) {
+                newReq.setRestaurantId(restaurantId);
+            }
+            return newReq;
+        });
+
+        if (entity.getRestaurantId() == null && restaurantId != null) {
+            entity.setRestaurantId(restaurantId);
+        }
+        entity.setRequestSource("RESTAURANT");
+        entity.setRestaurantName(displayName);
+        entity.setRequesterName(displayName);
+        entity.setContactPerson(displayName);
+        if (phone != null && !phone.isBlank()) entity.setContactPhone(phone);
+        if (email != null && !email.isBlank()) entity.setContactEmail(email);
+        entity.setAddress(displayArea);
+        entity.setRequestedArea(displayArea);
+        entity.setCityName(cityName != null && !cityName.isBlank() ? cityName : "Karnataka");
+        if (latitude != null) entity.setLatitude(latitude);
+        if (longitude != null) entity.setLongitude(longitude);
+        if (zoneId != null && !zoneId.isBlank()) entity.setZoneId(zoneId.trim());
+        if (zoneName != null && !zoneName.isBlank()) entity.setZoneName(zoneName.trim());
+        if (distanceKm != null) entity.setDistanceFromZoneKm(distanceKm);
+        entity.setStatus("PENDING");
+        entity.setUpdatedAt(Instant.now());
+
+        if (submittedDocuments != null && !submittedDocuments.isEmpty()) {
+            entity.setSubmittedDocuments(String.join(", ", submittedDocuments));
+        }
+
+        UnserviceableRequest saved = repository.save(entity);
+        return mapToDto(saved);
+    }
+
     private UnserviceableRequestDto mapToDto(UnserviceableRequest entity) {
         if (entity == null) return null;
         UnserviceableRequestDto dto = new UnserviceableRequestDto();
         dto.setId(entity.getId());
         if (entity.getDeliveryPartnerId() != null) {
             dto.setDeliveryPartnerId(entity.getDeliveryPartnerId().toString());
+        }
+        if (entity.getRestaurantId() != null) {
+            dto.setRestaurantId(entity.getRestaurantId().toString());
         }
         dto.setRestaurantName(entity.getRestaurantName());
         dto.setContactPerson(entity.getContactPerson());
@@ -250,6 +374,7 @@ public class UnserviceableRequestService {
         dto.setRequestedArea(entity.getRequestedArea());
         dto.setZoneId(entity.getZoneId());
         dto.setZoneName(entity.getZoneName());
+        dto.setDistanceFromZoneKm(entity.getDistanceFromZoneKm());
 
         if (entity.getSubmittedDocuments() != null && !entity.getSubmittedDocuments().isBlank()) {
             dto.setSubmittedDocuments(Arrays.stream(entity.getSubmittedDocuments().split(","))
@@ -269,6 +394,11 @@ public class UnserviceableRequestService {
                 entity.setDeliveryPartnerId(UUID.fromString(dto.getDeliveryPartnerId()));
             } catch (Exception ignored) {}
         }
+        if (dto.getRestaurantId() != null) {
+            try {
+                entity.setRestaurantId(UUID.fromString(dto.getRestaurantId()));
+            } catch (Exception ignored) {}
+        }
         entity.setRestaurantName(dto.getRestaurantName());
         entity.setContactPerson(dto.getContactPerson());
         entity.setContactEmail(dto.getContactEmail());
@@ -285,6 +415,9 @@ public class UnserviceableRequestService {
         entity.setRequestedArea(dto.getRequestedArea());
         entity.setZoneId(dto.getZoneId());
         entity.setZoneName(dto.getZoneName());
+        if (dto.getDistanceFromZoneKm() != null) {
+            entity.setDistanceFromZoneKm(dto.getDistanceFromZoneKm());
+        }
         if (dto.getSubmittedDocuments() != null && !dto.getSubmittedDocuments().isEmpty()) {
             entity.setSubmittedDocuments(String.join(", ", dto.getSubmittedDocuments()));
         }

@@ -17,6 +17,8 @@ public interface UnserviceableRequestRepository extends JpaRepository<Unservicea
 
     Optional<UnserviceableRequest> findFirstByDeliveryPartnerIdAndStatus(UUID deliveryPartnerId, String status);
 
+    Optional<UnserviceableRequest> findFirstByRestaurantId(UUID restaurantId);
+
     Optional<UnserviceableRequest> findFirstByContactPhoneAndRequestSource(String contactPhone, String requestSource);
 
     Optional<UnserviceableRequest> findFirstByContactEmailAndRequestSource(String contactEmail, String requestSource);
