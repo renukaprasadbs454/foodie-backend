@@ -767,6 +767,12 @@ public class LocationZoneController {
         if (nearestZone != null) {
             req.setZoneId(nearestZone.getId());
             req.setZoneName(nearestZone.getZoneName());
+            double currentRadius = nearestZone.getRadiusKm() != null ? nearestZone.getRadiusKm() : 10.0;
+            double requiredRadius = Math.ceil(minDistance + 2.0);
+            if (requiredRadius > currentRadius) {
+                nearestZone.setRadiusKm(requiredRadius);
+                zoneRepository.saveAndFlush(nearestZone);
+            }
         }
 
         req.setStatus("APPROVED");

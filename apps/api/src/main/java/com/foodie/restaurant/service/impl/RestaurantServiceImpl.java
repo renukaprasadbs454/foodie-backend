@@ -206,6 +206,13 @@ public class RestaurantServiceImpl implements RestaurantService {
         }
         BigDecimal minRatingDecimal = minRating != null ? BigDecimal.valueOf(minRating) : null;
 
+        // Block restaurant feed if customer location has an unserviceable request still PENDING approval/extension
+        if (lat != null && lng != null && unserviceableRequestService != null && unserviceableRequestService.hasPendingRequestNear(lat, lng, 10.0)) {
+            log.info("Customer location ({}, {}) has a PENDING unserviceable request awaiting admin extension/approval. Returning empty restaurants feed.", lat, lng);
+            PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+            return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+        }
+
         // Resolve active admin operating zone
         LocationZone targetZone = null;
         if (zoneId != null && !zoneId.isBlank()) {
@@ -1289,6 +1296,21 @@ public class RestaurantServiceImpl implements RestaurantService {
                     "Customer coordinates required for zone detection.");
         }
 
+        if (unserviceableRequestService != null && unserviceableRequestService.hasPendingRequestNear(lat, lng, 10.0)) {
+            log.info("Customer location ({}, {}) has a PENDING unserviceable request awaiting admin extension/approval.", lat, lng);
+            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                    false,
+                    null,
+                    null,
+                    null,
+                    lat,
+                    lng,
+                    0,
+                    availableZoneNames,
+                    "Your area expansion request is currently under review by Super Admin. Restaurants will be available once approved."
+            );
+        }
+
         LocationZone matchedZone = findActiveZoneForCoordinates(lat, lng);
         if (matchedZone == null) {
             return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
@@ -1351,6 +1373,9 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     private LocationZone findActiveZoneForCoordinates(Double lat, Double lng) {
         if (lat == null || lng == null) return null;
+        if (unserviceableRequestService != null && unserviceableRequestService.hasPendingRequestNear(lat, lng, 10.0)) {
+            return null;
+        }
         List<LocationZone> allZones = getOrInitActiveZones();
         LocationZone bestZone = null;
         double minDistance = Double.MAX_VALUE;
