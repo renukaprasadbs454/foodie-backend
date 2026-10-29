@@ -255,6 +255,45 @@ public class AdminOrderController {
                 adminOperationsService.overrideOrderStatus(principal.userId(), orderId, request)));
     }
 
+    @PostMapping(value = {"/{id}/assign-delivery-partner", "/{id}/assign"})
+    @org.springframework.transaction.annotation.Transactional
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Super Admin manual delivery partner assignment to order")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> assignDeliveryPartner(
+            @PathVariable("id") UUID orderId,
+            @RequestBody java.util.Map<String, Object> body) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Order not found."));
+
+        String dpIdStr = (String) body.get("deliveryPartnerId");
+        if (dpIdStr == null || dpIdStr.isBlank()) {
+            throw new com.foodie.common.exception.BadRequestException(
+                    com.foodie.common.exception.ErrorCode.VALIDATION_FAILED,
+                    "deliveryPartnerId is required.");
+        }
+
+        UUID dpUuid;
+        try {
+            dpUuid = UUID.fromString(dpIdStr);
+        } catch (IllegalArgumentException e) {
+            dpUuid = UUID.nameUUIDFromBytes(dpIdStr.getBytes());
+        }
+
+        order.assignDeliveryPartner(dpUuid);
+        if (order.getStatus() != OrderStatus.ASSIGNED) {
+            order.transitionTo(OrderStatus.ASSIGNED);
+        }
+        orderRepository.save(order);
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("orderId", order.getId().toString());
+        result.put("orderNumber", order.getOrderNumber());
+        result.put("assignedDeliveryPartnerId", dpIdStr);
+        result.put("status", "ASSIGNED");
+
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
     @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     @org.springframework.transaction.annotation.Transactional
     public void seedInitialOrdersIfEmpty() {
