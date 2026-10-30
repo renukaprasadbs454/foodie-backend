@@ -72,6 +72,13 @@ public class DeliveryPartnerDocument extends BaseEntity {
         this.verifiedAt = Instant.now();
     }
 
+    public void resetToPending() {
+        this.verificationStatus = DocumentVerificationStatus.PENDING;
+        this.verifiedBy = null;
+        this.verifiedAt = null;
+        this.remarks = null;
+    }
+
     public void reject(UUID verifiedBy, String remarks) {
         this.verificationStatus = DocumentVerificationStatus.REJECTED;
         this.verifiedBy = verifiedBy;

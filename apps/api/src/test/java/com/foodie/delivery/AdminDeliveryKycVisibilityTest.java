@@ -152,4 +152,20 @@ class AdminDeliveryKycVisibilityTest {
         ResponseEntity<?> response = adminDeliveryController.getStats(null, null);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
+    @Test
+    void suspendPartner_setsStatusToSuspendedAndOffline() {
+        completePartner.verifyKyc();
+        completePartner.setOnline(true);
+        when(deliveryPartnerRepository.findById(completePartner.getId())).thenReturn(Optional.of(completePartner));
+        when(deliveryPartnerDocumentRepository.findByDeliveryPartnerId(completePartner.getId()))
+                .thenReturn(createCompleteDocuments(completePartner));
+
+        AuthPrincipal principal = new AuthPrincipal(UUID.randomUUID(), com.foodie.common.enums.UserType.ADMIN);
+        ResponseEntity<?> response = adminDeliveryController.suspendPartner(principal, completePartner.getId(), java.util.Map.of("reason", "Suspended for review"));
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(completePartner.getKycStatus()).isEqualTo(com.foodie.common.enums.KycStatus.SUSPENDED);
+        assertThat(completePartner.isOnline()).isFalse();
+        assertThat(completePartner.getKycRejectionReason()).isEqualTo("Suspended for review");
+    }
 }

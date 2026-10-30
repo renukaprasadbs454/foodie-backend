@@ -162,6 +162,12 @@ public class DeliveryPartner extends BaseEntity {
         this.kycRejectionReason = null;
     }
 
+    public void suspend(String reason) {
+        this.kycStatus = KycStatus.SUSPENDED;
+        this.kycRejectionReason = reason;
+        this.online = false;
+    }
+
     public void rejectKyc(String reason) {
         this.kycStatus = KycStatus.REJECTED;
         this.kycRejectionReason = reason;

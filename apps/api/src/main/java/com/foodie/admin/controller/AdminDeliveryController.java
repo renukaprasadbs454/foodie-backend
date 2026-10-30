@@ -215,7 +215,7 @@ public class AdminDeliveryController {
         }
         long totalFleet = all.size();
         long onlineCount = all.stream().filter(DeliveryPartner::isOnline).count();
-        long pendingKyc = all.stream().filter(p -> p.getKycStatus() == KycStatus.PENDING).count();
+        long pendingKyc = all.stream().filter(p -> p.getKycStatus() == KycStatus.PENDING || p.getKycStatus() == KycStatus.SUSPENDED).count();
         long verified = all.stream().filter(p -> p.getKycStatus() == KycStatus.VERIFIED).count();
         long rejected = all.stream().filter(p -> p.getKycStatus() == KycStatus.REJECTED).count();
         BigDecimal totalCash = all.stream()
@@ -281,6 +281,36 @@ public class AdminDeliveryController {
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> approveKyc(
             AuthPrincipal principal, UUID partnerId) {
         return approveKyc(null, principal, null, partnerId);
+    }
+
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> suspendPartner(
+            AuthPrincipal principal, UUID partnerId, Map<String, String> body) {
+        return suspendPartner(null, principal, null, partnerId, body);
+    }
+
+    @RequestMapping(value = {"/{id}/suspend"}, method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST})
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Suspend delivery partner account (set KYC status to SUSPENDED)")
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> suspendPartner(
+            org.springframework.security.core.Authentication authentication,
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") UUID partnerId,
+            @RequestBody(required = false) Map<String, String> body) {
+        DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
+        assertPartnerInZone(authentication, partner, activeZoneHeader);
+        String reason = (body != null && body.containsKey("reason") && !body.get("reason").isBlank())
+                ? body.get("reason")
+                : "Account suspended by Admin. Verification review in progress.";
+        partner.suspend(reason);
+        deliveryPartnerRepository.save(partner);
+        List<DeliveryPartnerDocument> docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(partner.getId());
+        for (DeliveryPartnerDocument doc : docs) {
+            doc.resetToPending();
+            deliveryPartnerDocumentRepository.save(doc);
+        }
+        return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> rejectKyc(
