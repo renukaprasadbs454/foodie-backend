@@ -256,12 +256,22 @@ public class RestaurantServiceImpl implements RestaurantService {
             List<Restaurant> inZone = stream.filter(r -> isRestaurantInZone(r, finalTargetZone)).toList();
             if (!inZone.isEmpty()) {
                 stream = inZone.stream();
-            } else {
-                // Expansion or approved zone fallback: serve nearby restaurants from the city or within 50km
+                // Expansion or approved zone fallback: serve nearby restaurants from nearby zones only (within 25km)
+                Double refLat = lat != null ? lat : (finalTargetZone.getLatitude() != null ? finalTargetZone.getLatitude() : null);
+                Double refLng = lng != null ? lng : (finalTargetZone.getLongitude() != null ? finalTargetZone.getLongitude() : null);
                 String targetCity = finalTargetZone.getCityName() != null ? finalTargetZone.getCityName().toLowerCase() : "";
                 List<Restaurant> nearby = approvedList.stream().filter(r -> {
                     RestaurantAddress addr = r.getAddress();
-                    if (addr != null && addr.getCity() != null) {
+                    Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
+                            : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
+                    Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
+                            : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
+
+                    if (refLat != null && refLng != null && rLat != null && rLng != null) {
+                        double dist = calculateDistance(refLat, refLng, rLat, rLng);
+                        return dist <= 25.0;
+                    }
+                    if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
                         String rCity = addr.getCity().toLowerCase();
                         if (rCity.equals(targetCity)) return true;
                         if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
@@ -269,33 +279,65 @@ public class RestaurantServiceImpl implements RestaurantService {
                         if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
                             (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
                     }
-                    if (lat != null && lng != null && addr != null && addr.getLatitude() != null && addr.getLongitude() != null) {
-                        double dist = calculateDistance(lat, lng, addr.getLatitude().doubleValue(), addr.getLongitude().doubleValue());
-                        return dist <= 50.0;
-                    }
                     return false;
                 }).toList();
-                if (nearby.isEmpty()) {
-                    nearby = approvedList;
-                }
+                // Strictly return nearby zone restaurants only, never all restaurants
                 stream = nearby.stream();
             }
         }
 
-        // 2. Search filter
+        // 2. Search filter (matching restaurant name, description, or available menu items)
         if (search != null && !search.isBlank()) {
             String lowerSearch = search.trim().toLowerCase();
-            stream = stream.filter(r -> (r.getName() != null && r.getName().toLowerCase().contains(lowerSearch))
-                    || (r.getDescription() != null && r.getDescription().toLowerCase().contains(lowerSearch)));
+            java.util.Set<UUID> menuMatchedIds = findRestaurantIdsMatchingMenuOrCuisine(lowerSearch);
+            stream = stream.filter(r -> {
+                if (menuMatchedIds.contains(r.getId())) return true;
+                if (r.getName() != null && r.getName().toLowerCase().contains(lowerSearch)) return true;
+                if (r.getDescription() != null && r.getDescription().toLowerCase().contains(lowerSearch)) return true;
+                return false;
+            });
         }
 
-        // 3. Cuisine filter
+        // 3. Cuisine filter (also matches menu items, e.g. "Biriyani" matches "Chicken Biriyani")
         if (cuisineType != null && !cuisineType.isBlank()) {
             String lowerCuisine = cuisineType.trim().toLowerCase();
+            java.util.Set<UUID> menuMatchedIds = findRestaurantIdsMatchingMenuOrCuisine(lowerCuisine);
+            java.util.Set<String> cuisineVariants = new java.util.HashSet<>();
+            cuisineVariants.add(lowerCuisine);
+            if (lowerCuisine.contains("biriyani")) {
+                cuisineVariants.add(lowerCuisine.replace("biriyani", "biryani"));
+            } else if (lowerCuisine.contains("biryani")) {
+                cuisineVariants.add(lowerCuisine.replace("biryani", "biriyani"));
+            }
+
             stream = stream.filter(r -> {
-                if (r.getCuisineTypes() == null) return false;
-                for (String c : r.getCuisineTypes()) {
-                    if (c != null && c.toLowerCase().contains(lowerCuisine)) return true;
+                // If any menu item matches this cuisine/word (e.g., "Chicken Biriyani" contains "biriyani")
+                if (menuMatchedIds.contains(r.getId())) return true;
+
+                // Restaurant name or description match
+                if (r.getName() != null) {
+                    String rName = r.getName().toLowerCase();
+                    for (String v : cuisineVariants) {
+                        if (rName.contains(v) || v.contains(rName)) return true;
+                    }
+                }
+                if (r.getDescription() != null) {
+                    String rDesc = r.getDescription().toLowerCase();
+                    for (String v : cuisineVariants) {
+                        if (rDesc.contains(v)) return true;
+                    }
+                }
+
+                // Check cuisineTypes array
+                if (r.getCuisineTypes() != null) {
+                    for (String c : r.getCuisineTypes()) {
+                        if (c != null) {
+                            String cLower = c.toLowerCase().replace("_", " ").trim();
+                            for (String v : cuisineVariants) {
+                                if (cLower.contains(v) || v.contains(cLower)) return true;
+                            }
+                        }
+                    }
                 }
                 return false;
             });
@@ -1187,6 +1229,38 @@ public class RestaurantServiceImpl implements RestaurantService {
         // Do not throw 400 Bad Request for free-text search filters
     }
 
+    private java.util.Set<UUID> findRestaurantIdsMatchingMenuOrCuisine(String query) {
+        if (query == null || query.isBlank()) {
+            return java.util.Collections.emptySet();
+        }
+        String lower = query.trim().toLowerCase();
+        java.util.Set<String> searchWords = new java.util.HashSet<>();
+        searchWords.add(lower);
+
+        // Normalize Indian food variations: "biriyani" <-> "biryani"
+        if (lower.contains("biriyani")) {
+            searchWords.add(lower.replace("biriyani", "biryani"));
+        } else if (lower.contains("biryani")) {
+            searchWords.add(lower.replace("biryani", "biriyani"));
+        }
+
+        java.util.Set<UUID> matchedRestoIds = new java.util.HashSet<>();
+        for (String word : searchWords) {
+            try {
+                var items = menuItemRepository.findByNameContainingIgnoreCase(word);
+                if (items != null) {
+                    for (var item : items) {
+                        if (item.getRestaurantId() != null) {
+                            matchedRestoIds.add(item.getRestaurantId());
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return matchedRestoIds;
+    }
+
     private Sort resolveSort(String sort) {
         String field = sort == null || sort.isBlank() ? "createdAt" : sort;
         return switch (field) {
@@ -1330,9 +1404,20 @@ public class RestaurantServiceImpl implements RestaurantService {
         long count = approved.stream().filter(r -> isRestaurantInZone(r, matchedZone)).count();
         if (count == 0) {
             String targetCity = matchedZone.getCityName() != null ? matchedZone.getCityName().toLowerCase() : "";
+            Double refLat = lat != null ? lat : (matchedZone.getLatitude() != null ? matchedZone.getLatitude() : null);
+            Double refLng = lng != null ? lng : (matchedZone.getLongitude() != null ? matchedZone.getLongitude() : null);
             count = approved.stream().filter(r -> {
                 RestaurantAddress addr = r.getAddress();
-                if (addr != null && addr.getCity() != null) {
+                Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
+                        : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
+                Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
+                        : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
+
+                if (refLat != null && refLng != null && rLat != null && rLng != null) {
+                    double dist = calculateDistance(refLat, refLng, rLat, rLng);
+                    return dist <= 25.0;
+                }
+                if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
                     String rCity = addr.getCity().toLowerCase();
                     if (rCity.equals(targetCity)) return true;
                     if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
@@ -1340,15 +1425,8 @@ public class RestaurantServiceImpl implements RestaurantService {
                     if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
                         (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
                 }
-                if (lat != null && lng != null && addr != null && addr.getLatitude() != null && addr.getLongitude() != null) {
-                    double dist = calculateDistance(lat, lng, addr.getLatitude().doubleValue(), addr.getLongitude().doubleValue());
-                    return dist <= 50.0;
-                }
                 return false;
             }).count();
-            if (count == 0) {
-                count = approved.size();
-            }
         }
 
         return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
