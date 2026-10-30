@@ -20,7 +20,41 @@ public record MenuItemResponseDto(
         String preparationTime,
         BigDecimal gstPct,
         @JsonProperty("avg_rating") BigDecimal avgRating,
-        @JsonProperty("review_count") Long reviewCount) {
+        @JsonProperty("review_count") Long reviewCount,
+        UUID restaurantId) {
+
+    public MenuItemResponseDto(
+            UUID menuItemId,
+            UUID categoryId,
+            String name,
+            String description,
+            BigDecimal basePrice,
+            boolean isVeg,
+            String foodType,
+            boolean isAvailable,
+            String imageUrl,
+            String packageSize,
+            String preparationTime,
+            BigDecimal gstPct,
+            BigDecimal avgRating,
+            Long reviewCount) {
+        this(
+                menuItemId,
+                categoryId,
+                name,
+                description,
+                basePrice,
+                isVeg,
+                foodType,
+                isAvailable,
+                imageUrl,
+                packageSize,
+                preparationTime,
+                gstPct,
+                avgRating,
+                reviewCount,
+                null);
+    }
 
     public MenuItemResponseDto(
             UUID menuItemId,

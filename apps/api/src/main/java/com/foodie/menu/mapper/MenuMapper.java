@@ -38,7 +38,8 @@ public class MenuMapper {
                 item.getPreparationTime(),
                 item.getGstPct(),
                 avgRating != null ? avgRating : BigDecimal.ZERO,
-                reviewCount != null ? reviewCount : 0L);
+                reviewCount != null ? reviewCount : 0L,
+                item.getRestaurantId());
     }
 
     public VariantResponseDto toVariant(Variant variant) {

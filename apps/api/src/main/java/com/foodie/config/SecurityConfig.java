@@ -109,6 +109,11 @@ public class SecurityConfig {
                                                                 HttpMethod.GET,
                                                                 "/api/v1/search/**")
                                                 .permitAll()
+                                                .requestMatchers(
+                                                                HttpMethod.GET,
+                                                                "/api/v1/banners",
+                                                                "/api/v1/banners/**")
+                                                .permitAll()
                                                 .anyRequest().authenticated())
                                 .exceptionHandling(ex -> ex
                                                 .authenticationEntryPoint(
