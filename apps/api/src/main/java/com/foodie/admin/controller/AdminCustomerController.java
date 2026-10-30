@@ -56,8 +56,8 @@ public class AdminCustomerController {
     private final RoleRepository roleRepository;
     private final AddressRepository addressRepository;
     private final AdminZoneService adminZoneService;
-    private static final Map<String, Boolean> COD_DISABLED_CUSTOMERS = new ConcurrentHashMap<>();
-    private static final Map<String, String> SUSPENSION_REASONS = new ConcurrentHashMap<>();
+    public static final Map<String, Boolean> COD_DISABLED_CUSTOMERS = new ConcurrentHashMap<>();
+    public static final Map<String, String> SUSPENSION_REASONS = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.order.repository.OrderRepository orderRepository;

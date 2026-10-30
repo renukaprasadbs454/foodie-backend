@@ -7,6 +7,19 @@ public record CustomerProfileResponseDto(
         String fullName,
         String email,
         String phoneNumber,
-        UUID defaultAddressId
+        UUID defaultAddressId,
+        String accountStatus,
+        Boolean isSuspended,
+        String suspensionReason,
+        Boolean isCodDisabled
 ) {
+    public CustomerProfileResponseDto(
+            UUID customerId,
+            String fullName,
+            String email,
+            String phoneNumber,
+            UUID defaultAddressId
+    ) {
+        this(customerId, fullName, email, phoneNumber, defaultAddressId, "ACTIVE", false, null, false);
+    }
 }
