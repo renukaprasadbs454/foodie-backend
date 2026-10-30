@@ -27,6 +27,8 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     List<Review> findByDeliveryPartnerIdOrderByCreatedAtDesc(UUID deliveryPartnerId);
 
+    List<Review> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
+
     @Query("select coalesce(avg(r.deliveryRating), 5.0) from Review r where r.deliveryPartnerId = :deliveryPartnerId and r.deliveryRating is not null")
     Double averageDeliveryRating(@Param("deliveryPartnerId") UUID deliveryPartnerId);
 

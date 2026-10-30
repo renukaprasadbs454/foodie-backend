@@ -51,6 +51,19 @@ public class UnserviceableRequestService {
         if (lat == null || lng == null) return false;
         try {
             List<UnserviceableRequestDto> all = getAllRequests();
+            // If admin has APPROVED any unserviceable request near this location (e.g. within 15 km),
+            // then the area is approved / extended and must NOT be blocked by lingering duplicate requests.
+            for (UnserviceableRequestDto req : all) {
+                if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
+                    if (req.getLatitude() != null && req.getLongitude() != null) {
+                        double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
+                        if (dist <= Math.max(radiusKm, 15.0)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+
             for (UnserviceableRequestDto req : all) {
                 if ("PENDING".equalsIgnoreCase(req.getStatus())) {
                     if (req.getLatitude() != null && req.getLongitude() != null) {
@@ -119,6 +132,38 @@ public class UnserviceableRequestService {
         entity.setStatus(cleanStatus);
         entity.setUpdatedAt(Instant.now());
         UnserviceableRequest saved = repository.save(entity);
+
+        // If approved, cascade approval to all duplicate requests for this requester or within 10 km
+        if ("APPROVED".equalsIgnoreCase(cleanStatus)) {
+            try {
+                List<UnserviceableRequest> all = repository.findAll();
+                for (UnserviceableRequest other : all) {
+                    if (!other.getId().equals(entity.getId()) && "PENDING".equalsIgnoreCase(other.getStatus())) {
+                        boolean match = false;
+                        if (entity.getContactPhone() != null && !entity.getContactPhone().isBlank() &&
+                            entity.getContactPhone().equalsIgnoreCase(other.getContactPhone())) {
+                            match = true;
+                        } else if (entity.getLatitude() != null && entity.getLongitude() != null &&
+                                   other.getLatitude() != null && other.getLongitude() != null) {
+                            double d = calculateHaversineDistance(entity.getLatitude(), entity.getLongitude(),
+                                    other.getLatitude(), other.getLongitude());
+                            if (d <= 10.0) {
+                                match = true;
+                            }
+                        }
+                        if (match) {
+                            other.setStatus("APPROVED");
+                            other.setZoneId(entity.getZoneId());
+                            other.setZoneName(entity.getZoneName());
+                            other.setUpdatedAt(Instant.now());
+                            repository.save(other);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to cascade approval to duplicate unserviceable requests: {}", e.getMessage());
+            }
+        }
 
         // Update corresponding DeliveryPartner in database if applicable
         syncDeliveryPartnerStatus(entity, cleanStatus);

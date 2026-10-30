@@ -17,6 +17,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     boolean existsByOrderNumber(String orderNumber);
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
+
+    java.util.List<Order> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
     
     Page<Order> findByCustomerIdAndStatusNot(UUID customerId, OrderStatus status, Pageable pageable);
 

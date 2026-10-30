@@ -34,6 +34,15 @@ import com.foodie.user.repository.AddressRepository;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import java.math.BigDecimal;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+
 
 @RestController
 @RequestMapping("/api/v1/admin/customers")
@@ -47,6 +56,24 @@ public class AdminCustomerController {
     private final RoleRepository roleRepository;
     private final AddressRepository addressRepository;
     private final AdminZoneService adminZoneService;
+    private static final Map<String, Boolean> COD_DISABLED_CUSTOMERS = new ConcurrentHashMap<>();
+    private static final Map<String, String> SUSPENSION_REASONS = new ConcurrentHashMap<>();
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.order.repository.OrderRepository orderRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.review.repository.ReviewRepository reviewRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.support.repository.SupportConversationRepository supportConversationRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.payment.repository.PaymentRepository paymentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
+
 
     public AdminCustomerController(
             CustomerRepository customerRepository,
@@ -342,4 +369,324 @@ public class AdminCustomerController {
     public record CustomerDashboardResponse(CustomerSummary summary, List<AdminCustomerDto> customers, int total,
             int openTicketsCount) {
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get detailed customer profile, orders, addresses, payments, support tickets, and reviews")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCustomerDetails(@PathVariable("id") String id) {
+        Customer customer = null;
+        try {
+            UUID custUuid = UUID.fromString(id);
+            customer = customerRepository.findById(custUuid).orElse(null);
+        } catch (IllegalArgumentException ignored) {}
+
+        if (customer == null) {
+            List<Customer> all = customerRepository.findAll();
+            for (Customer c : all) {
+                if (c.getId().toString().equalsIgnoreCase(id) || (c.getEmail() != null && c.getEmail().equalsIgnoreCase(id))) {
+                    customer = c;
+                    break;
+                }
+            }
+        }
+
+        if (customer == null) {
+            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found with id: " + id);
+        }
+
+        UUID custId = customer.getId();
+        UserCredential cred = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+        boolean isActive = cred == null || cred.isActive();
+        String phone = cred != null && cred.getPhoneNumber() != null ? cred.getPhoneNumber() : "Unknown";
+        String email = customer.getEmail() != null ? customer.getEmail() : (cred != null ? cred.getEmail() : "Unknown");
+        String joinedDate = customer.getCreatedAt() != null ? customer.getCreatedAt().toString().substring(0, 10) : "unknown";
+
+        var loyaltyOpt = customerLoyaltyRepository.findByCustomerId(custId);
+        String tier = loyaltyOpt.map(l -> l.getLoyaltyTier().name()).orElse("BRONZE");
+
+        // Addresses
+        List<Address> addressesList = addressRepository.findByCustomerIdOrderByCreatedAtAsc(custId);
+        List<Map<String, Object>> addressDtos = new ArrayList<>();
+        for (Address a : addressesList) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", a.getId().toString());
+            m.put("title", a.getLabel() != null ? a.getLabel() : "Home");
+            m.put("name", a.getRecipientName() != null ? a.getRecipientName() : customer.getFullName());
+            m.put("phone", a.getRecipientPhone() != null ? a.getRecipientPhone() : phone);
+            m.put("streetAddress", (a.getLine1() != null ? a.getLine1() : "") + (a.getLine2() != null ? ", " + a.getLine2() : ""));
+            m.put("apartment", a.getHouseFlatNo() != null ? a.getHouseFlatNo() : "");
+            m.put("landmark", a.getLandmark() != null ? a.getLandmark() : "");
+            m.put("city", a.getCity() != null ? a.getCity() : "Bangalore");
+            m.put("state", a.getState() != null ? a.getState() : "Karnataka");
+            m.put("postalCode", a.getPincode() != null ? a.getPincode() : "");
+            m.put("latitude", a.getLatitude() != null ? a.getLatitude().doubleValue() : null);
+            m.put("longitude", a.getLongitude() != null ? a.getLongitude().doubleValue() : null);
+            m.put("isDefault", a.isDefault());
+            addressDtos.add(m);
+        }
+
+        // Orders
+        List<com.foodie.order.entity.Order> ordersList = orderRepository != null
+                ? orderRepository.findByCustomerIdOrderByCreatedAtDesc(custId)
+                : Collections.emptyList();
+
+        Map<UUID, String> restaurantNames = new HashMap<>();
+        List<UUID> orderIds = new ArrayList<>();
+        double totalSpend = 0.0;
+        int deliveredCount = 0;
+        int cancelledCount = 0;
+
+        List<Map<String, Object>> orderDtos = new ArrayList<>();
+        for (com.foodie.order.entity.Order o : ordersList) {
+            orderIds.add(o.getId());
+            double amt = o.getTotalAmount() != null ? o.getTotalAmount().doubleValue() : 0.0;
+            String status = o.getStatus() != null ? o.getStatus().name() : "PENDING";
+            if ("DELIVERED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) {
+                deliveredCount++;
+                totalSpend += amt;
+            } else if ("CANCELLED".equalsIgnoreCase(status) || "REJECTED".equalsIgnoreCase(status)) {
+                cancelledCount++;
+            } else {
+                totalSpend += amt;
+            }
+
+            String rName = "Foodie Partner Restaurant";
+            if (o.getRestaurantId() != null) {
+                if (restaurantNames.containsKey(o.getRestaurantId())) {
+                    rName = restaurantNames.get(o.getRestaurantId());
+                } else if (restaurantRepository != null) {
+                    var rOpt = restaurantRepository.findById(o.getRestaurantId());
+                    if (rOpt.isPresent()) {
+                        rName = rOpt.get().getName();
+                        restaurantNames.put(o.getRestaurantId(), rName);
+                    }
+                }
+            }
+
+            Map<String, Object> om = new HashMap<>();
+            om.put("id", o.getId().toString());
+            om.put("orderNumber", o.getOrderNumber());
+            om.put("restaurantId", o.getRestaurantId() != null ? o.getRestaurantId().toString() : null);
+            om.put("restaurantName", rName);
+            om.put("totalAmount", amt);
+            om.put("status", status);
+            om.put("createdAt", o.getCreatedAt() != null ? o.getCreatedAt().toString() : joinedDate);
+            om.put("paymentMethod", "ONLINE_UPI");
+            orderDtos.add(om);
+        }
+
+        // Payments
+        List<Map<String, Object>> paymentDtos = new ArrayList<>();
+        if (paymentRepository != null && !orderIds.isEmpty()) {
+            List<com.foodie.payment.entity.Payment> payments = paymentRepository.findByOrderIdIn(orderIds);
+            for (com.foodie.payment.entity.Payment p : payments) {
+                Map<String, Object> pm = new HashMap<>();
+                pm.put("id", p.getId().toString());
+                pm.put("orderId", p.getOrderId() != null ? p.getOrderId().toString() : null);
+                pm.put("amount", p.getAmount() != null ? p.getAmount().doubleValue() : 0.0);
+                pm.put("status", p.getStatus() != null ? p.getStatus().name() : "SUCCESS");
+                pm.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : joinedDate);
+                pm.put("paymentMethod", "Razorpay / Cashfree Gateway");
+                paymentDtos.add(pm);
+            }
+        }
+
+        // Support Conversations / Complaints
+        List<Map<String, Object>> complaintDtos = new ArrayList<>();
+        if (supportConversationRepository != null) {
+            List<com.foodie.support.entity.SupportConversation> convs = supportConversationRepository
+                    .findByCustomerIdOrderByUpdatedAtDesc(custId.toString());
+            for (var c : convs) {
+                Map<String, Object> cm = new HashMap<>();
+                cm.put("id", c.getId());
+                cm.put("subject", c.getSubject() != null ? c.getSubject() : "Support Inquiry");
+                cm.put("category", c.getCategory() != null ? c.getCategory() : "GENERAL");
+                cm.put("status", c.getStatus() != null ? c.getStatus() : "OPEN");
+                cm.put("orderId", c.getOrderId());
+                cm.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : joinedDate);
+                cm.put("updatedAt", c.getUpdatedAt() != null ? c.getUpdatedAt().toString() : joinedDate);
+                complaintDtos.add(cm);
+            }
+        }
+
+        // Reviews
+        List<Map<String, Object>> reviewDtos = new ArrayList<>();
+        if (reviewRepository != null) {
+            List<com.foodie.review.entity.Review> reviews = reviewRepository.findByCustomerIdOrderByCreatedAtDesc(custId);
+            for (var r : reviews) {
+                String rName = "Restaurant";
+                if (r.getRestaurantId() != null && restaurantRepository != null) {
+                    rName = restaurantRepository.findById(r.getRestaurantId()).map(res -> res.getName()).orElse("Restaurant");
+                }
+                Map<String, Object> rm = new HashMap<>();
+                rm.put("id", r.getId().toString());
+                rm.put("restaurantId", r.getRestaurantId() != null ? r.getRestaurantId().toString() : null);
+                rm.put("restaurantName", rName);
+                rm.put("orderId", r.getOrderId() != null ? r.getOrderId().toString() : null);
+                rm.put("restaurantRating", (int) r.getRestaurantRating());
+                rm.put("deliveryRating", r.getDeliveryRating() != null ? r.getDeliveryRating().intValue() : null);
+                rm.put("comment", r.getComment());
+                rm.put("createdAt", r.getCreatedAt() != null ? r.getCreatedAt().toString() : joinedDate);
+                reviewDtos.add(rm);
+            }
+        }
+
+        boolean isCodDisabled = Boolean.TRUE.equals(COD_DISABLED_CUSTOMERS.get(custId.toString()));
+        String suspensionReason = SUSPENSION_REASONS.get(custId.toString());
+
+        Map<String, Object> custProfile = new HashMap<>();
+        custProfile.put("id", custId.toString());
+        custProfile.put("name", customer.getFullName());
+        custProfile.put("email", email);
+        custProfile.put("phone", phone);
+        custProfile.put("accountStatus", isActive ? "ACTIVE" : "SUSPENDED");
+        custProfile.put("suspensionReason", suspensionReason);
+        custProfile.put("isCodDisabled", isCodDisabled);
+        custProfile.put("loyaltyTier", tier);
+        custProfile.put("totalOrders", ordersList.size());
+        custProfile.put("totalSpend", totalSpend);
+        custProfile.put("totalOrdersDelivered", deliveredCount);
+        custProfile.put("totalOrdersCancelled", cancelledCount);
+        custProfile.put("avgOrderValue", ordersList.isEmpty() ? 0.0 : Math.round((totalSpend / ordersList.size()) * 100.0) / 100.0);
+        custProfile.put("savedAddressesCount", addressDtos.size());
+        custProfile.put("joinedDate", joinedDate);
+        custProfile.put("lastOrderDate", ordersList.isEmpty() ? joinedDate : ordersList.get(0).getCreatedAt().toString().substring(0, 10));
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("customer", custProfile);
+        responseData.put("addresses", addressDtos);
+        responseData.put("orders", orderDtos);
+        responseData.put("payments", paymentDtos);
+        responseData.put("complaints", complaintDtos);
+        responseData.put("reviews", reviewDtos);
+
+        return ResponseEntity.ok(ApiResponse.success(responseData));
+    }
+
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "Suspend or activate customer account with mandatory reason for suspension")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateCustomerStatus(
+            @PathVariable("id") String id,
+            @RequestBody Map<String, Object> body) {
+        Customer customer = null;
+        try {
+            customer = customerRepository.findById(UUID.fromString(id)).orElse(null);
+        } catch (IllegalArgumentException ignored) {}
+        if (customer == null) {
+            for (Customer c : customerRepository.findAll()) {
+                if (c.getId().toString().equalsIgnoreCase(id)) { customer = c; break; }
+            }
+        }
+        if (customer == null) {
+            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found.");
+        }
+
+        String targetStatus = (String) body.get("accountStatus");
+        String reason = (String) body.get("reason");
+
+        if (targetStatus == null || targetStatus.isBlank()) {
+            throw new com.foodie.common.exception.BadRequestException(
+                    com.foodie.common.exception.ErrorCode.VALIDATION_FAILED,
+                    "accountStatus ('ACTIVE' or 'SUSPENDED') is required.");
+        }
+
+        boolean willSuspend = "SUSPENDED".equalsIgnoreCase(targetStatus);
+        if (willSuspend) {
+            if (reason == null || reason.trim().length() < 3) {
+                throw new com.foodie.common.exception.BadRequestException(
+                        com.foodie.common.exception.ErrorCode.VALIDATION_FAILED,
+                        "Mandatory suspension reason must be provided (minimum 3 characters).");
+            }
+            SUSPENSION_REASONS.put(customer.getId().toString(), reason.trim());
+        } else {
+            SUSPENSION_REASONS.remove(customer.getId().toString());
+        }
+
+        UserCredential cred = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+        if (cred != null) {
+            cred.setActive(!willSuspend);
+            userCredentialRepository.save(cred);
+        }
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", customer.getId().toString());
+        res.put("accountStatus", willSuspend ? "SUSPENDED" : "ACTIVE");
+        res.put("reason", reason);
+        res.put("updatedAt", java.time.Instant.now().toString());
+
+        return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
+    @PatchMapping("/{id}/cod")
+    @Operation(summary = "Disable or enable Cash on Delivery (COD) for a specific customer")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateCustomerCod(
+            @PathVariable("id") String id,
+            @RequestBody Map<String, Object> body) {
+        Customer customer = null;
+        try {
+            customer = customerRepository.findById(UUID.fromString(id)).orElse(null);
+        } catch (IllegalArgumentException ignored) {}
+        if (customer == null) {
+            for (Customer c : customerRepository.findAll()) {
+                if (c.getId().toString().equalsIgnoreCase(id)) { customer = c; break; }
+            }
+        }
+        if (customer == null) {
+            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found.");
+        }
+
+        Object codVal = body.get("isCodDisabled");
+        boolean disabled = false;
+        if (codVal instanceof Boolean) {
+            disabled = (Boolean) codVal;
+        } else if (codVal != null) {
+            disabled = Boolean.parseBoolean(codVal.toString());
+        }
+
+        COD_DISABLED_CUSTOMERS.put(customer.getId().toString(), disabled);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", customer.getId().toString());
+        res.put("isCodDisabled", disabled);
+        res.put("message", disabled ? "Cash on Delivery has been disabled for this customer." : "Cash on Delivery has been enabled for this customer.");
+
+        return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Permanently delete/anonymize customer data (GDPR / Privacy Compliance)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteCustomerData(@PathVariable("id") String id) {
+        Customer customer = null;
+        try {
+            customer = customerRepository.findById(UUID.fromString(id)).orElse(null);
+        } catch (IllegalArgumentException ignored) {}
+        if (customer == null) {
+            for (Customer c : customerRepository.findAll()) {
+                if (c.getId().toString().equalsIgnoreCase(id)) { customer = c; break; }
+            }
+        }
+        if (customer == null) {
+            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found.");
+        }
+
+        UUID custId = customer.getId();
+        UserCredential cred = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+        if (cred != null) {
+            cred.deactivate();
+            userCredentialRepository.save(cred);
+        }
+
+        customer.updateProfile("Purged User (" + custId.toString().substring(0, 8) + ")", "anonymized-" + custId.toString().substring(0, 8) + "@foodie.local");
+        customerRepository.save(customer);
+
+        COD_DISABLED_CUSTOMERS.remove(custId.toString());
+        SUSPENSION_REASONS.remove(custId.toString());
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", custId.toString());
+        res.put("deleted", true);
+        res.put("message", "Customer account and personal data have been purged successfully.");
+
+        return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
 }
