@@ -1,5 +1,6 @@
 package com.foodie.delivery.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.VehicleType;
 import java.math.BigDecimal;
@@ -25,4 +26,19 @@ public record AdminDeliveryPartnerResponseDto(
         String zone,
         List<DeliveryDocumentResponseDto> documents,
         Instant createdAt
-) {}
+) {
+    @JsonProperty("online")
+    public boolean online() {
+        return isOnline;
+    }
+
+    @JsonProperty("isAvailable")
+    public boolean isAvailable() {
+        return isOnline;
+    }
+
+    @JsonProperty("onlineStatus")
+    public String onlineStatus() {
+        return isOnline ? "ONLINE" : "OFFLINE";
+    }
+}

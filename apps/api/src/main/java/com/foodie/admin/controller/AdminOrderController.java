@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
-@RequestMapping("/api/v1/admin/orders")
+@RequestMapping({"/api/v1/admin/orders", "/api/admin/orders"})
 @Tag(name = "Admin — Order")
 public class AdminOrderController {
 
@@ -67,6 +67,24 @@ public class AdminOrderController {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private PaymentRepository paymentRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.shared.contract.DeliveryPartnerLookup deliveryPartnerLookup;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.order.repository.OrderItemRepository orderItemRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.order.repository.OrderStatusEventRepository orderStatusEventRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.notification.repository.NotificationLogRepository notificationLogRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
 
     public record AdminOrderSummaryDto(
             String id,
@@ -223,6 +241,142 @@ public class AdminOrderController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
+    @GetMapping("/{id}")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Get single order details for admin with delivery partner information")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getOrderById(
+            @PathVariable("id") UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new com.foodie.common.exception.ResourceNotFoundException("Order not found."));
+
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("id", order.getId().toString());
+        data.put("orderId", order.getId().toString());
+        data.put("orderNumber", order.getOrderNumber());
+        data.put("status", order.getStatus() != null ? order.getStatus().name() : "PENDING");
+        data.put("customerId", order.getCustomerId() != null ? order.getCustomerId().toString() : null);
+        data.put("restaurantId", order.getRestaurantId() != null ? order.getRestaurantId().toString() : null);
+        data.put("addressId", order.getAddressId() != null ? order.getAddressId().toString() : null);
+        data.put("subtotal", order.getSubtotal());
+        data.put("deliveryFee", order.getDeliveryFee());
+        data.put("discountAmount", order.getDiscountAmount());
+        data.put("taxAmount", order.getTaxAmount());
+        data.put("totalAmount", order.getTotalAmount());
+        data.put("placedAt", order.getPlacedAt() != null ? order.getPlacedAt().toString() : null);
+
+        if (order.getCustomerId() != null) {
+            customerRepository.findById(order.getCustomerId()).ifPresent(c -> {
+                if (c.getFullName() != null) data.put("customerName", c.getFullName());
+                if (c.getUserCredentialId() != null) {
+                    userCredentialRepository.findById(c.getUserCredentialId()).ifPresent(cred -> {
+                        if (cred.getPhoneNumber() != null) data.put("customerPhone", cred.getPhoneNumber());
+                    });
+                }
+            });
+        }
+
+        if (order.getRestaurantId() != null) {
+            restaurantRepository.findById(order.getRestaurantId()).ifPresent(r -> {
+                if (r.getName() != null) data.put("restaurantName", r.getName());
+            });
+        }
+
+        UUID dpId = order.getDeliveryPartnerId();
+        if (dpId != null) {
+            data.put("deliveryPartnerId", dpId.toString());
+            data.put("assignedDeliveryPartnerId", dpId.toString());
+            String dpName = "Delivery Partner";
+            String dpPhone = "";
+
+            if (deliveryPartnerRepository != null) {
+                var dpOpt = deliveryPartnerRepository.findById(dpId);
+                if (dpOpt.isPresent()) {
+                    var dp = dpOpt.get();
+                    if (dp.getFullName() != null && !dp.getFullName().isBlank()) {
+                        dpName = dp.getFullName();
+                    }
+                    if (dp.getUserCredentialId() != null) {
+                        var credOpt = userCredentialRepository.findById(dp.getUserCredentialId());
+                        if (credOpt.isPresent() && credOpt.get().getPhoneNumber() != null) {
+                            dpPhone = credOpt.get().getPhoneNumber();
+                        }
+                    }
+                }
+            } else if (deliveryPartnerLookup != null) {
+                var summaryOpt = deliveryPartnerLookup.findPartnerSummaryById(dpId);
+                if (summaryOpt.isPresent()) {
+                    var s = summaryOpt.get();
+                    if (s.fullName() != null && !s.fullName().isBlank()) {
+                        dpName = s.fullName();
+                    }
+                    if (s.phoneNumber() != null && !s.phoneNumber().isBlank()) {
+                        dpPhone = s.phoneNumber();
+                    } else if (s.userCredentialId() != null) {
+                        var credOpt = userCredentialRepository.findById(s.userCredentialId());
+                        if (credOpt.isPresent() && credOpt.get().getPhoneNumber() != null) {
+                            dpPhone = credOpt.get().getPhoneNumber();
+                        }
+                    }
+                }
+            }
+
+            data.put("deliveryPartnerName", dpName);
+            data.put("deliveryPartnerPhone", dpPhone);
+            data.put("assignedDeliveryPartnerName", dpName);
+            data.put("assignedDeliveryPartnerPhone", dpPhone);
+
+            java.util.Map<String, Object> partnerMap = new java.util.HashMap<>();
+            partnerMap.put("id", dpId.toString());
+            partnerMap.put("fullName", dpName);
+            partnerMap.put("name", dpName);
+            partnerMap.put("phoneNumber", dpPhone);
+            partnerMap.put("phone", dpPhone);
+            data.put("assignedDeliveryPartner", partnerMap);
+        } else {
+            data.put("deliveryPartnerId", null);
+            data.put("deliveryPartnerName", null);
+            data.put("deliveryPartnerPhone", null);
+            data.put("assignedDeliveryPartner", null);
+            data.put("assignedDeliveryPartnerId", null);
+            data.put("assignedDeliveryPartnerName", null);
+            data.put("assignedDeliveryPartnerPhone", null);
+        }
+
+        if (orderItemRepository != null) {
+            List<com.foodie.order.entity.OrderItem> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+            List<java.util.Map<String, Object>> itemDtos = new ArrayList<>();
+            for (var it : items) {
+                java.util.Map<String, Object> im = new java.util.HashMap<>();
+                im.put("menuItemId", it.getMenuItemId() != null ? it.getMenuItemId().toString() : null);
+                im.put("name", "Order Item");
+                im.put("quantity", it.getQuantity());
+                im.put("unitPrice", it.getUnitPrice());
+                im.put("lineTotal", it.getLineTotal());
+                itemDtos.add(im);
+            }
+            data.put("items", itemDtos);
+        }
+
+        if (orderStatusEventRepository != null) {
+            List<com.foodie.order.entity.OrderStatusEvent> events = orderStatusEventRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+            List<java.util.Map<String, Object>> eventDtos = new ArrayList<>();
+            for (var ev : events) {
+                java.util.Map<String, Object> em = new java.util.HashMap<>();
+                em.put("eventId", ev.getId() != null ? ev.getId().toString() : null);
+                em.put("fromStatus", ev.getFromStatus() != null ? ev.getFromStatus().name() : null);
+                em.put("toStatus", ev.getToStatus() != null ? ev.getToStatus().name() : null);
+                em.put("actorType", ev.getActorType() != null ? ev.getActorType().name() : null);
+                em.put("reason", ev.getReason());
+                em.put("createdAt", ev.getCreatedAt() != null ? ev.getCreatedAt().toString() : null);
+                eventDtos.add(em);
+            }
+            data.put("orderStatusEvents", eventDtos);
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
     @PostMapping("/{id}/override-status")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
     @Operation(summary = "Emergency order status override (state-machine graph still enforced)")
@@ -284,6 +438,61 @@ public class AdminOrderController {
             order.transitionTo(OrderStatus.ASSIGNED);
         }
         orderRepository.save(order);
+
+        // Find delivery partner to get userCredentialId
+        UUID userCredId = null;
+        if (deliveryPartnerRepository != null) {
+            var dpOpt = deliveryPartnerRepository.findById(dpUuid);
+            if (dpOpt.isPresent()) {
+                userCredId = dpOpt.get().getUserCredentialId();
+            }
+        }
+        UUID targetCredId = userCredId != null ? userCredId : dpUuid;
+
+        // Bug 3: Create notification document for that specific delivery partner only
+        String notifTitle = "New Order Assigned";
+        String notifBody = "Order #" + order.getOrderNumber() + " has been assigned to you.";
+        if (notificationLogRepository != null) {
+            try {
+                com.foodie.notification.entity.NotificationLog notif =
+                        com.foodie.notification.entity.NotificationLog.create(
+                                targetCredId,
+                                null,
+                                notifTitle,
+                                notifBody,
+                                com.foodie.common.enums.NotificationDeliveryStatus.SENT
+                        );
+                notificationLogRepository.save(notif);
+            } catch (Exception ex) {
+                System.err.println("Warning: failed to save NotificationLog: " + ex.getMessage());
+            }
+        }
+
+        // Bug 3: Send socket event to that particular partner room using deliveryPartner_partnerId (do NOT broadcast to all)
+        if (messagingTemplate != null) {
+            try {
+                java.util.Map<String, Object> socketPayload = new java.util.LinkedHashMap<>();
+                socketPayload.put("type", "ORDER_ASSIGNED");
+                socketPayload.put("event", "ORDER_ASSIGNED");
+                socketPayload.put("orderId", order.getId().toString());
+                socketPayload.put("orderNumber", order.getOrderNumber());
+                socketPayload.put("deliveryPartnerId", dpIdStr);
+                socketPayload.put("title", notifTitle);
+                socketPayload.put("body", notifBody);
+                socketPayload.put("status", "ASSIGNED");
+                socketPayload.put("timestamp", java.time.Instant.now().toString());
+
+                String partnerRoom = "deliveryPartner_" + dpIdStr;
+                messagingTemplate.convertAndSend("/topic/" + partnerRoom, socketPayload);
+                messagingTemplate.convertAndSend(partnerRoom, socketPayload);
+
+                if (userCredId != null) {
+                    messagingTemplate.convertAndSend("/topic/user/" + userCredId + "/notifications", socketPayload);
+                }
+            } catch (Exception ex) {
+                System.err.println("Warning: failed to send WebSocket notification: " + ex.getMessage());
+            }
+        }
 
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("orderId", order.getId().toString());

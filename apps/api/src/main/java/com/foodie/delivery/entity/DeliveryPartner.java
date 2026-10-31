@@ -254,6 +254,14 @@ public class DeliveryPartner extends BaseEntity {
         return online;
     }
 
+    public boolean isAvailable() {
+        return online;
+    }
+
+    public String getOnlineStatus() {
+        return online ? "ONLINE" : "OFFLINE";
+    }
+
     public void updateBankDetails(String accountHolderName, String accountNumber, String ifscCode, String bankName) {
         if (accountHolderName != null) this.accountHolderName = accountHolderName;
         if (accountNumber != null) this.accountNumber = accountNumber;

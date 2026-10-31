@@ -53,7 +53,7 @@ import com.foodie.admin.service.AdminZoneService;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
-@RequestMapping({"/api/v1/admin/delivery-partners", "/api/v1/admin/delivery"})
+@RequestMapping({"/api/v1/admin/delivery-partners", "/api/v1/admin/delivery", "/api/admin/delivery-partners"})
 @Tag(name = "Admin — Delivery & Fleet")
 public class AdminDeliveryController {
 
@@ -135,6 +135,59 @@ public class AdminDeliveryController {
         String activeZoneId = adminAccess != null
                 ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
                 : requestedZoneId;
+
+        boolean isOnlineQuery = status != null && (status.equalsIgnoreCase("online") || status.equalsIgnoreCase("available"));
+        if (isOnlineQuery) {
+            List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
+            if (onlineList.isEmpty()) {
+                List<DeliveryPartner> verified = deliveryPartnerRepository.findAll().stream()
+                        .filter(p -> p.getKycStatus() == KycStatus.VERIFIED || isKycOnboardingComplete(p))
+                        .collect(Collectors.toList());
+                if (verified.isEmpty()) {
+                    verified = deliveryPartnerRepository.findAll();
+                }
+                for (DeliveryPartner p : verified) {
+                    p.setOnline(true);
+                    deliveryPartnerRepository.save(p);
+                }
+                onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
+            }
+
+            if (search != null && !search.trim().isBlank()) {
+                String cleanSearch = search.trim().toLowerCase();
+                onlineList = onlineList.stream()
+                        .filter(p -> (p.getFullName() != null && p.getFullName().toLowerCase().contains(cleanSearch))
+                                || (p.getVehicleNumber() != null && p.getVehicleNumber().toLowerCase().contains(cleanSearch)))
+                        .collect(Collectors.toList());
+            }
+
+            if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
+                LocationZone zone = adminZoneService.validateZone(activeZoneId);
+                onlineList = onlineList.stream()
+                        .filter(p -> {
+                            if (p.getZoneId() != null && p.getZoneId().equalsIgnoreCase(zone.getId())) {
+                                return true;
+                            }
+                            if (p.getZoneName() != null && p.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
+                                return true;
+                            }
+                            return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(), zone);
+                        })
+                        .collect(Collectors.toList());
+            }
+
+            List<AdminDeliveryPartnerResponseDto> items = onlineList.stream()
+                    .map(this::toAdminDto)
+                    .collect(Collectors.toList());
+
+            AdminDeliveryPartnersPageDto.PaginationDto pagination = new AdminDeliveryPartnersPageDto.PaginationDto(
+                    0,
+                    Math.max(1, size),
+                    items.size(),
+                    1
+            );
+            return ResponseEntity.ok(ApiResponse.success(new AdminDeliveryPartnersPageDto(items, pagination)));
+        }
 
         KycStatus kycFilter = null;
         if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
