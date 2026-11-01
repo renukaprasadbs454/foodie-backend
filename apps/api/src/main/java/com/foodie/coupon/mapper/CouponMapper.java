@@ -19,7 +19,8 @@ public final class CouponMapper {
                 coupon.getValue(),
                 coupon.getMinOrderAmount(),
                 coupon.getMaxDiscountAmount(),
-                coupon.getExpiryDate());
+                coupon.getExpiryDate(),
+                coupon.getZoneId());
     }
 
     public static EligibleCouponResponseDto toEligibleDto(CouponService.CouponView view) {
@@ -29,7 +30,8 @@ public final class CouponMapper {
                 view.value(),
                 view.minOrderAmount(),
                 view.maxDiscountAmount(),
-                view.expiryDate());
+                view.expiryDate(),
+                view.zoneId());
     }
 
     public static ApplyCouponResponseDto toApplyDto(CouponService.DiscountResult result) {

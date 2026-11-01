@@ -13,5 +13,10 @@ public interface CouponQueryService {
     List<EligibleCouponResponseDto> listEligibleForCaller(
             UUID userCredentialId, UUID restaurantId, BigDecimal cartTotal);
 
+    default List<EligibleCouponResponseDto> listEligibleForCaller(
+            UUID userCredentialId, UUID restaurantId, BigDecimal cartTotal, String customerZoneId) {
+        return listEligibleForCaller(userCredentialId, restaurantId, cartTotal);
+    }
+
     ApplyCouponResponseDto applyForCaller(UUID userCredentialId, ApplyCouponRequestDto request);
 }

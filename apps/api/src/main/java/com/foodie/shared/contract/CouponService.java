@@ -13,6 +13,10 @@ public interface CouponService {
 
     List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal);
 
+    default List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal, String customerZoneId) {
+        return listEligible(customerId, restaurantId, cartTotal);
+    }
+
     DiscountResult apply(String code, UUID customerId, UUID restaurantId, BigDecimal cartTotal);
 
     void recordRedemption(UUID couponId, UUID customerId, UUID orderId);
@@ -23,8 +27,19 @@ public interface CouponService {
             BigDecimal value,
             BigDecimal minOrderAmount,
             BigDecimal maxDiscountAmount,
-            Instant expiryDate
+            Instant expiryDate,
+            String zoneId
     ) {
+        public CouponView(
+                String code,
+                String discountType,
+                BigDecimal value,
+                BigDecimal minOrderAmount,
+                BigDecimal maxDiscountAmount,
+                Instant expiryDate
+        ) {
+            this(code, discountType, value, minOrderAmount, maxDiscountAmount, expiryDate, null);
+        }
     }
 
     /**

@@ -9,6 +9,17 @@ public record EligibleCouponResponseDto(
         BigDecimal value,
         BigDecimal minOrderAmount,
         BigDecimal maxDiscountAmount,
-        Instant expiryDate
+        Instant expiryDate,
+        String zoneId
 ) {
+    public EligibleCouponResponseDto(
+            String code,
+            String discountType,
+            BigDecimal value,
+            BigDecimal minOrderAmount,
+            BigDecimal maxDiscountAmount,
+            Instant expiryDate
+    ) {
+        this(code, discountType, value, minOrderAmount, maxDiscountAmount, expiryDate, null);
+    }
 }
