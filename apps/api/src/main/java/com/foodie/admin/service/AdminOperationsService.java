@@ -31,6 +31,15 @@ public interface AdminOperationsService {
         RestaurantDetailResponseDto rejectRestaurant(
                         UUID actorCredentialId, UUID restaurantId, String reason);
 
+        com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto verifyRestaurantDocument(
+                        UUID actorCredentialId, UUID restaurantId, UUID documentId);
+
+        com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto rejectRestaurantDocument(
+                        UUID actorCredentialId, UUID restaurantId, UUID documentId, String reason);
+
+        RestaurantDetailResponseDto updateRestaurantCommission(
+                        UUID actorCredentialId, UUID restaurantId, java.math.BigDecimal commissionPct);
+
         void updateTopPositions(UUID actorCredentialId, List<com.foodie.admin.dto.request.UpdateRestaurantPositionRequestDto> positions);
 
         DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId);

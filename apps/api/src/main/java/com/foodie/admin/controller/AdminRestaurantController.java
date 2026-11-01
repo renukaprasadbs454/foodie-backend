@@ -33,13 +33,16 @@ public class AdminRestaurantController {
 
     private final AdminOperationsService adminOperationsService;
     private final AdminZoneService adminZoneService;
+    private final com.foodie.restaurant.service.RestaurantService restaurantService;
 
     public AdminRestaurantController(
             AdminOperationsService adminOperationsService,
-            AdminZoneService adminZoneService
+            AdminZoneService adminZoneService,
+            com.foodie.restaurant.service.RestaurantService restaurantService
     ) {
         this.adminOperationsService = adminOperationsService;
         this.adminZoneService = adminZoneService;
+        this.restaurantService = restaurantService;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -87,6 +90,16 @@ public class AdminRestaurantController {
         }
 
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Get single restaurant details with documents and legal info for admin")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> getById(
+            @PathVariable("id") UUID id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(
+                restaurantService.getById(id, principal != null ? principal.userId() : null, true)));
     }
 
     private void assertRestaurantInActiveZone(org.springframework.security.core.Authentication authentication, UUID restaurantId, String activeZoneHeader, UUID actorCredentialId) {
@@ -167,6 +180,52 @@ public class AdminRestaurantController {
         assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
         return ResponseEntity.ok(ApiResponse.success(
                 adminOperationsService.rejectRestaurant(principal.userId(), restaurantId, request.reason())));
+    }
+
+    @org.springframework.web.bind.annotation.RequestMapping(value = "/{id}/documents/{docId}/verify", method = {org.springframework.web.bind.annotation.RequestMethod.POST, org.springframework.web.bind.annotation.RequestMethod.PATCH})
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Verify a restaurant document")
+    public ResponseEntity<ApiResponse<com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto>> verifyDocument(
+            org.springframework.security.core.Authentication authentication,
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") UUID restaurantId,
+            @PathVariable("docId") UUID documentId) {
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.verifyRestaurantDocument(principal.userId(), restaurantId, documentId)));
+    }
+
+    @org.springframework.web.bind.annotation.RequestMapping(value = "/{id}/documents/{docId}/reject", method = {org.springframework.web.bind.annotation.RequestMethod.POST, org.springframework.web.bind.annotation.RequestMethod.PATCH})
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Reject a restaurant document")
+    public ResponseEntity<ApiResponse<com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto>> rejectDocument(
+            org.springframework.security.core.Authentication authentication,
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") UUID restaurantId,
+            @PathVariable("docId") UUID documentId,
+            @RequestBody(required = false) java.util.Map<String, String> body) {
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
+        String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Document rejected by admin.";
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.rejectRestaurantDocument(principal.userId(), restaurantId, documentId, reason)));
+    }
+
+    @org.springframework.web.bind.annotation.RequestMapping(value = "/{id}/commission", method = {org.springframework.web.bind.annotation.RequestMethod.POST, org.springframework.web.bind.annotation.RequestMethod.PATCH})
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "Update restaurant commission percentage")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> updateCommission(
+            org.springframework.security.core.Authentication authentication,
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
+            @PathVariable("id") UUID restaurantId,
+            @RequestBody java.util.Map<String, Object> body) {
+        assertRestaurantInActiveZone(authentication, restaurantId, activeZoneHeader, principal.userId());
+        Object commObj = body != null ? body.get("commissionPct") : null;
+        java.math.BigDecimal comm = commObj != null ? new java.math.BigDecimal(commObj.toString()) : new java.math.BigDecimal("15.00");
+        return ResponseEntity.ok(ApiResponse.success(
+                adminOperationsService.updateRestaurantCommission(principal.userId(), restaurantId, comm)));
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")

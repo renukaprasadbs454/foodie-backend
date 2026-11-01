@@ -266,6 +266,10 @@ public class Restaurant extends BaseEntity {
         return commissionPct;
     }
 
+    public void updateCommissionPct(BigDecimal commissionPct) {
+        this.commissionPct = commissionPct;
+    }
+
     public java.time.LocalTime getOpenTime() {
         return openTime;
     }

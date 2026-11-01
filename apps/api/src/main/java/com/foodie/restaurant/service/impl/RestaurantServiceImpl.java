@@ -1162,6 +1162,29 @@ public class RestaurantServiceImpl implements RestaurantService {
         return restaurantMapper.toDocument(document, docUrl);
     }
 
+    @Override
+    @Transactional
+    public RestaurantDocumentResponseDto rejectDocument(UUID restaurantId, UUID documentId, UUID adminId, String reason) {
+        RestaurantDocument document = restaurantDocumentRepository.findByIdAndRestaurantId(documentId, restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found."));
+        document.resetVerification();
+        log.info("Restaurant document {} rejected by admin {}: {}", documentId, adminId, reason);
+        String docUrl = objectStorageClient.createSignedGetUrl(document.getS3Key(), java.time.Duration.ofHours(1));
+        return restaurantMapper.toDocument(document, docUrl);
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto updateCommission(UUID restaurantId, java.math.BigDecimal commissionPct, UUID adminId) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found."));
+        restaurant.updateCommissionPct(commissionPct);
+        restaurant = restaurantRepository.save(restaurant);
+        restaurantCacheService.evictAllListCaches();
+        log.info("Restaurant {} commission updated to {}% by admin {}", restaurantId, commissionPct, adminId);
+        return buildDetail(restaurant, true);
+    }
+
     private Restaurant requireOwned(UUID ownerCredentialId) {
         return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));

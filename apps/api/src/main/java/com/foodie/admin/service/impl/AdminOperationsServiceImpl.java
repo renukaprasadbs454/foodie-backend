@@ -167,6 +167,55 @@ public class AdminOperationsServiceImpl implements AdminOperationsService {
 
     @Override
     @Transactional
+    public com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto verifyRestaurantDocument(
+            UUID actorCredentialId, UUID restaurantId, UUID documentId) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");
+        var result = restaurantService.verifyDocument(restaurantId, documentId, admin.getId());
+        adminService.recordAudit(
+                admin.getId(),
+                "VERIFY_RESTAURANT_DOCUMENT",
+                "RESTAURANT_DOCUMENT",
+                documentId,
+                Map.of("restaurantId", restaurantId.toString()),
+                Map.of("status", "VERIFIED", "verifiedAt", result.verifiedAt() != null ? result.verifiedAt().toString() : ""));
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.restaurant.dto.response.RestaurantDocumentResponseDto rejectRestaurantDocument(
+            UUID actorCredentialId, UUID restaurantId, UUID documentId, String reason) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");
+        var result = restaurantService.rejectDocument(restaurantId, documentId, admin.getId(), reason);
+        adminService.recordAudit(
+                admin.getId(),
+                "REJECT_RESTAURANT_DOCUMENT",
+                "RESTAURANT_DOCUMENT",
+                documentId,
+                Map.of("restaurantId", restaurantId.toString()),
+                Map.of("status", "REJECTED", "reason", reason));
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public RestaurantDetailResponseDto updateRestaurantCommission(
+            UUID actorCredentialId, UUID restaurantId, java.math.BigDecimal commissionPct) {
+        AdminUser admin = requirePermission(actorCredentialId, "RESTAURANT", "APPROVE");
+        RestaurantDetailResponseDto before = restaurantService.getById(restaurantId, actorCredentialId, true);
+        RestaurantDetailResponseDto after = restaurantService.updateCommission(restaurantId, commissionPct, admin.getId());
+        adminService.recordAudit(
+                admin.getId(),
+                "UPDATE_RESTAURANT_COMMISSION",
+                "RESTAURANT",
+                restaurantId,
+                Map.of("commissionPct", before.commissionPct() != null ? before.commissionPct().toString() : "15.00"),
+                Map.of("commissionPct", commissionPct.toString()));
+        return after;
+    }
+
+    @Override
+    @Transactional
     public DeliveryProfileResponseDto approveDeliveryKyc(UUID actorCredentialId, UUID partnerId) {
         AdminUser admin = requirePermission(actorCredentialId, "DELIVERY", "KYC_APPROVE");
         DeliveryProfileResponseDto after = deliveryService.verifyKyc(partnerId, admin.getId());

@@ -46,6 +46,10 @@ public class RestaurantDocument extends BaseEntity {
         this.verifiedAt = Instant.now();
     }
 
+    public void resetVerification() {
+        this.verifiedAt = null;
+    }
+
     public Restaurant getRestaurant() {
         return restaurant;
     }

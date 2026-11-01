@@ -135,5 +135,11 @@ public interface RestaurantService {
         /** Document verification for Admin Ops — sets verified_at. */
         RestaurantDocumentResponseDto verifyDocument(UUID restaurantId, UUID documentId, UUID adminId);
 
+        /** Document rejection for Admin Ops — clears verified_at. */
+        RestaurantDocumentResponseDto rejectDocument(UUID restaurantId, UUID documentId, UUID adminId, String reason);
+
+        /** Update restaurant commission percentage. */
+        RestaurantDetailResponseDto updateCommission(UUID restaurantId, java.math.BigDecimal commissionPct, UUID adminId);
+
         void delete(UUID restaurantId, UUID adminId);
 }
