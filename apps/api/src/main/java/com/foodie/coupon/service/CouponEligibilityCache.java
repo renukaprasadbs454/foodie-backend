@@ -17,6 +17,8 @@ public class CouponEligibilityCache {
     private static final Duration TTL = Duration.ofMinutes(5);
     private static final String ELIGIBLE = "1";
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CouponEligibilityCache.class);
+
     private final StringRedisTemplate redisTemplate;
 
     public CouponEligibilityCache(StringRedisTemplate redisTemplate) {
@@ -25,11 +27,19 @@ public class CouponEligibilityCache {
 
     /** Positive eligibility hint after a successful DB check (cache-aside write). */
     public void markEligible(UUID couponId, UUID customerId) {
-        redisTemplate.opsForValue().set(key(couponId, customerId), ELIGIBLE, TTL);
+        try {
+            redisTemplate.opsForValue().set(key(couponId, customerId), ELIGIBLE, TTL);
+        } catch (Exception ex) {
+            log.warn("Failed to write coupon eligibility to Redis cache: {}", ex.getMessage());
+        }
     }
 
     public void invalidate(UUID couponId, UUID customerId) {
-        redisTemplate.delete(key(couponId, customerId));
+        try {
+            redisTemplate.delete(key(couponId, customerId));
+        } catch (Exception ex) {
+            log.warn("Failed to invalidate coupon eligibility in Redis cache: {}", ex.getMessage());
+        }
     }
 
     private static String key(UUID couponId, UUID customerId) {
