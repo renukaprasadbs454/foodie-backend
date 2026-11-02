@@ -70,7 +70,8 @@ public class FavoriteServiceImpl implements FavoriteService {
                         detail.longitude(),
                         detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl(),
                         detail.isOpen(),
-                        null))
+                        null,
+                        detail.address() != null ? detail.address().city() : null))
                 .toList();
     }
 

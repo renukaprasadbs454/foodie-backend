@@ -24,6 +24,12 @@ import org.springframework.stereotype.Component;
 public class RestaurantMapper {
 
         public RestaurantSummaryResponseDto toSummary(Restaurant restaurant, String imageUrl) {
+                String city = null;
+                if (restaurant.getAddress() != null && restaurant.getAddress().getCity() != null && !restaurant.getAddress().getCity().isBlank()) {
+                        city = restaurant.getAddress().getCity().trim();
+                } else if (restaurant.getZoneName() != null && !restaurant.getZoneName().isBlank()) {
+                        city = restaurant.getZoneName().trim();
+                }
                 return new RestaurantSummaryResponseDto(
                                 restaurant.getId(),
                                 restaurant.getName(),
@@ -33,7 +39,8 @@ public class RestaurantMapper {
                                 restaurant.getLongitude(),
                                 imageUrl,
                                 restaurant.getIsOpen(),
-                                restaurant.getTopPosition());
+                                restaurant.getTopPosition(),
+                                city);
         }
 
         public RestaurantDetailResponseDto toDetail(

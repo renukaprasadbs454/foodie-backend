@@ -13,5 +13,6 @@ public record RestaurantSummaryResponseDto(
                 BigDecimal longitude,
                 String imageUrl,
                 Boolean isOpen,
-                Integer topPosition) {
+                Integer topPosition,
+                String city) {
 }
