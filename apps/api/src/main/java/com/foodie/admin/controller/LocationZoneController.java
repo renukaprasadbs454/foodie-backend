@@ -286,6 +286,49 @@ public class LocationZoneController {
         return ResponseEntity.ok(ApiResponse.success(dtos));
     }
 
+    @GetMapping("/zones/{zoneId}")
+    public ResponseEntity<ApiResponse<LocationZoneDto>> getZoneById(@PathVariable String zoneId) {
+        LocationZone zone = zoneRepository.findById(zoneId)
+                .or(() -> zoneRepository.findAll().stream()
+                        .filter(z -> zoneId.equalsIgnoreCase(z.getId()) || zoneId.equalsIgnoreCase(z.getZoneName()))
+                        .findFirst())
+                .orElse(null);
+        if (zone == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
+    }
+
+    @PutMapping("/zones/{zoneId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<LocationZoneDto>> updateZone(
+            @PathVariable String zoneId,
+            @RequestBody LocationZoneDto dto) {
+        LocationZone zone = zoneRepository.findById(zoneId)
+                .or(() -> zoneRepository.findAll().stream()
+                        .filter(z -> zoneId.equalsIgnoreCase(z.getId()) || zoneId.equalsIgnoreCase(z.getZoneName()))
+                        .findFirst())
+                .orElse(null);
+        if (zone == null) {
+            zone = mapToEntity(dto);
+            zone.setId(zoneId);
+        } else {
+            if (dto.getZoneName() != null) zone.setZoneName(dto.getZoneName());
+            if (dto.getCityName() != null) zone.setCityName(dto.getCityName());
+            if (dto.getLatitude() != null) zone.setLatitude(dto.getLatitude());
+            if (dto.getLongitude() != null) zone.setLongitude(dto.getLongitude());
+            if (dto.getRadiusKm() != null) zone.setRadiusKm(dto.getRadiusKm());
+            if (dto.getPolygonCoordinates() != null) zone.setPolygonCoordinates(dto.getPolygonCoordinates());
+            if (dto.getSurgeMultiplier() != null) zone.setSurgeMultiplier(dto.getSurgeMultiplier());
+            if (dto.getStatus() != null) zone.setStatus(dto.getStatus());
+            zone.setRestaurantEnabled(dto.isRestaurantEnabled());
+            zone.setDeliveryPartnerEnabled(dto.isDeliveryPartnerEnabled());
+            zone.setCustomerOrderingEnabled(dto.isCustomerOrderingEnabled());
+        }
+        zoneRepository.saveAndFlush(zone);
+        return ResponseEntity.ok(ApiResponse.success(mapToDto(zone)));
+    }
+
     @PostMapping("/zones")
     @Transactional
     public ResponseEntity<ApiResponse<LocationZoneDto>> createZone(
