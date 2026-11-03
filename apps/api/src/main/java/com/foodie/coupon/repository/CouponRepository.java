@@ -15,6 +15,10 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
 
         boolean existsByCode(String code);
 
+        List<Coupon> findByRestaurantId(UUID restaurantId);
+
+        List<Coupon> findByZoneId(String zoneId);
+
         @Query("""
                         SELECT c FROM Coupon c
                         WHERE c.active = true
