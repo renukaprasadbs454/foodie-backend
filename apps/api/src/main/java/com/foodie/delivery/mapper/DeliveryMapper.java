@@ -15,10 +15,11 @@ import java.math.BigDecimal;
 public class DeliveryMapper {
 
         public DeliveryProfileResponseDto toProfile(DeliveryPartner partner, String profileImageUrl,
-                        java.util.List<DeliveryDocumentResponseDto> documents) {
+                        java.util.List<DeliveryDocumentResponseDto> documents, String phoneNumber) {
                 return new DeliveryProfileResponseDto(
                                 partner.getId(),
                                 partner.getFullName(),
+                                phoneNumber,
                                 partner.getVehicleType().name(),
                                 partner.getVehicleNumber(),
                                 partner.getAddressLine1(),
@@ -36,6 +37,12 @@ public class DeliveryMapper {
                                 partner.getZoneId(),
                                 partner.getZoneName(),
                                 partner.isZoneVerified(), partner.getLocationApprovalStatus() != null && !"NONE".equalsIgnoreCase(partner.getLocationApprovalStatus()) ? partner.getLocationApprovalStatus() : (partner.isZoneVerified() ? "APPROVED" : "PENDING"));
+        }
+
+        
+        public DeliveryProfileResponseDto toProfile(DeliveryPartner partner, String profileImageUrl,
+                        java.util.List<DeliveryDocumentResponseDto> documents) {
+                return toProfile(partner, profileImageUrl, documents, null);
         }
 
         public DeliveryDocumentResponseDto toDocument(DeliveryPartnerDocument document) {

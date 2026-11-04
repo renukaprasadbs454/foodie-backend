@@ -6,6 +6,7 @@ import java.util.UUID;
 public record DeliveryProfileResponseDto(
                 UUID partnerId,
                 String fullName,
+                String phoneNumber,
                 String vehicleType,
                 String vehicleNumber,
                 String addressLine1,
@@ -45,8 +46,39 @@ public record DeliveryProfileResponseDto(
             String zoneId,
             String zoneName,
             boolean zoneVerified) {
-        this(partnerId, fullName, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state, pincode,
+        this(partnerId, fullName, null, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state, pincode,
              kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
              zoneVerified, zoneVerified ? "APPROVED" : "PENDING");
     }
+
+    public DeliveryProfileResponseDto(
+            UUID partnerId,
+            String fullName,
+            String vehicleType,
+            String vehicleNumber,
+            String addressLine1,
+            String addressLine2,
+            String city,
+            String state,
+            String pincode,
+            String kycStatus,
+            boolean isOnline,
+            String profileImageUrl,
+            List<DeliveryDocumentResponseDto> documents,
+            java.math.BigDecimal cashInHand,
+            Double latitude,
+            Double longitude,
+            String zoneId,
+            String zoneName,
+            boolean zoneVerified,
+            String locationApprovalStatus) {
+        this(partnerId, fullName, null, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state, pincode,
+             kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
+             zoneVerified, locationApprovalStatus);
+    }
+
+    public String phone() {
+        return phoneNumber;
+    }
+
 }

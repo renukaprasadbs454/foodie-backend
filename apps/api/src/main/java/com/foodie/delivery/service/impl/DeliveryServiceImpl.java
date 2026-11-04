@@ -214,7 +214,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .stream()
                 .map(deliveryMapper::toDocument)
                 .toList();
-        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs);
+        String phone = null;
+        if (userCredentialRepository != null && userCredentialId != null) {
+            com.foodie.auth.entity.UserCredential cred = userCredentialRepository.findById(userCredentialId).orElse(null);
+            if (cred != null) {
+                phone = cred.getPhoneNumber();
+            }
+        }
+        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs, phone);
     }
 
     @Override
