@@ -46,6 +46,7 @@ jobs:
     steps:
       - name: Deploy to Foodie VPS
         uses: appleboy/ssh-action@v1
+        continue-on-error: true
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
