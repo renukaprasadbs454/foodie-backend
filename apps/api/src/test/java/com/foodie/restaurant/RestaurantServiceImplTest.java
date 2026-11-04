@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodie.common.enums.CuisineType;
 import com.foodie.common.enums.RestaurantDocType;
 import com.foodie.common.enums.RestaurantStatus;
+import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ConflictException;
 import com.foodie.common.exception.ErrorCode;
 import com.foodie.common.exception.UnprocessableEntityException;
@@ -382,6 +383,52 @@ class RestaurantServiceImplTest {
         assertThat(restaurant.getStatus()).isEqualTo(RestaurantStatus.PENDING);
         assertThat(restaurant.getRejectionReason()).isNull();
         verify(restaurantCacheService).evictRestaurant(restaurant.getId());
+    }
+
+    @Test
+    void toggleStatus_whenActiveOrdersExist_throwsBadRequestAndDoesNotGoOffline() {
+        Restaurant restaurant = pendingRestaurant();
+        restaurant.setIsOpen(true);
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(orderRepository.existsByRestaurantIdAndStatusIn(eq(restaurant.getId()), any()))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.toggleStatus(ownerId, false))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("You have an active order. Please complete and hand over your order before going offline.");
+
+        assertThat(restaurant.getIsOpen()).isTrue();
+        verify(restaurantRepository, never()).save(any());
+    }
+
+    @Test
+    void toggleStatus_whenNoActiveOrders_allowsSwitchingToOffline() {
+        Restaurant restaurant = pendingRestaurant();
+        restaurant.setIsOpen(true);
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(orderRepository.existsByRestaurantIdAndStatusIn(eq(restaurant.getId()), any()))
+                .thenReturn(false);
+        when(restaurantRepository.save(any(Restaurant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RestaurantDetailResponseDto result = service.toggleStatus(ownerId, false);
+
+        assertThat(restaurant.getIsOpen()).isFalse();
+        verify(restaurantRepository).save(restaurant);
+        verify(restaurantCacheService).evictRestaurant(restaurant.getId());
+    }
+
+    @Test
+    void toggleStatus_whenGoingOnline_doesNotCheckActiveOrders() {
+        Restaurant restaurant = pendingRestaurant();
+        restaurant.setIsOpen(false);
+        when(restaurantRepository.findByOwnerUserCredentialId(ownerId)).thenReturn(Optional.of(restaurant));
+        when(restaurantRepository.save(any(Restaurant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RestaurantDetailResponseDto result = service.toggleStatus(ownerId, true);
+
+        assertThat(restaurant.getIsOpen()).isTrue();
+        verify(orderRepository, never()).existsByRestaurantIdAndStatusIn(any(), any());
+        verify(restaurantRepository).save(restaurant);
     }
 
     private Restaurant pendingRestaurant() {

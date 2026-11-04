@@ -42,6 +42,8 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -151,7 +153,9 @@ public class MenuServiceImpl implements MenuService {
                 : Map.of();
 
         List<FullMenuResponseDto.MenuCategoryDto> categoryDtos = new ArrayList<>();
+        Set<UUID> processedCategoryIds = new HashSet<>();
         for (Category category : categories) {
+            processedCategoryIds.add(category.getId());
             List<MenuItem> categoryItems = itemsByCategory.get(category.getId());
             List<FullMenuResponseDto.MenuItemDto> itemDtos = (categoryItems != null ? categoryItems
                     : List.<MenuItem>of())
@@ -174,6 +178,26 @@ public class MenuServiceImpl implements MenuService {
                     })
                     .toList();
             categoryDtos.add(menuMapper.toFullMenuCategory(category, itemDtos));
+        }
+
+        List<MenuItem> orphanItems = items.stream()
+                .filter(i -> i.getCategoryId() == null || !processedCategoryIds.contains(i.getCategoryId()))
+                .toList();
+        if (!orphanItems.isEmpty()) {
+            List<FullMenuResponseDto.MenuItemDto> orphanDtos = orphanItems.stream()
+                    .map(item -> {
+                        List<Variant> itemVariants = variantsByItem != null ? variantsByItem.get(item.getId()) : null;
+                        List<VariantResponseDto> variantDtos = (itemVariants != null ? itemVariants : List.<Variant>of())
+                                .stream().map(menuMapper::toVariant).toList();
+                        ReviewRatingQuery.MenuItemRating rating = ratingsByItem.getOrDefault(item.getId(), ReviewRatingQuery.MenuItemRating.empty());
+                        return menuMapper.toFullMenuItem(item, signedOrNull(item.getImageS3Key()), variantDtos, rating.avgRating(), rating.reviewCount());
+                    })
+                    .toList();
+            categoryDtos.add(new FullMenuResponseDto.MenuCategoryDto(
+                    UUID.randomUUID(),
+                    "Other Items",
+                    categoryDtos.size() + 1,
+                    orphanDtos));
         }
 
         BigDecimal restaurantAvgRating = reviewRatingQuery != null ? reviewRatingQuery.averageRestaurantRating(activeRestaurantId) : BigDecimal.ZERO;
@@ -450,6 +474,9 @@ public class MenuServiceImpl implements MenuService {
     private String signedOrNull(String key) {
         if (key == null || key.isBlank()) {
             return null;
+        }
+        if (key.startsWith("http://") || key.startsWith("https://")) {
+            return key;
         }
         return objectStorageClient.createSignedGetUrl(key, SIGNED_URL_TTL);
     }

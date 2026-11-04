@@ -483,15 +483,47 @@ public class RestaurantServiceImpl implements RestaurantService {
         return buildDetail(restaurant, true);
     }
 
+    private static final List<OrderStatus> ACTIVE_ACCEPTED_STATUSES = List.of(
+            OrderStatus.ACCEPTED,
+            OrderStatus.PREPARING,
+            OrderStatus.WAITING_FOR_DELIVERY_PARTNER,
+            OrderStatus.READY_FOR_PICKUP,
+            OrderStatus.ASSIGNED,
+            OrderStatus.REACHED_RESTAURANT);
+
     @Override
     @Transactional
     public RestaurantDetailResponseDto toggleStatus(UUID ownerCredentialId, boolean isOpen) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
+        if (!isOpen) {
+            boolean hasActiveOrders = orderRepository.existsByRestaurantIdAndStatusIn(
+                    restaurant.getId(),
+                    ACTIVE_ACCEPTED_STATUSES);
+            if (hasActiveOrders) {
+                throw new BadRequestException(
+                        ErrorCode.BAD_REQUEST,
+                        "You have an active order. Please complete and hand over your order before going offline.");
+            }
+        }
         restaurant.setIsOpen(isOpen);
         restaurant = restaurantRepository.save(restaurant);
         restaurantCacheService.evictRestaurant(restaurant.getId());
         restaurantCacheService.evictAllListCaches();
         return buildDetail(restaurant, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveAcceptedOrders(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        return orderRepository.existsByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveAcceptedOrders(UUID ownerCredentialId) {
+        Restaurant restaurant = requireOwned(ownerCredentialId);
+        return orderRepository.countByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES);
     }
 
     @Override

@@ -68,6 +68,10 @@ public interface RestaurantService {
 
         RestaurantDetailResponseDto toggleStatus(UUID ownerCredentialId, boolean isOpen);
 
+        boolean hasActiveAcceptedOrders(UUID ownerCredentialId);
+
+        long countActiveAcceptedOrders(UUID ownerCredentialId);
+
         RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request);
 
         RestaurantDetailResponseDto updateMyRestaurant(UUID ownerCredentialId, UpdateRestaurantRequestDto request);

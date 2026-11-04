@@ -1,5 +1,7 @@
 package com.foodie.restaurant.service;
 
+import com.foodie.common.enums.OrderStatus;
+import com.foodie.order.repository.OrderRepository;
 import com.foodie.restaurant.entity.Restaurant;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import java.time.LocalDate;
@@ -18,14 +20,25 @@ public class RestaurantStatusScheduler {
     private static final Logger log = LoggerFactory.getLogger(RestaurantStatusScheduler.class);
     private final RestaurantRepository restaurantRepository;
     private final RestaurantCacheService restaurantCacheService;
+    private final OrderRepository orderRepository;
+
+    private static final List<OrderStatus> ACTIVE_ACCEPTED_STATUSES = List.of(
+            OrderStatus.ACCEPTED,
+            OrderStatus.PREPARING,
+            OrderStatus.WAITING_FOR_DELIVERY_PARTNER,
+            OrderStatus.READY_FOR_PICKUP,
+            OrderStatus.ASSIGNED,
+            OrderStatus.REACHED_RESTAURANT);
 
     // Use India timezone for standard evaluation
     private static final ZoneId LOCAL_ZONE = ZoneId.of("Asia/Kolkata");
 
     public RestaurantStatusScheduler(RestaurantRepository restaurantRepository,
-                                     RestaurantCacheService restaurantCacheService) {
+                                     RestaurantCacheService restaurantCacheService,
+                                     OrderRepository orderRepository) {
         this.restaurantRepository = restaurantRepository;
         this.restaurantCacheService = restaurantCacheService;
+        this.orderRepository = orderRepository;
     }
 
     // Run every minute
@@ -42,6 +55,10 @@ public class RestaurantStatusScheduler {
         for (Restaurant restaurant : approvedRestaurants) {
             boolean shouldBeOpen = calculateExpectedStatus(restaurant, now, todayString);
             if (restaurant.getIsOpen() != shouldBeOpen) {
+                if (!shouldBeOpen && orderRepository.existsByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES)) {
+                    log.info("Restaurant {} closing hours reached, but keeping ONLINE due to active accepted orders", restaurant.getId());
+                    continue;
+                }
                 restaurant.setIsOpen(shouldBeOpen);
                 restaurantRepository.save(restaurant);
                 restaurantCacheService.evictRestaurant(restaurant.getId());

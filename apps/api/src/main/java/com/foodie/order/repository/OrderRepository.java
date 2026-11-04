@@ -36,6 +36,12 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     java.util.List<Order> findByRestaurantId(UUID restaurantId);
 
+    boolean existsByRestaurantIdAndStatusIn(UUID restaurantId, java.util.Collection<OrderStatus> statuses);
+
+    long countByRestaurantIdAndStatusIn(UUID restaurantId, java.util.Collection<OrderStatus> statuses);
+
+    java.util.List<Order> findByRestaurantIdAndStatusIn(UUID restaurantId, java.util.Collection<OrderStatus> statuses);
+
     java.util.List<Order> findByStatusInAndDeliveryPartnerIdIsNull(java.util.Collection<OrderStatus> statuses);
 
     java.util.List<Order> findByRestaurantIdAndCreatedAtBetween(UUID restaurantId, java.time.Instant from, java.time.Instant to);

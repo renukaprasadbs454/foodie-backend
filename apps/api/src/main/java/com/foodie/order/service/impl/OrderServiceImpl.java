@@ -534,6 +534,42 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveAcceptedOrders(UUID ownerUserCredentialId) {
+        UUID restaurantId = restaurantSummaryProvider.findByOwnerUserCredentialId(ownerUserCredentialId)
+                .map(RestaurantSummaryProvider.RestaurantSummary::restaurantId)
+                .orElse(null);
+        if (restaurantId == null) {
+            return false;
+        }
+        return orderRepository.existsByRestaurantIdAndStatusIn(restaurantId, List.of(
+                OrderStatus.ACCEPTED,
+                OrderStatus.PREPARING,
+                OrderStatus.WAITING_FOR_DELIVERY_PARTNER,
+                OrderStatus.READY_FOR_PICKUP,
+                OrderStatus.ASSIGNED,
+                OrderStatus.REACHED_RESTAURANT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveAcceptedOrders(UUID ownerUserCredentialId) {
+        UUID restaurantId = restaurantSummaryProvider.findByOwnerUserCredentialId(ownerUserCredentialId)
+                .map(RestaurantSummaryProvider.RestaurantSummary::restaurantId)
+                .orElse(null);
+        if (restaurantId == null) {
+            return 0L;
+        }
+        return orderRepository.countByRestaurantIdAndStatusIn(restaurantId, List.of(
+                OrderStatus.ACCEPTED,
+                OrderStatus.PREPARING,
+                OrderStatus.WAITING_FOR_DELIVERY_PARTNER,
+                OrderStatus.READY_FOR_PICKUP,
+                OrderStatus.ASSIGNED,
+                OrderStatus.REACHED_RESTAURANT));
+    }
+
+    @Override
     @Transactional
     public OrderResponseDto transition(
             UUID orderId,

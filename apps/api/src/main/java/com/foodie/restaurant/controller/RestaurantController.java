@@ -148,6 +148,22 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.toggleStatus(principal.userId(), isOpen)));
     }
 
+    @GetMapping("/me/active-orders-check")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Check if restaurant has active accepted customer orders")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> checkActiveOrders(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        boolean hasActive = restaurantService.hasActiveAcceptedOrders(principal.userId());
+        long count = restaurantService.countActiveAcceptedOrders(principal.userId());
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("hasActiveOrders", hasActive);
+        data.put("activeOrderCount", count);
+        data.put("message", hasActive
+                ? "You have an active order. Please complete and hand over your order before going offline."
+                : "No active orders. Restaurant can safely go offline.");
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
     @PutMapping("/me")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Update my restaurant profile (status/commissionPct not updatable)")

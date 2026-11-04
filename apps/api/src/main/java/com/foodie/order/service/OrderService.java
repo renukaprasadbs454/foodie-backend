@@ -42,6 +42,10 @@ public interface OrderService {
                         int size,
                         String sort);
 
+        boolean hasActiveAcceptedOrders(UUID ownerUserCredentialId);
+
+        long countActiveAcceptedOrders(UUID ownerUserCredentialId);
+
         OrderResponseDto transition(
                         UUID orderId,
                         OrderStatus targetStatus,
