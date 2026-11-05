@@ -25,11 +25,11 @@ public class Coupon extends BaseEntity {
     private DiscountType discountType;
 
     public enum FunderType {
-        FOODIE, RESTAURANT, SHARED, PARTNER
+        FOODIE, RESTAURANT, SHARED, PARTNER, MERCHANT
     }
 
     public enum CouponType {
-        NEW_USER, RESTAURANT_FIRST_ORDER, REPEAT_ORDER, REACTIVATION, GENERIC, COMBO, REFERRAL, FESTIVAL
+        NEW_USER, RESTAURANT_FIRST_ORDER, REPEAT_ORDER, REACTIVATION, GENERIC, COMBO, REFERRAL, FESTIVAL, PROMO_COUPON, RESTAURANT_COUPON, RESTAURANT
     }
 
     public enum BenefitMode {
@@ -89,6 +89,12 @@ public class Coupon extends BaseEntity {
 
     @Column(name = "zone_id", length = 100)
     private String zoneId;
+
+    @Column(name = "admin_discount", precision = 10, scale = 2)
+    private BigDecimal adminDiscount;
+
+    @Column(name = "restaurant_discount", precision = 10, scale = 2)
+    private BigDecimal restaurantDiscount;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -235,6 +241,22 @@ public class Coupon extends BaseEntity {
 
     public void setZoneId(String zoneId) {
         this.zoneId = zoneId;
+    }
+
+    public BigDecimal getAdminDiscount() {
+        return adminDiscount;
+    }
+
+    public void setAdminDiscount(BigDecimal adminDiscount) {
+        this.adminDiscount = adminDiscount;
+    }
+
+    public BigDecimal getRestaurantDiscount() {
+        return restaurantDiscount;
+    }
+
+    public void setRestaurantDiscount(BigDecimal restaurantDiscount) {
+        this.restaurantDiscount = restaurantDiscount;
     }
 
     public Instant getDeletedAt() {

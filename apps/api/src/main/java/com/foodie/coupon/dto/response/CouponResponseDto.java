@@ -20,7 +20,31 @@ public record CouponResponseDto(
                 int usageLimitPerUser,
                 UUID restaurantId,
                 boolean isActive,
+                String zoneId,
+                BigDecimal adminDiscount,
+                BigDecimal restaurantDiscount) {
+
+        public CouponResponseDto(
+                UUID couponId,
+                String code,
+                String discountType,
+                String funderType,
+                String couponType,
+                String benefitMode,
+                String approvalStatus,
+                BigDecimal value,
+                BigDecimal minOrderAmount,
+                BigDecimal maxDiscountAmount,
+                Instant expiryDate,
+                Integer usageLimitTotal,
+                int usageLimitPerUser,
+                UUID restaurantId,
+                boolean isActive,
                 String zoneId) {
+                this(couponId, code, discountType, funderType, couponType, benefitMode, approvalStatus,
+                        value, minOrderAmount, maxDiscountAmount, expiryDate, usageLimitTotal,
+                        usageLimitPerUser, restaurantId, isActive, zoneId, null, null);
+        }
 
         public CouponResponseDto(
                 UUID couponId,
@@ -40,6 +64,6 @@ public record CouponResponseDto(
                 boolean isActive) {
                 this(couponId, code, discountType, funderType, couponType, benefitMode, approvalStatus,
                         value, minOrderAmount, maxDiscountAmount, expiryDate, usageLimitTotal,
-                        usageLimitPerUser, restaurantId, isActive, null);
+                        usageLimitPerUser, restaurantId, isActive, null, null, null);
         }
 }

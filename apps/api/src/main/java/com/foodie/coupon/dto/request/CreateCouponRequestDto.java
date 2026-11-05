@@ -56,6 +56,10 @@ public class CreateCouponRequestDto {
 
     private String zoneId;
 
+    private BigDecimal adminDiscount;
+
+    private BigDecimal restaurantDiscount;
+
     public CreateCouponRequestDto() {
     }
 
@@ -187,5 +191,21 @@ public class CreateCouponRequestDto {
 
     public void setZoneId(String zoneId) {
         this.zoneId = zoneId;
+    }
+
+    public BigDecimal getAdminDiscount() {
+        return adminDiscount;
+    }
+
+    public void setAdminDiscount(BigDecimal adminDiscount) {
+        this.adminDiscount = adminDiscount;
+    }
+
+    public BigDecimal getRestaurantDiscount() {
+        return restaurantDiscount;
+    }
+
+    public void setRestaurantDiscount(BigDecimal restaurantDiscount) {
+        this.restaurantDiscount = restaurantDiscount;
     }
 }

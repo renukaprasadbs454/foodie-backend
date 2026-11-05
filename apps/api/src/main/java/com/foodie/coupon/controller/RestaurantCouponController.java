@@ -66,6 +66,22 @@ public class RestaurantCouponController {
         return null;
     }
 
+    private boolean isRestaurantCoupon(Coupon c) {
+        if (c == null) return false;
+        if (c.getCouponType() == Coupon.CouponType.PROMO_COUPON) {
+            return false;
+        }
+        if (c.getCouponType() == Coupon.CouponType.GENERIC && c.getFunderType() == Coupon.FunderType.FOODIE && c.getRestaurantId() == null) {
+            return false;
+        }
+        return c.getRestaurantId() != null ||
+               c.getFunderType() == Coupon.FunderType.RESTAURANT ||
+               c.getFunderType() == Coupon.FunderType.MERCHANT ||
+               c.getCouponType() == Coupon.CouponType.RESTAURANT ||
+               c.getCouponType() == Coupon.CouponType.RESTAURANT_COUPON ||
+               c.getCouponType() == Coupon.CouponType.RESTAURANT_FIRST_ORDER;
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('RESTAURANT') or hasRole('ADMIN')")
     @Operation(summary = "Get all coupons assigned to this restaurant")
@@ -76,22 +92,25 @@ public class RestaurantCouponController {
         if (restId == null) {
             return ResponseEntity.ok(ApiResponse.success(Collections.emptyList()));
         }
-        List<Coupon> coupons = new java.util.ArrayList<>(couponRepository.findByRestaurantId(restId));
+        List<Coupon> rawList = couponRepository.findByRestaurantId(restId).stream()
+                .filter(this::isRestaurantCoupon)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+
         if (restaurantRepository != null) {
             restaurantRepository.findById(restId).ifPresent(r -> {
                 String zid = r.getZoneId();
                 String zname = r.getZoneName();
                 if (zid != null && !zid.isBlank()) {
                     for (Coupon zc : couponRepository.findByZoneId(zid.trim())) {
-                        if (coupons.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
-                            coupons.add(zc);
+                        if (isRestaurantCoupon(zc) && rawList.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
+                            rawList.add(zc);
                         }
                     }
                 }
                 if (zname != null && !zname.isBlank()) {
                     for (Coupon zc : couponRepository.findByZoneId(zname.trim())) {
-                        if (coupons.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
-                            coupons.add(zc);
+                        if (isRestaurantCoupon(zc) && rawList.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
+                            rawList.add(zc);
                         }
                     }
                 }
@@ -100,18 +119,20 @@ public class RestaurantCouponController {
         // Also include All Locations / global coupons
         for (String allKey : java.util.List.of("ALL", "all", "ALL_LOCATIONS", "All Locations")) {
             for (Coupon ac : couponRepository.findByZoneId(allKey)) {
-                if (coupons.stream().noneMatch(c -> c.getId().equals(ac.getId()))) {
-                    coupons.add(ac);
+                if (isRestaurantCoupon(ac) && rawList.stream().noneMatch(c -> c.getId().equals(ac.getId()))) {
+                    rawList.add(ac);
                 }
             }
         }
         couponRepository.findAll().stream()
-                .filter(c -> c.getZoneId() == null || c.getZoneId().isBlank() || "ALL".equalsIgnoreCase(c.getZoneId()) || "All Locations".equalsIgnoreCase(c.getZoneId()))
+                .filter(c -> isRestaurantCoupon(c) && (c.getZoneId() == null || c.getZoneId().isBlank() || "ALL".equalsIgnoreCase(c.getZoneId()) || "All Locations".equalsIgnoreCase(c.getZoneId())))
                 .forEach(c -> {
-                    if (coupons.stream().noneMatch(existing -> existing.getId().equals(c.getId()))) {
-                        coupons.add(c);
+                    if (rawList.stream().noneMatch(existing -> existing.getId().equals(c.getId()))) {
+                        rawList.add(c);
                     }
                 });
+
+        List<Coupon> coupons = rawList;
 
         List<CouponResponseDto> dtos = coupons.stream()
                 .map(c -> {
@@ -133,7 +154,9 @@ public class RestaurantCouponController {
                                 dto.usageLimitPerUser(),
                                 restId,
                                 dto.isActive(),
-                                dto.zoneId()
+                                dto.zoneId(),
+                                dto.adminDiscount(),
+                                dto.restaurantDiscount()
                         );
                     }
                     return dto;
