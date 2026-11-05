@@ -122,6 +122,25 @@ public class RestaurantController {
         return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyRestaurant(principal.userId())));
     }
 
+    @GetMapping(value = { "/my-restaurants", "/me/all" })
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Get all registered restaurants owned by the authenticated owner")
+    public ResponseEntity<ApiResponse<List<RestaurantDetailResponseDto>>> getMyRestaurants(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.getMyRestaurants(principal.userId())));
+    }
+
+    @PutMapping("/{restaurantId}/status")
+    @PreAuthorize("hasRole('RESTAURANT')")
+    @Operation(summary = "Toggle specific restaurant online/offline status")
+    public ResponseEntity<ApiResponse<RestaurantDetailResponseDto>> toggleRestaurantStatus(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID restaurantId,
+            @RequestParam boolean isOpen) {
+        return ResponseEntity.ok(ApiResponse.success(
+                restaurantService.toggleStatusByRestaurantId(principal.userId(), restaurantId, isOpen)));
+    }
+
     @PutMapping("/me/timings")
     @PreAuthorize("hasRole('RESTAURANT')")
     @Operation(summary = "Update my restaurant operational timings")

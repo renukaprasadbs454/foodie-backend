@@ -112,7 +112,6 @@ class RestaurantServiceImplTest {
 
     @Test
     void create_ignoresClientCommission_andPublishesCreatedEvent() {
-        when(restaurantRepository.existsByOwnerUserCredentialId(ownerId)).thenReturn(false);
         when(restaurantAddressRepository.save(any())).thenAnswer(inv -> {
             RestaurantAddress a = inv.getArgument(0);
             setId(a, UUID.randomUUID());
@@ -232,15 +231,55 @@ class RestaurantServiceImplTest {
     }
 
     @Test
-    void create_whenProfileAlreadyExists_throwsConflict() {
-        when(restaurantRepository.existsByOwnerUserCredentialId(ownerId)).thenReturn(true);
-        CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(
-                "Dup", null, List.of(CuisineType.NORTH_INDIAN), addressDto(), null);
+    void create_whenOwnerAlreadyHasRestaurant_allowsCreatingAnotherRestaurant() {
+        when(restaurantAddressRepository.save(any())).thenAnswer(inv -> {
+            RestaurantAddress a = inv.getArgument(0);
+            setId(a, UUID.randomUUID());
+            return a;
+        });
+        when(restaurantRepository.save(any())).thenAnswer(inv -> {
+            Restaurant r = inv.getArgument(0);
+            setId(r, UUID.randomUUID());
+            return r;
+        });
+        LocationZone dummyZone = new LocationZone();
+        dummyZone.setRestaurantEnabled(true);
+        dummyZone.setLatitude(12.9716);
+        dummyZone.setLongitude(77.5946);
+        dummyZone.setRadiusKm(500.0);
+        when(locationZoneRepository.findAll()).thenReturn(List.of(dummyZone));
 
-        assertThatThrownBy(() -> service.create(ownerId, request))
-                .isInstanceOf(ConflictException.class)
-                .extracting(ex -> ((ConflictException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.RESTAURANT_PROFILE_ALREADY_EXISTS);
+        CreateRestaurantRequestDto request = new CreateRestaurantRequestDto(
+                "Second Restaurant", null, List.of(CuisineType.NORTH_INDIAN), addressDto(), null);
+
+        RestaurantDetailResponseDto dto = service.create(ownerId, request);
+        assertThat(dto.name()).isEqualTo("Second Restaurant");
+        assertThat(dto.ownerUserCredentialId()).isEqualTo(ownerId);
+    }
+
+    @Test
+    void getMyRestaurants_returnsAllRestaurantsForOwner() {
+        Restaurant r1 = pendingRestaurant();
+        Restaurant r2 = pendingRestaurant();
+        when(restaurantRepository.findAllByOwnerUserCredentialId(ownerId)).thenReturn(List.of(r1, r2));
+
+        List<RestaurantDetailResponseDto> list = service.getMyRestaurants(ownerId);
+        assertThat(list).hasSize(2);
+    }
+
+    @Test
+    void toggleStatusByRestaurantId_updatesOnlyTargetRestaurant() {
+        Restaurant r1 = pendingRestaurant();
+        r1.setIsOpen(false);
+        when(restaurantRepository.findByIdAndOwnerUserCredentialId(r1.getId(), ownerId))
+                .thenReturn(Optional.of(r1));
+        when(restaurantRepository.save(any(Restaurant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RestaurantDetailResponseDto result = service.toggleStatusByRestaurantId(ownerId, r1.getId(), true);
+
+        assertThat(r1.getIsOpen()).isTrue();
+        verify(restaurantRepository).save(r1);
+        verify(restaurantCacheService).evictRestaurant(r1.getId());
     }
 
     @Test

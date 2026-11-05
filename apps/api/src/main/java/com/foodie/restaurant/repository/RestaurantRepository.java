@@ -18,7 +18,16 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, UUID> {
 
      boolean existsByOwnerUserCredentialId(UUID ownerUserCredentialId);
 
-     Optional<Restaurant> findByOwnerUserCredentialId(UUID ownerUserCredentialId);
+     Optional<Restaurant> findFirstByOwnerUserCredentialIdOrderByCreatedAtDesc(UUID ownerUserCredentialId);
+
+     @Query("SELECT r FROM Restaurant r WHERE r.ownerUserCredentialId = :ownerId ORDER BY r.createdAt DESC")
+     java.util.List<Restaurant> findAllByOwnerUserCredentialId(@Param("ownerId") UUID ownerId);
+
+     Optional<Restaurant> findByIdAndOwnerUserCredentialId(UUID id, UUID ownerUserCredentialId);
+
+     default Optional<Restaurant> findByOwnerUserCredentialId(UUID ownerUserCredentialId) {
+          return findFirstByOwnerUserCredentialIdOrderByCreatedAtDesc(ownerUserCredentialId);
+     }
 
      java.util.List<Restaurant> findAllByStatus(com.foodie.common.enums.RestaurantStatus status);
 

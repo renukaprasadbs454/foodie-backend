@@ -483,6 +483,13 @@ public class RestaurantServiceImpl implements RestaurantService {
         return buildDetail(restaurant, true);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<RestaurantDetailResponseDto> getMyRestaurants(UUID ownerCredentialId) {
+        List<Restaurant> restaurants = restaurantRepository.findAllByOwnerUserCredentialId(ownerCredentialId);
+        return restaurants.stream().map(r -> buildDetail(r, true)).toList();
+    }
+
     private static final List<OrderStatus> ACTIVE_ACCEPTED_STATUSES = List.of(
             OrderStatus.ACCEPTED,
             OrderStatus.PREPARING,
@@ -513,9 +520,39 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     @Override
+    @Transactional
+    public RestaurantDetailResponseDto toggleStatusByRestaurantId(UUID ownerCredentialId, UUID restaurantId, boolean isOpen) {
+        Restaurant restaurant = restaurantRepository.findByIdAndOwnerUserCredentialId(restaurantId, ownerCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found or not owned by user."));
+        if (!isOpen) {
+            boolean hasActiveOrders = orderRepository.existsByRestaurantIdAndStatusIn(
+                    restaurant.getId(),
+                    ACTIVE_ACCEPTED_STATUSES);
+            if (hasActiveOrders) {
+                throw new BadRequestException(
+                        ErrorCode.BAD_REQUEST,
+                        "You have an active order. Please complete and hand over your order before going offline.");
+            }
+        }
+        restaurant.setIsOpen(isOpen);
+        restaurant = restaurantRepository.save(restaurant);
+        restaurantCacheService.evictRestaurant(restaurant.getId());
+        restaurantCacheService.evictAllListCaches();
+        return buildDetail(restaurant, true);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public boolean hasActiveAcceptedOrders(UUID ownerCredentialId) {
         Restaurant restaurant = requireOwned(ownerCredentialId);
+        return orderRepository.existsByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveAcceptedOrders(UUID ownerCredentialId, UUID restaurantId) {
+        Restaurant restaurant = restaurantRepository.findByIdAndOwnerUserCredentialId(restaurantId, ownerCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found or not owned by user."));
         return orderRepository.existsByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES);
     }
 
@@ -527,12 +564,24 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public long countActiveAcceptedOrders(UUID ownerCredentialId, UUID restaurantId) {
+        Restaurant restaurant = restaurantRepository.findByIdAndOwnerUserCredentialId(restaurantId, ownerCredentialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found or not owned by user."));
+        return orderRepository.countByRestaurantIdAndStatusIn(restaurant.getId(), ACTIVE_ACCEPTED_STATUSES);
+    }
+
+    @Override
     @Transactional
     public RestaurantDetailResponseDto create(UUID ownerCredentialId, CreateRestaurantRequestDto request) {
-        if (restaurantRepository.existsByOwnerUserCredentialId(ownerCredentialId)) {
-            throw new ConflictException(
-                    ErrorCode.RESTAURANT_PROFILE_ALREADY_EXISTS,
-                    "A restaurant profile already exists for this account.");
+        if (request.name() != null && !request.name().isBlank()) {
+            boolean duplicateName = restaurantRepository.findAllByOwnerUserCredentialId(ownerCredentialId).stream()
+                    .anyMatch(r -> r.getName() != null && r.getName().trim().equalsIgnoreCase(request.name().trim()));
+            if (duplicateName) {
+                throw new ConflictException(
+                        ErrorCode.CONFLICT,
+                        "A restaurant with this name already exists under your account.");
+            }
         }
 
         if (request.address() == null || request.address().city() == null) {
@@ -1218,6 +1267,14 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     private Restaurant requireOwned(UUID ownerCredentialId) {
+        java.util.Optional<UUID> requestedId = com.foodie.restaurant.util.RestaurantContextHelper.getRequestedRestaurantId();
+        if (requestedId.isPresent()) {
+            java.util.Optional<Restaurant> matched = restaurantRepository
+                    .findByIdAndOwnerUserCredentialId(requestedId.get(), ownerCredentialId);
+            if (matched.isPresent()) {
+                return matched.get();
+            }
+        }
         return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
     }

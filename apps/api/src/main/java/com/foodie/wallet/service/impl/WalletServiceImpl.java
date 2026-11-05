@@ -641,8 +641,8 @@ public class WalletServiceImpl implements WalletService {
     }
 
     private UUID requireRestaurantId(UUID ownerCredentialId) {
-        return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
-                .map(Restaurant::getId)
+        return restaurantSummaryProvider.findByOwnerUserCredentialId(ownerCredentialId)
+                .map(com.foodie.shared.contract.RestaurantSummaryProvider.RestaurantSummary::restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found."));
     }
 

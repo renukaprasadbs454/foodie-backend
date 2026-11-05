@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/support")
@@ -27,6 +28,13 @@ public class SupportController {
 
     private com.foodie.restaurant.entity.Restaurant getAuthenticatedRestaurant(com.foodie.security.principal.AuthPrincipal principal) {
         if (principal != null) {
+            java.util.Optional<UUID> requestedId = com.foodie.restaurant.util.RestaurantContextHelper.getRequestedRestaurantId();
+            if (requestedId.isPresent()) {
+                var matched = restaurantRepository.findByIdAndOwnerUserCredentialId(requestedId.get(), principal.userId());
+                if (matched.isPresent()) {
+                    return matched.get();
+                }
+            }
             var byOwner = restaurantRepository.findByOwnerUserCredentialId(principal.userId());
             if (byOwner.isPresent()) {
                 return byOwner.get();

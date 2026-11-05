@@ -19,7 +19,7 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "restaurant")
 public class Restaurant extends BaseEntity {
 
-    @Column(name = "owner_user_credential_id", nullable = false, unique = true, updatable = false)
+    @Column(name = "owner_user_credential_id", nullable = false, updatable = false)
     private UUID ownerUserCredentialId;
 
     @Column(name = "name", nullable = false)

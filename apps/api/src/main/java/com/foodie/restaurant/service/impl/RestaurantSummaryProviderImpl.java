@@ -1,5 +1,6 @@
 package com.foodie.restaurant.service.impl;
 
+import com.foodie.restaurant.util.RestaurantContextHelper;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.restaurant.repository.RestaurantRepository;
 import java.util.Optional;
@@ -25,6 +26,14 @@ public class RestaurantSummaryProviderImpl implements RestaurantSummaryProvider 
     @Override
     @Transactional(readOnly = true)
     public Optional<RestaurantSummary> findByOwnerUserCredentialId(UUID ownerUserCredentialId) {
+        Optional<UUID> requestedId = RestaurantContextHelper.getRequestedRestaurantId();
+        if (requestedId.isPresent()) {
+            Optional<com.foodie.restaurant.entity.Restaurant> matched = restaurantRepository
+                    .findByIdAndOwnerUserCredentialId(requestedId.get(), ownerUserCredentialId);
+            if (matched.isPresent()) {
+                return matched.map(this::toSummary);
+            }
+        }
         return restaurantRepository.findByOwnerUserCredentialId(ownerUserCredentialId).map(this::toSummary);
     }
 

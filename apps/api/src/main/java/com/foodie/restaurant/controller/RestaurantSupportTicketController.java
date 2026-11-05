@@ -35,6 +35,13 @@ public class RestaurantSupportTicketController {
     }
 
     private Restaurant requireOwnedRestaurant(UUID ownerCredentialId) {
+        java.util.Optional<UUID> requestedId = com.foodie.restaurant.util.RestaurantContextHelper.getRequestedRestaurantId();
+        if (requestedId.isPresent()) {
+            var matched = restaurantRepository.findByIdAndOwnerUserCredentialId(requestedId.get(), ownerCredentialId);
+            if (matched.isPresent()) {
+                return matched.get();
+            }
+        }
         return restaurantRepository.findByOwnerUserCredentialId(ownerCredentialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant profile not found for authenticated user."));
     }
