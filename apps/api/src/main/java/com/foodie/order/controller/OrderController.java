@@ -224,6 +224,8 @@ public class OrderController {
         response.put("orderId", orderKey);
         response.put("status", "REFUNDED");
         response.put("refundApprovalState", "DONE");
+        response.put("refundDestination", "APP_WALLET");
+        response.put("destinationText", "Delimo App Wallet");
         response.put("refundReference", "REF-" + Math.abs(orderKey.hashCode()));
         response.put("reviewedAt", java.time.Instant.now().toString());
         response.put("reviewedBy", "SYSTEM");

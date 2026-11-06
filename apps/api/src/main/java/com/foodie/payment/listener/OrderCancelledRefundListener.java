@@ -37,12 +37,19 @@ public class OrderCancelledRefundListener {
                         event.orderId(), payment.getStatus());
                 return;
             }
+            java.math.BigDecimal totalPaid = payment.getAmount().add(
+                    payment.getWalletAmount() != null ? payment.getWalletAmount() : java.math.BigDecimal.ZERO);
+            if (totalPaid.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                log.info("Skip auto-refund for orderId={} as totalPaid is zero", event.orderId());
+                return;
+            }
             String reason = event.reason() == null || event.reason().isBlank()
-                    ? "Order cancelled"
+                    ? "Order cancelled - Refund deposited to Delimo App Wallet"
                     : event.reason();
+            log.info("Auto-refunding cancelled orderId={} totalPaid={} to customer wallet", event.orderId(), totalPaid);
             paymentService.refund(
                     payment.getId(),
-                    new RefundPaymentRequestDto(payment.getAmount(), reason),
+                    new RefundPaymentRequestDto(totalPaid, reason, true),
                     PaymentServiceImpl.SYSTEM_ACTOR_ID,
                     true
             );

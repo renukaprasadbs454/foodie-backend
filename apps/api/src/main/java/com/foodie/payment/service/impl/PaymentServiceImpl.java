@@ -356,16 +356,22 @@ public class PaymentServiceImpl implements PaymentService {
             throw new UnprocessableEntityException(
                     ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment is not refundable in its current status.");
         }
-        if (payment.getCashfreeOrderId() == null || payment.getCashfreeOrderId().isBlank()
-                || payment.getCashfreeOrderId().startsWith("WALLET_")) {
-            throw new UnprocessableEntityException(
-                    ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment has no Cashfree order id for refund.");
-        }
 
+        BigDecimal totalPaid = payment.getAmount().add(
+                payment.getWalletAmount() != null ? payment.getWalletAmount() : BigDecimal.ZERO);
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
-        if (amount.compareTo(payment.getAmount()) > 0) {
+        if (amount.compareTo(totalPaid) > 0) {
             throw new BadRequestException(
                     ErrorCode.VALIDATION_FAILED, "Refund amount cannot exceed captured payment amount.");
+        }
+
+        boolean refundToWallet = request.isRefundToWallet();
+        if (!refundToWallet) {
+            if (payment.getCashfreeOrderId() == null || payment.getCashfreeOrderId().isBlank()
+                    || payment.getCashfreeOrderId().startsWith("WALLET_")) {
+                throw new UnprocessableEntityException(
+                        ErrorCode.PAYMENT_NOT_REFUNDABLE, "Payment has no Cashfree order id for refund.");
+            }
         }
 
         var pending = refundRequestRepository.findByPaymentIdAndStatus(paymentId, RefundStatus.INITIATED);
@@ -378,11 +384,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         UUID initiator = actorId != null ? actorId : SYSTEM_ACTOR_ID;
 
-        if (Boolean.TRUE.equals(request.refundToWallet())) {
+        if (refundToWallet) {
             OrderPaymentPort.PayableOrder order = orderPaymentPort.findByOrderId(payment.getOrderId()).orElse(null);
             if (order != null) {
-                walletService.credit(OwnerType.CUSTOMER, order.customerId(), amount, LedgerReferenceType.REFUND,
-                        payment.getId());
                 RefundRequest refundRequest = RefundRequest.initiate(paymentId, amount, request.reason(), initiator,
                         "WALLET_REFUND_" + UUID.randomUUID());
                 refundRequest.markProcessed();
@@ -390,10 +394,15 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.markRefunded();
                 paymentRepository.save(payment);
 
+                walletService.credit(OwnerType.CUSTOMER, order.customerId(), amount, LedgerReferenceType.REFUND,
+                        payment.getId());
+
                 eventPublisher.publishEvent(RefundProcessedEvent.of(payment.getId(), refundRequest.getId(), amount));
-                log.info("Refund to WALLET PROCESSED refundRequestId={} paymentId={} customerId={}",
-                        refundRequest.getId(), payment.getId(), order.customerId());
+                log.info("Refund to WALLET PROCESSED refundRequestId={} paymentId={} customerId={} amount={}",
+                        refundRequest.getId(), payment.getId(), order.customerId(), amount);
                 return new RefundInitiationResponseDto(refundRequest.getId(), refundRequest.getStatus());
+            } else {
+                throw new ResourceNotFoundException("Order not found for payment refund.");
             }
         }
 

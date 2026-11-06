@@ -12,6 +12,10 @@ public record RefundPaymentRequestDto(
         Boolean refundToWallet
 ) {
     public RefundPaymentRequestDto(BigDecimal amount, String reason) {
-        this(amount, reason, false);
+        this(amount, reason, true);
+    }
+
+    public boolean isRefundToWallet() {
+        return refundToWallet == null || Boolean.TRUE.equals(refundToWallet);
     }
 }
