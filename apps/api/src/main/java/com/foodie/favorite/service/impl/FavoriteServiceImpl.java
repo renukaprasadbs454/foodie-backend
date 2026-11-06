@@ -61,17 +61,22 @@ public class FavoriteServiceImpl implements FavoriteService {
                     }
                 })
                 .filter(Objects::nonNull)
-                .map(detail -> new RestaurantSummaryResponseDto(
-                        detail.restaurantId(),
-                        detail.name(),
-                        detail.cuisineTypes(),
-                        detail.avgRating(),
-                        detail.latitude(),
-                        detail.longitude(),
-                        detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl(),
-                        detail.isOpen(),
-                        null,
-                        detail.address() != null ? detail.address().city() : null))
+                .map(detail -> {
+                        String rType = detail.restaurantType() != null ? detail.restaurantType().name() : "BOTH";
+                        return new RestaurantSummaryResponseDto(
+                                detail.restaurantId(),
+                                detail.name(),
+                                detail.cuisineTypes(),
+                                detail.avgRating(),
+                                detail.latitude(),
+                                detail.longitude(),
+                                detail.coverImageUrl() != null ? detail.coverImageUrl() : detail.logoImageUrl(),
+                                detail.isOpen(),
+                                null,
+                                detail.address() != null ? detail.address().city() : null,
+                                rType,
+                                "VEGETARIAN".equalsIgnoreCase(rType));
+                })
                 .toList();
     }
 

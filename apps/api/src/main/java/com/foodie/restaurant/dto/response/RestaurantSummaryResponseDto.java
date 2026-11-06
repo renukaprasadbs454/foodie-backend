@@ -14,5 +14,7 @@ public record RestaurantSummaryResponseDto(
                 String imageUrl,
                 Boolean isOpen,
                 Integer topPosition,
-                String city) {
+                String city,
+                String restaurantType,
+                Boolean isPureVeg) {
 }

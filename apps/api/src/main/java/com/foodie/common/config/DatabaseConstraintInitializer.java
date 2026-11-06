@@ -141,5 +141,8 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
                 jdbcTemplate.execute(sql);
             } catch (Exception ignored) {}
         }
+        try {
+            jdbcTemplate.update("UPDATE restaurant SET restaurant_type = 'VEGETARIAN' WHERE LOWER(name) LIKE '%ctr%' OR LOWER(name) LIKE '%dosa%' OR LOWER(name) LIKE '%pure veg%'");
+        } catch (Exception ignored) {}
     }
 }

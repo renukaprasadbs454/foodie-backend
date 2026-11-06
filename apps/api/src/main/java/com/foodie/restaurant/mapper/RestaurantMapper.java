@@ -30,6 +30,12 @@ public class RestaurantMapper {
                 } else if (restaurant.getZoneName() != null && !restaurant.getZoneName().isBlank()) {
                         city = restaurant.getZoneName().trim();
                 }
+                String restType = restaurant.getRestaurantType() != null ? restaurant.getRestaurantType().name() : "BOTH";
+                boolean isPureVeg = "VEGETARIAN".equalsIgnoreCase(restType)
+                                || (restaurant.getName() != null && (restaurant.getName().toLowerCase().contains("ctr") || restaurant.getName().toLowerCase().contains("pure veg")));
+                if (isPureVeg) {
+                        restType = "VEGETARIAN";
+                }
                 return new RestaurantSummaryResponseDto(
                                 restaurant.getId(),
                                 restaurant.getName(),
@@ -40,7 +46,9 @@ public class RestaurantMapper {
                                 imageUrl,
                                 restaurant.getIsOpen(),
                                 restaurant.getTopPosition(),
-                                city);
+                                city,
+                                restType,
+                                isPureVeg);
         }
 
         public RestaurantDetailResponseDto toDetail(
