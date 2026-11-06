@@ -43,22 +43,35 @@ public class AuthController {
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final LocationZoneRepository locationZoneRepository;
     private final AdminUserRepository adminUserRepository;
+    private final com.foodie.admin.service.UserLoginDeviceService userLoginDeviceService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AuthController(
             AuthService authService,
             org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
             LocationZoneRepository locationZoneRepository,
-            AdminUserRepository adminUserRepository
+            AdminUserRepository adminUserRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.foodie.admin.service.UserLoginDeviceService userLoginDeviceService
     ) {
         this.authService = authService;
         this.jdbcTemplate = jdbcTemplate;
         this.locationZoneRepository = locationZoneRepository;
         this.adminUserRepository = adminUserRepository;
+        this.userLoginDeviceService = userLoginDeviceService;
+    }
+
+    public AuthController(
+            AuthService authService,
+            org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+            LocationZoneRepository locationZoneRepository,
+            AdminUserRepository adminUserRepository
+    ) {
+        this(authService, jdbcTemplate, locationZoneRepository, adminUserRepository, null);
     }
 
     public AuthController(AuthService authService, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
-        this(authService, jdbcTemplate, null, null);
+        this(authService, jdbcTemplate, null, null, null);
     }
 
     private String formatZoneAdminLabel(String zoneName) {
@@ -249,8 +262,37 @@ public class AuthController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limited")
     })
     public ResponseEntity<ApiResponse<TokenPairResponseDto>> login(
-            @Valid @RequestBody AdminLoginRequestDto request) {
-        return ResponseEntity.ok(ApiResponse.success(authService.loginAdmin(request)));
+            @Valid @RequestBody AdminLoginRequestDto request,
+            jakarta.servlet.http.HttpServletRequest httpRequest
+    ) {
+        TokenPairResponseDto response = authService.loginAdmin(request);
+        if (response != null && userLoginDeviceService != null) {
+            try {
+                String ip = extractClientIp(httpRequest);
+                String ua = httpRequest != null && httpRequest.getHeader("User-Agent") != null
+                        ? httpRequest.getHeader("User-Agent")
+                        : (request.deviceInfo() != null ? request.deviceInfo() : "Admin Panel / Chrome");
+                String location = httpRequest != null ? httpRequest.getHeader("X-City") : null;
+                String userId = response.userId() != null ? response.userId().toString() : request.email();
+                String role = response.role() != null ? response.role() : "ADMIN";
+                userLoginDeviceService.recordDeviceLogin(userId, role, ua, ip, location);
+            } catch (Exception ignored) {
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    private String extractClientIp(jakarta.servlet.http.HttpServletRequest req) {
+        if (req == null) return "127.0.0.1";
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        String realIp = req.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return req.getRemoteAddr() != null ? req.getRemoteAddr() : "127.0.0.1";
     }
 
     @PostMapping("/refresh")
