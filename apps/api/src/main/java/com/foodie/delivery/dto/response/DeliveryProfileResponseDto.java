@@ -4,27 +4,27 @@ import java.util.List;
 import java.util.UUID;
 
 public record DeliveryProfileResponseDto(
-                UUID partnerId,
-                String fullName,
-                String phoneNumber,
-                String vehicleType,
-                String vehicleNumber,
-                String addressLine1,
-                String addressLine2,
-                String city,
-                String state,
-                String pincode,
-                String kycStatus,
-                boolean isOnline,
-                String profileImageUrl,
-                List<DeliveryDocumentResponseDto> documents,
-                java.math.BigDecimal cashInHand,
-                Double latitude,
-                Double longitude,
-                String zoneId,
-                String zoneName,
-                boolean zoneVerified,
-                String locationApprovalStatus) {
+        UUID partnerId,
+        String fullName,
+        String phoneNumber,
+        String vehicleType,
+        String vehicleNumber,
+        String addressLine1,
+        String addressLine2,
+        String city,
+        String state,
+        String pincode,
+        String kycStatus,
+        boolean isOnline,
+        String profileImageUrl,
+        List<DeliveryDocumentResponseDto> documents,
+        java.math.BigDecimal cashInHand,
+        Double latitude,
+        Double longitude,
+        String zoneId,
+        String zoneName,
+        boolean zoneVerified,
+        String locationApprovalStatus) {
 
     public DeliveryProfileResponseDto(
             UUID partnerId,
@@ -47,8 +47,8 @@ public record DeliveryProfileResponseDto(
             String zoneName,
             boolean zoneVerified) {
         this(partnerId, fullName, null, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state, pincode,
-             kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
-             zoneVerified, zoneVerified ? "APPROVED" : "PENDING");
+                kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
+                zoneVerified, zoneVerified ? "APPROVED" : "PENDING");
     }
 
     public DeliveryProfileResponseDto(
@@ -73,8 +73,8 @@ public record DeliveryProfileResponseDto(
             boolean zoneVerified,
             String locationApprovalStatus) {
         this(partnerId, fullName, null, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state, pincode,
-             kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
-             zoneVerified, locationApprovalStatus);
+                kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId, zoneName,
+                zoneVerified, locationApprovalStatus);
     }
 
     public String phone() {

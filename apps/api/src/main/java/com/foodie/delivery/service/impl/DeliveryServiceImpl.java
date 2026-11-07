@@ -341,6 +341,17 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
         if (isGoingOnline && !partner.isZoneVerified()) { throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Your delivery zone location request is pending Super Admin approval. You cannot receive deliveries until approved."); }
+        if (!isGoingOnline) {
+            var activeAssignment = deliveryAssignmentRepository.findFirstByDeliveryPartnerIdAndStatusIn(
+                    partner.getId(),
+                    java.util.List.of(DeliveryAssignmentStatus.ACCEPTED, DeliveryAssignmentStatus.PICKED_UP)
+            );
+            if (activeAssignment.isPresent()) {
+                throw new UnprocessableEntityException(
+                        ErrorCode.BAD_REQUEST,
+                        "You cannot go offline while you have active orders to deliver. Please complete your deliveries first.");
+            }
+        }
         partner.setOnline(isGoingOnline);
         deliveryPartnerRepository.save(partner);
 
