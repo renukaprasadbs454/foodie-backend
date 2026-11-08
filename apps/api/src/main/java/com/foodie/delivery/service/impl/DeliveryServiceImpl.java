@@ -370,7 +370,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
         partner.setOnline(isGoingOnline);
-        deliveryPartnerRepository.saveAndFlush(partner);
+        deliveryPartnerRepository.save(partner);
 
         if (onlineSessionRepository != null) {
             if (isGoingOnline) {
@@ -647,7 +647,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         partner.setLatitude(lat);
         partner.setLongitude(lng);
-        deliveryPartnerRepository.saveAndFlush(partner);
+        deliveryPartnerRepository.save(partner);
 
         deliveryAssignmentRepository
                 .findFirstByDeliveryPartnerIdAndStatusIn(
