@@ -28,7 +28,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping({"/api/v1/admin/users", "/api/admin/users", "/api/v1/users", "/users"})
+@RequestMapping({"/api/v1/admin/users", "/api/admin/users"})
 @Tag(name = "Admin — Users")
 public class AdminUserController {
 
