@@ -68,12 +68,9 @@ public class DeliveryAssignmentScheduler {
         List<Order> unassignedOrders = orderRepository.findByStatusInAndDeliveryPartnerIdIsNull(eligibleStatuses);
 
         for (Order order : unassignedOrders) {
-            if (order.getStatus() == OrderStatus.CONFIRMED && order.getAssignmentScheduledAt() == null) {
-                continue;
-            }
             Instant scheduledAt = order.getAssignmentScheduledAt();
             if (scheduledAt == null || !scheduledAt.isAfter(now)) {
-                // If an active offer is already pending for this order, do not overwrite it — let the partner respond or wait for 45s timeout
+                // If an active offer is already pending for this order, do not overwrite it — let the partner respond or wait for 120s timeout
                 Optional<DeliveryAssignment> existingOpt = deliveryAssignmentRepository.findByOrderId(order.getId());
                 if (existingOpt.isPresent() && existingOpt.get().getStatus() == DeliveryAssignmentStatus.OFFERED) {
                     continue;

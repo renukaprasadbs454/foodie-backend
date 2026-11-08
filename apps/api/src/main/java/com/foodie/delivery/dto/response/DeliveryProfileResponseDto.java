@@ -52,7 +52,7 @@ public record DeliveryProfileResponseDto(
             String locationApprovalStatus) {
         this(partnerId, fullName, phoneNumber, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state,
                 pincode, kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId,
-                zoneName, zoneVerified, locationApprovalStatus, new java.math.BigDecimal("2000.00"), false);
+                zoneName, zoneVerified, locationApprovalStatus, new java.math.BigDecimal("50000.00"), false);
     }
 
     public DeliveryProfileResponseDto(

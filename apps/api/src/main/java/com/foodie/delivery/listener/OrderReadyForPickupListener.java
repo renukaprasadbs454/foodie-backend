@@ -26,25 +26,15 @@ public class OrderReadyForPickupListener {
     @EventListener
     @Transactional
     public void onOrderStatusChanged(OrderStatusChangedEvent event) {
-        if (event.toStatus() != OrderStatus.READY_FOR_PICKUP &&
+        if (event.toStatus() != OrderStatus.CONFIRMED &&
+            event.toStatus() != OrderStatus.ACCEPTED &&
             event.toStatus() != OrderStatus.PREPARING &&
-            event.toStatus() != OrderStatus.ACCEPTED) {
+            event.toStatus() != OrderStatus.WAITING_FOR_DELIVERY_PARTNER &&
+            event.toStatus() != OrderStatus.READY_FOR_PICKUP) {
             return;
         }
 
-        if (event.toStatus() == OrderStatus.ACCEPTED || event.toStatus() == OrderStatus.PREPARING) {
-            orderDeliveryPort.findByOrderId(event.orderId()).ifPresent(snapshot -> {
-                java.time.Instant scheduledAt = snapshot.assignmentScheduledAt();
-                if (scheduledAt == null || !scheduledAt.isAfter(java.time.Instant.now())) {
-                    log.info("Order {} prep <= 10m or assignment due — creating immediate delivery assignment", event.orderId());
-                    deliveryService.createAssignmentForOrder(event.orderId());
-                } else {
-                    log.info("Order {} assignment scheduled for {} — background scheduler will assign 10m before food ready", event.orderId(), scheduledAt);
-                }
-            });
-        } else {
-            log.info("Order {} transitioned to {} — creating delivery assignment", event.orderId(), event.toStatus());
-            deliveryService.createAssignmentForOrder(event.orderId());
-        }
+        log.info("Order {} transitioned to {} — triggering immediate delivery partner assignment", event.orderId(), event.toStatus());
+        deliveryService.createAssignmentForOrder(event.orderId());
     }
 }

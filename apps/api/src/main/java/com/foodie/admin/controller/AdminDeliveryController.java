@@ -332,6 +332,24 @@ public class AdminDeliveryController {
         }
         assertPartnerInZone(authentication, partner, activeZoneHeader);
         partner.verifyKyc();
+        partner.setZoneVerified(true);
+        partner.setLocationApprovalStatus("APPROVED");
+        if ((partner.getZoneId() == null || partner.getZoneId().isBlank())
+                && (partner.getZoneName() == null || partner.getZoneName().isBlank())) {
+            if (activeZoneHeader != null && !activeZoneHeader.isBlank()) {
+                partner.setZoneId(activeZoneHeader.trim());
+                partner.setZoneName(activeZoneHeader.trim());
+            } else {
+                String city = partner.getCity() != null ? partner.getCity().toLowerCase() : "";
+                if (city.contains("tumkur") || city.contains("tumakuru")) {
+                    partner.setZoneId("dz-tumkur");
+                    partner.setZoneName("Tumkur Zone");
+                } else {
+                    partner.setZoneId("dz-bangalore");
+                    partner.setZoneName("Bangalore Zone");
+                }
+            }
+        }
         deliveryPartnerRepository.save(partner);
         UUID adminUserId = resolveAdminUserId(principal != null ? principal.userId() : null);
         List<DeliveryPartnerDocument> docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(partner.getId());

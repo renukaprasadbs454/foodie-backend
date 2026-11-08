@@ -340,8 +340,16 @@ public class DeliveryServiceImpl implements DeliveryService {
                         ErrorCode.KYC_NOT_VERIFIED,
                         "KYC must be verified before going online.");
             }
+            if ("REJECTED".equalsIgnoreCase(partner.getLocationApprovalStatus())) {
+                throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Your delivery zone location request was rejected by Super Admin. You cannot receive deliveries.");
+            }
+            if (!partner.isZoneVerified()) {
+                partner.setZoneVerified(true);
+                if (partner.getLocationApprovalStatus() == null || "PENDING".equalsIgnoreCase(partner.getLocationApprovalStatus())) {
+                    partner.setLocationApprovalStatus("APPROVED");
+                }
+            }
         }
-        if (isGoingOnline && !partner.isZoneVerified()) { throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Your delivery zone location request is pending Super Admin approval. You cannot receive deliveries until approved."); }
         if (!isGoingOnline) {
             var activeAssignment = deliveryAssignmentRepository.findFirstByDeliveryPartnerIdAndStatusIn(
                     partner.getId(),
@@ -380,6 +388,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                     onlineSessionRepository.save(session);
                 }
             }
+        }
+
+        if (isGoingOnline) {
+            assignPendingOrders();
         }
 
         return new AvailabilityResponseDto(partner.isOnline());
@@ -662,6 +674,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         java.time.Instant offerCutoff = java.time.Instant.now().minusSeconds(120);
         List<UUID> busyPartnerIds = deliveryAssignmentRepository.findAll().stream()
                 .filter(a -> {
+                    // Do not mark partner busy because of an assignment for THIS SAME ORDER
+                    if (a.getOrderId() != null && a.getOrderId().equals(orderId)) {
+                        return false;
+                    }
                     if (a.getStatus() == DeliveryAssignmentStatus.DELIVERED
                             || a.getStatus() == DeliveryAssignmentStatus.REJECTED
                             || a.getStatus() == DeliveryAssignmentStatus.EXPIRED) {
@@ -676,8 +692,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     boolean isBusy = true;
                     if (orderStatus == OrderStatus.DELIVERED
                             || orderStatus == OrderStatus.CANCELLED
-                            || orderStatus == OrderStatus.REJECTED
-                            || orderStatus == OrderStatus.WAITING_FOR_DELIVERY_PARTNER) {
+                            || orderStatus == OrderStatus.REJECTED) {
                         isBusy = false;
                     } else if (a.getStatus() == DeliveryAssignmentStatus.OFFERED) {
                         isBusy = a.getAssignedAt() != null
@@ -870,6 +885,22 @@ public class DeliveryServiceImpl implements DeliveryService {
                     }
                 }
             }
+
+            // Fourth pass: if only previousPartnerId was available in matching zone, re-offer to them so order does not starve
+            if (selectedPartner.isEmpty() && previousPartnerId != null) {
+                for (DeliveryPartner candidate : onlineList) {
+                    if (java.util.Objects.equals(candidate.getId(), previousPartnerId)
+                            && candidate.isOnline()
+                            && candidate.getKycStatus() == KycStatus.VERIFIED
+                            && isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
+                        selectedPartner = Optional.of(candidate);
+                        selectedDistance = 2.5;
+                        log.info("Fourth pass: re-assigned previous partner {} ({}) in matching zone '{}' for order {}",
+                                candidate.getId(), candidate.getFullName(), finalOrderZoneName, orderId);
+                        break;
+                    }
+                }
+            }
         }
 
         if (selectedPartner.isEmpty()) {
@@ -918,6 +949,20 @@ public class DeliveryServiceImpl implements DeliveryService {
         DeliveryPartner partner = deliveryPartnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found."));
         partner.verifyKyc();
+        partner.setZoneVerified(true);
+        partner.setLocationApprovalStatus("APPROVED");
+        if ((partner.getZoneId() == null || partner.getZoneId().isBlank())
+                && (partner.getZoneName() == null || partner.getZoneName().isBlank())) {
+            String city = partner.getCity() != null ? partner.getCity().toLowerCase() : "";
+            if (city.contains("tumkur") || city.contains("tumakuru")) {
+                partner.setZoneId("dz-tumkur");
+                partner.setZoneName("Tumkur Zone");
+            } else {
+                partner.setZoneId("dz-bangalore");
+                partner.setZoneName("Bangalore Zone");
+            }
+        }
+        deliveryPartnerRepository.save(partner);
         log.info("Delivery partner {} KYC verified by admin {}", partnerId, adminId);
         List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
                 .findByDeliveryPartnerId(partner.getId())
@@ -1895,11 +1940,28 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     private boolean isPartnerInSameZone(DeliveryPartner partner, String orderZoneId, String orderZoneName) {
-        if (partner == null || !partner.isZoneVerified()) {
+        if (partner == null) {
+            return false;
+        }
+        if ("REJECTED".equalsIgnoreCase(partner.getLocationApprovalStatus())
+                || "SUSPENDED".equalsIgnoreCase(partner.getLocationApprovalStatus())) {
             return false;
         }
         String pZoneId = partner.getZoneId();
         String pZoneName = partner.getZoneName();
+        if ((pZoneId == null || pZoneId.isBlank()) && (pZoneName == null || pZoneName.isBlank())) {
+            // Check if partner address city resolves to a known operating zone
+            if (partner.getCity() != null && !partner.getCity().isBlank()) {
+                String city = partner.getCity().toLowerCase();
+                if (city.contains("tumkur") || city.contains("tumakuru")) {
+                    pZoneId = "dz-tumkur";
+                    pZoneName = "Tumkur Zone";
+                } else if (city.contains("bangalore") || city.contains("bengaluru")) {
+                    pZoneId = "dz-bangalore";
+                    pZoneName = "Bangalore Zone";
+                }
+            }
+        }
         if ((pZoneId == null || pZoneId.isBlank()) && (pZoneName == null || pZoneName.isBlank())) {
             // Strict zone requirement: unzoned delivery partners cannot receive orders
             return false;
