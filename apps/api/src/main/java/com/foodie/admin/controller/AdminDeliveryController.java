@@ -35,6 +35,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -56,6 +57,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 @RequestMapping({ "/api/v1/admin/delivery-partners", "/api/v1/admin/delivery", "/api/admin/delivery-partners" })
 @Tag(name = "Admin — Delivery & Fleet")
 public class AdminDeliveryController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AdminDeliveryController.class);
 
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryPartnerDocumentRepository deliveryPartnerDocumentRepository;
@@ -542,7 +545,7 @@ public class AdminDeliveryController {
             deliveryService.assignPendingOrders();
             return ResponseEntity.ok(ApiResponse.success(Map.of("updatedCount", all.size(), "maxCashLimit", newLimit)));
         }
-        return ResponseEntity.badRequest().body(ApiResponse.error(ErrorCode.BAD_REQUEST, "maxCashLimit required"));
+        return ResponseEntity.badRequest().body(ApiResponse.failure(ErrorCode.BAD_REQUEST, "maxCashLimit required"));
     }
 
     private AdminDeliveryPartnerResponseDto toAdminDto(DeliveryPartner partner) {
