@@ -78,9 +78,6 @@ public class DatabaseConstraintInitializer implements ApplicationRunner {
             jdbcTemplate.execute("ALTER TABLE \"order\" ALTER COLUMN status VARCHAR(50)");
         } catch (Exception ignored) {}
         try {
-            jdbcTemplate.update("UPDATE delivery_partner SET is_online = FALSE");
-        } catch (Exception ignored) {}
-        try {
             jdbcTemplate.update("UPDATE delivery_assignment SET status = 'EXPIRED' WHERE status IN ('OFFERED', 'ACCEPTED', 'PICKED_UP')");
         } catch (Exception ignored) {}
         try {
