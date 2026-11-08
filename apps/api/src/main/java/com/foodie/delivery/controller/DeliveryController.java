@@ -273,4 +273,25 @@ public class DeliveryController {
             @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.getDeliveryPartnerReviews(principal.userId())));
     }
+
+    @PostMapping("/assignments/{id}/collect-online-payment")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Generate Cashfree payment QR for COD order collection")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto>> collectOnlinePayment(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                deliveryService.initiateCodOnlinePayment(principal.userId(), id)));
+    }
+
+    @PostMapping("/assignments/{id}/verify-online-payment")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Verify Cashfree online payment for COD order collection")
+    public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto>> verifyOnlinePayment(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id,
+            @RequestParam(required = false) String cfOrderId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                deliveryService.verifyCodOnlinePayment(principal.userId(), id, cfOrderId)));
+    }
 }

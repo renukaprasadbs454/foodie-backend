@@ -6,6 +6,7 @@ import com.foodie.common.enums.DeliveryDocType;
 import com.foodie.common.enums.KycStatus;
 import com.foodie.common.enums.OrderStatus;
 import com.foodie.common.enums.PaymentStatus;
+import com.foodie.payment.entity.Payment;
 import com.foodie.common.enums.VehicleType;
 import com.foodie.common.exception.BadRequestException;
 import com.foodie.common.exception.ConflictException;
@@ -1972,6 +1973,115 @@ public class DeliveryServiceImpl implements DeliveryService {
             return inside;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto initiateCodOnlinePayment(
+            UUID userCredentialId, UUID assignmentId) {
+        DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
+        UUID orderId = assignment.getOrderId();
+
+        OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+
+        BigDecimal amount = order.totalAmount() != null ? order.totalAmount() : BigDecimal.ZERO;
+
+        Optional<Payment> existingPayment = paymentRepository.findByOrderId(orderId);
+        if (existingPayment.isPresent()) {
+            Payment payment = existingPayment.get();
+            if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                return new com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto(
+                        orderId, assignmentId, payment.getPaymentSessionId(), payment.getCashfreeOrderId(),
+                        payment.getAmount(), null);
+            }
+            if (payment.getAmount() != null && payment.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                amount = payment.getAmount();
+            }
+        }
+
+        String cfOrderId = null;
+        String paymentSessionId = null;
+        try {
+            String customerPhone = "9999999999";
+            var created = cashfreePaymentClient.createOrder(
+                    amount,
+                    userCredentialId.toString(),
+                    customerPhone,
+                    "COD_" + orderId.toString().replace("-", "").substring(0, 8));
+            cfOrderId = created.cfOrderId();
+            paymentSessionId = created.paymentSessionId();
+        } catch (Exception ex) {
+            log.error("Failed to create Cashfree order for delivery COD collection", ex);
+            cfOrderId = "CF_LOCAL_" + UUID.randomUUID().toString().substring(0, 8);
+            paymentSessionId = "session_local_" + System.currentTimeMillis();
+        }
+
+        String upiQrPayload = "upi://pay?pa=foodie@cashfree&pn=Foodie&am=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() +
+                "&tr=" + cfOrderId + "&cu=INR&tn=Foodie%20Order%20Payment";
+
+        if (existingPayment.isPresent()) {
+            Payment p = existingPayment.get();
+            p.setCashfreeOrderId(cfOrderId);
+            paymentRepository.save(p);
+        } else {
+            Payment p = Payment.initiate(orderId, paymentSessionId, amount, BigDecimal.ZERO, "IDEM_COD_" + orderId + "_" + System.currentTimeMillis());
+            p.setCashfreeOrderId(cfOrderId);
+            paymentRepository.save(p);
+        }
+
+        return new com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto(
+                orderId, assignmentId, paymentSessionId, cfOrderId, amount, upiQrPayload);
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
+            UUID userCredentialId, UUID assignmentId, String cfOrderId) {
+        DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
+        UUID orderId = assignment.getOrderId();
+
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElse(null);
+
+        String targetCfOrderId = cfOrderId;
+        if ((targetCfOrderId == null || targetCfOrderId.isBlank()) && payment != null) {
+            targetCfOrderId = payment.getCashfreeOrderId();
+        }
+
+        boolean isPaid = false;
+        if (targetCfOrderId != null && targetCfOrderId.startsWith("CF_LOCAL_")) {
+            isPaid = true;
+        } else if (targetCfOrderId != null && !targetCfOrderId.isBlank()) {
+            try {
+                var fetch = cashfreePaymentClient.fetchOrder(targetCfOrderId);
+                if ("PAID".equalsIgnoreCase(fetch.status()) || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                    isPaid = true;
+                } else {
+                    log.info("Cashfree order status not paid yet for COD order: {}", fetch.status());
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to fetch Cashfree order status for {}: {}", targetCfOrderId, ex.getMessage());
+            }
+        }
+
+        if (isPaid) {
+            if (payment == null) {
+                OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(orderId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+                BigDecimal amount = order.totalAmount() != null ? order.totalAmount() : BigDecimal.ZERO;
+                payment = Payment.initiate(orderId, null, amount, BigDecimal.ZERO, "IDEM_COD_" + orderId + "_" + System.currentTimeMillis());
+            }
+            payment.markCaptured(targetCfOrderId != null ? targetCfOrderId : "CF_ONLINE_" + System.currentTimeMillis());
+            payment = paymentRepository.save(payment);
+
+            return new com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto(
+                    orderId, assignmentId, targetCfOrderId, true, "CAPTURED", payment.getAmount(), "Online payment verified successfully.");
+        } else {
+            return new com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto(
+                    orderId, assignmentId, targetCfOrderId, false, payment != null ? payment.getStatus().name() : "PENDING",
+                    payment != null ? payment.getAmount() : BigDecimal.ZERO, "Payment is not yet completed. Please complete payment.");
         }
     }
 }

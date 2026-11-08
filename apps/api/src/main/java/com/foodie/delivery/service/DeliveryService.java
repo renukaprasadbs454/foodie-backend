@@ -95,4 +95,10 @@ public interface DeliveryService {
                 Double latitude, Double longitude, String zoneId);
 
         List<com.foodie.admin.dto.LocationZoneDto> getActiveDeliveryZones();
+
+        com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto initiateCodOnlinePayment(
+                UUID userCredentialId, UUID assignmentId);
+
+        com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
+                UUID userCredentialId, UUID assignmentId, String cfOrderId);
 }
