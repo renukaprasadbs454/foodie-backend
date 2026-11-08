@@ -36,7 +36,10 @@ public class DeliveryMapper {
                                 partner.getLongitude(),
                                 partner.getZoneId(),
                                 partner.getZoneName(),
-                                partner.isZoneVerified(), partner.getLocationApprovalStatus() != null && !"NONE".equalsIgnoreCase(partner.getLocationApprovalStatus()) ? partner.getLocationApprovalStatus() : (partner.isZoneVerified() ? "APPROVED" : "PENDING"));
+                                partner.isZoneVerified(),
+                                partner.getLocationApprovalStatus() != null && !"NONE".equalsIgnoreCase(partner.getLocationApprovalStatus()) ? partner.getLocationApprovalStatus() : (partner.isZoneVerified() ? "APPROVED" : "PENDING"),
+                                partner.getMaxCashInHandLimit(),
+                                partner.isCashLimitExceeded());
         }
 
         

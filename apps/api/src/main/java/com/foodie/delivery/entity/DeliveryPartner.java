@@ -59,7 +59,7 @@ public class DeliveryPartner extends BaseEntity {
     private java.math.BigDecimal cashInHand = java.math.BigDecimal.ZERO;
 
     @Column(name = "max_cash_in_hand_limit", nullable = false, precision = 10, scale = 2)
-    private java.math.BigDecimal maxCashInHandLimit = new java.math.BigDecimal("50000.00");
+    private java.math.BigDecimal maxCashInHandLimit = new java.math.BigDecimal("2000.00");
 
     @Column(name = "account_holder_name", length = 100)
     private String accountHolderName;
@@ -107,7 +107,7 @@ public class DeliveryPartner extends BaseEntity {
         partner.kycStatus = KycStatus.PENDING;
         partner.online = false;
         partner.cashInHand = java.math.BigDecimal.ZERO;
-        partner.maxCashInHandLimit = new java.math.BigDecimal("50000.00");
+        partner.maxCashInHandLimit = new java.math.BigDecimal("2000.00");
         return partner;
     }
 
@@ -204,10 +204,7 @@ public class DeliveryPartner extends BaseEntity {
         if (this.cashInHand == null) {
             this.cashInHand = java.math.BigDecimal.ZERO;
         }
-        java.math.BigDecimal limit = this.maxCashInHandLimit;
-        if (limit == null || limit.compareTo(new java.math.BigDecimal("2000.00")) <= 0) {
-            limit = new java.math.BigDecimal("50000.00");
-        }
+        java.math.BigDecimal limit = this.maxCashInHandLimit != null ? this.maxCashInHandLimit : new java.math.BigDecimal("2000.00");
         return this.cashInHand.compareTo(limit) >= 0;
     }
 

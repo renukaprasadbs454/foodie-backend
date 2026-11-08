@@ -482,6 +482,51 @@ public class AdminDeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.rejectCashDeposit(id, principal.userId(), reason)));
     }
 
+    @PatchMapping({"/delivery-partners/{id}/max-cash-limit", "/{id}/max-cash-limit"})
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update maximum allowed COD cash in hand limit for a delivery partner")
+    public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> updateMaxCashLimit(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body) {
+        DeliveryPartner partner = deliveryPartnerRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found: " + id));
+
+        Object limitVal = body.get("maxCashLimit");
+        if (limitVal == null) {
+            limitVal = body.get("maxCashInHandLimit");
+        }
+        if (limitVal != null) {
+            BigDecimal newLimit = new BigDecimal(limitVal.toString());
+            partner.setMaxCashInHandLimit(newLimit);
+            partner = deliveryPartnerRepository.save(partner);
+            log.info("Admin updated max COD cash limit for partner {} to ₹{}", partner.getId(), newLimit);
+            // If new limit is higher and unblocks partner, assign any waiting orders immediately
+            deliveryService.assignPendingOrders();
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
+    }
+
+    @PostMapping({"/delivery-partners/max-cash-limit/global", "/max-cash-limit/global"})
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Set global maximum COD cash limit for all delivery partners")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateGlobalMaxCashLimit(
+            @RequestBody Map<String, Object> body) {
+        Object limitVal = body.get("maxCashLimit");
+        if (limitVal != null) {
+            BigDecimal newLimit = new BigDecimal(limitVal.toString());
+            List<DeliveryPartner> all = deliveryPartnerRepository.findAll();
+            for (DeliveryPartner p : all) {
+                p.setMaxCashInHandLimit(newLimit);
+            }
+            deliveryPartnerRepository.saveAll(all);
+            log.info("Admin updated global max COD limit to ₹{} for {} partners", newLimit, all.size());
+            deliveryService.assignPendingOrders();
+            return ResponseEntity.ok(ApiResponse.success(Map.of("updatedCount", all.size(), "maxCashLimit", newLimit)));
+        }
+        return ResponseEntity.badRequest().body(ApiResponse.error(ErrorCode.BAD_REQUEST, "maxCashLimit required"));
+    }
+
     private AdminDeliveryPartnerResponseDto toAdminDto(DeliveryPartner partner) {
         UserCredential cred = userCredentialRepository.findById(partner.getUserCredentialId()).orElse(null);
         String phone = (cred != null && cred.getPhoneNumber() != null) ? cred.getPhoneNumber() : "+91 98765 43210";

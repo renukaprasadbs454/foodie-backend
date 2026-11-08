@@ -90,6 +90,15 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
         apply(order, status, null);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<UUID> findOrdersWaitingForDeliveryPartner() {
+        return orderRepository.findAll().stream()
+                .filter(o -> o.getStatus() == OrderStatus.WAITING_FOR_DELIVERY_PARTNER || o.getStatus() == OrderStatus.READY_FOR_PICKUP)
+                .map(Order::getId)
+                .toList();
+    }
+
     private void apply(Order order, OrderStatus target, String reason) {
         OrderStateMachine.Decision decision = OrderStateMachine.evaluate(order.getStatus(), target,
                 OrderActorType.SYSTEM);

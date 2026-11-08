@@ -20,6 +20,8 @@ public interface OrderDeliveryPort {
 
     void updateStatus(UUID orderId, OrderStatus status);
 
+    java.util.List<UUID> findOrdersWaitingForDeliveryPartner();
+
     record OrderDeliverySnapshot(
             UUID orderId,
             String orderNumber,

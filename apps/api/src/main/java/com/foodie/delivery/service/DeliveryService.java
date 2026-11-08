@@ -52,6 +52,8 @@ public interface DeliveryService {
 
         void createAssignmentForOrder(UUID orderId);
 
+        void assignPendingOrders();
+
         DeliveryProfileResponseDto verifyKyc(UUID partnerId, UUID adminId);
 
         boolean verifyFace(UUID userCredentialId, MultipartFile file);

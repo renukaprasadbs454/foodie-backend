@@ -24,7 +24,36 @@ public record DeliveryProfileResponseDto(
         String zoneId,
         String zoneName,
         boolean zoneVerified,
-        String locationApprovalStatus) {
+        String locationApprovalStatus,
+        java.math.BigDecimal maxCashInHandLimit,
+        boolean isCashLimitExceeded) {
+
+    public DeliveryProfileResponseDto(
+            UUID partnerId,
+            String fullName,
+            String phoneNumber,
+            String vehicleType,
+            String vehicleNumber,
+            String addressLine1,
+            String addressLine2,
+            String city,
+            String state,
+            String pincode,
+            String kycStatus,
+            boolean isOnline,
+            String profileImageUrl,
+            List<DeliveryDocumentResponseDto> documents,
+            java.math.BigDecimal cashInHand,
+            Double latitude,
+            Double longitude,
+            String zoneId,
+            String zoneName,
+            boolean zoneVerified,
+            String locationApprovalStatus) {
+        this(partnerId, fullName, phoneNumber, vehicleType, vehicleNumber, addressLine1, addressLine2, city, state,
+                pincode, kycStatus, isOnline, profileImageUrl, documents, cashInHand, latitude, longitude, zoneId,
+                zoneName, zoneVerified, locationApprovalStatus, new java.math.BigDecimal("2000.00"), false);
+    }
 
     public DeliveryProfileResponseDto(
             UUID partnerId,

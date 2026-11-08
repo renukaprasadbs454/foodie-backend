@@ -1377,6 +1377,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             deposit.getDeliveryPartner().deductCash(deposit.getAmount());
             deliveryPartnerRepository.save(deposit.getDeliveryPartner());
             deposit = deliveryCashDepositRepository.save(deposit);
+            assignPendingOrders();
         }
 
         return new com.foodie.delivery.dto.response.CashDepositResponseDto(
@@ -1417,6 +1418,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         deposit.getDeliveryPartner().deductCash(deposit.getAmount());
         deliveryPartnerRepository.save(deposit.getDeliveryPartner());
         deliveryCashDepositRepository.save(deposit);
+        assignPendingOrders();
 
         return new com.foodie.delivery.dto.response.CashDepositResponseDto(
                 deposit.getId(),
@@ -2147,6 +2149,25 @@ public class DeliveryServiceImpl implements DeliveryService {
             return new com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto(
                     orderId, assignmentId, targetCfOrderId, false, payment != null ? payment.getStatus().name() : "PENDING",
                     payment != null ? payment.getAmount() : BigDecimal.ZERO, "Payment is not yet completed. Please complete payment.");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void assignPendingOrders() {
+        if (orderDeliveryPort == null) return;
+        try {
+            var pendingOrderIds = orderDeliveryPort.findOrdersWaitingForDeliveryPartner();
+            log.info("assignPendingOrders: checking {} pending orders waiting for delivery partner", pendingOrderIds.size());
+            for (UUID orderId : pendingOrderIds) {
+                try {
+                    createAssignmentForOrder(orderId);
+                } catch (Exception ex) {
+                    log.warn("Auto-assignment failed for pending order {}: {}", orderId, ex.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error running assignPendingOrders: {}", e.getMessage());
         }
     }
 }
