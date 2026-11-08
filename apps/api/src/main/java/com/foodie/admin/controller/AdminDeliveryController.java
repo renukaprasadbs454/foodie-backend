@@ -53,7 +53,7 @@ import com.foodie.admin.service.AdminZoneService;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
-@RequestMapping({"/api/v1/admin/delivery-partners", "/api/v1/admin/delivery", "/api/admin/delivery-partners"})
+@RequestMapping({ "/api/v1/admin/delivery-partners", "/api/v1/admin/delivery", "/api/admin/delivery-partners" })
 @Tag(name = "Admin — Delivery & Fleet")
 public class AdminDeliveryController {
 
@@ -88,7 +88,8 @@ public class AdminDeliveryController {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.admin.security.AdminAccess adminAccess;
 
-    private void assertPartnerInZone(org.springframework.security.core.Authentication authentication, DeliveryPartner partner, String activeZoneHeader) {
+    private void assertPartnerInZone(org.springframework.security.core.Authentication authentication,
+            DeliveryPartner partner, String activeZoneHeader) {
         String effectiveZone = activeZoneHeader;
         if (adminAccess != null && authentication != null && authentication.isAuthenticated()
                 && authentication.getPrincipal() instanceof com.foodie.security.principal.AuthPrincipal) {
@@ -107,11 +108,13 @@ public class AdminDeliveryController {
             inZone = true;
         } else if (partner.getZoneName() != null && partner.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
             inZone = true;
-        } else if (adminZoneService.isLocationInZone(partner.getLatitude(), partner.getLongitude(), partner.getCity(), zone)) {
+        } else if (adminZoneService.isLocationInZone(partner.getLatitude(), partner.getLongitude(), partner.getCity(),
+                zone)) {
             inZone = true;
         }
         if (!inZone) {
-            throw new com.foodie.common.exception.ForbiddenException("Delivery partner is outside your assigned operating zone: " + zone.getZoneName());
+            throw new com.foodie.common.exception.ForbiddenException(
+                    "Delivery partner is outside your assigned operating zone: " + zone.getZoneName());
         }
     }
 
@@ -136,7 +139,8 @@ public class AdminDeliveryController {
                 ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
                 : requestedZoneId;
 
-        boolean isOnlineQuery = status != null && (status.equalsIgnoreCase("online") || status.equalsIgnoreCase("available"));
+        boolean isOnlineQuery = status != null
+                && (status.equalsIgnoreCase("online") || status.equalsIgnoreCase("available"));
         if (isOnlineQuery) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
             if (onlineList.isEmpty()) {
@@ -157,7 +161,8 @@ public class AdminDeliveryController {
                 String cleanSearch = search.trim().toLowerCase();
                 onlineList = onlineList.stream()
                         .filter(p -> (p.getFullName() != null && p.getFullName().toLowerCase().contains(cleanSearch))
-                                || (p.getVehicleNumber() != null && p.getVehicleNumber().toLowerCase().contains(cleanSearch)))
+                                || (p.getVehicleNumber() != null
+                                        && p.getVehicleNumber().toLowerCase().contains(cleanSearch)))
                         .collect(Collectors.toList());
             }
 
@@ -171,7 +176,8 @@ public class AdminDeliveryController {
                             if (p.getZoneName() != null && p.getZoneName().equalsIgnoreCase(zone.getZoneName())) {
                                 return true;
                             }
-                            return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(), zone);
+                            return adminZoneService.isLocationInZone(p.getLatitude(), p.getLongitude(), p.getCity(),
+                                    zone);
                         })
                         .collect(Collectors.toList());
             }
@@ -184,8 +190,7 @@ public class AdminDeliveryController {
                     0,
                     Math.max(1, size),
                     items.size(),
-                    1
-            );
+                    1);
             return ResponseEntity.ok(ApiResponse.success(new AdminDeliveryPartnersPageDto(items, pagination)));
         }
 
@@ -200,9 +205,11 @@ public class AdminDeliveryController {
         String searchFilter = (search != null && !search.trim().isBlank())
                 ? "%" + search.trim().toLowerCase() + "%"
                 : null;
-        PageRequest pageRequest = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageRequest = PageRequest.of(Math.max(0, page), Math.max(1, size),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        Page<DeliveryPartner> partnerPage = deliveryPartnerRepository.searchDeliveryPartners(kycFilter, searchFilter, pageRequest);
+        Page<DeliveryPartner> partnerPage = deliveryPartnerRepository.searchDeliveryPartners(kycFilter, searchFilter,
+                pageRequest);
 
         List<DeliveryPartner> partnerList = partnerPage.getContent();
         if (activeZoneId != null && !activeZoneId.equalsIgnoreCase("ALL")) {
@@ -228,8 +235,7 @@ public class AdminDeliveryController {
                 partnerPage.getNumber(),
                 partnerPage.getSize(),
                 items.size(),
-                partnerPage.getTotalPages()
-        );
+                partnerPage.getTotalPages());
 
         return ResponseEntity.ok(ApiResponse.success(new AdminDeliveryPartnersPageDto(items, pagination)));
     }
@@ -240,8 +246,7 @@ public class AdminDeliveryController {
     public ResponseEntity<ApiResponse<AdminDeliveryStatsDto>> getStats(
             org.springframework.security.core.Authentication authentication,
             @RequestHeader(value = "X-Active-Zone-Id", required = false) String activeZoneHeader,
-            @RequestParam(value = "zoneId", required = false) String zoneIdParam
-    ) {
+            @RequestParam(value = "zoneId", required = false) String zoneIdParam) {
         String requestedZoneId = (activeZoneHeader != null && !activeZoneHeader.isBlank())
                 ? activeZoneHeader.trim()
                 : (zoneIdParam != null && !zoneIdParam.isBlank() ? zoneIdParam.trim() : null);
@@ -268,7 +273,8 @@ public class AdminDeliveryController {
         }
         long totalFleet = all.size();
         long onlineCount = all.stream().filter(DeliveryPartner::isOnline).count();
-        long pendingKyc = all.stream().filter(p -> p.getKycStatus() == KycStatus.PENDING || p.getKycStatus() == KycStatus.SUSPENDED).count();
+        long pendingKyc = all.stream()
+                .filter(p -> p.getKycStatus() == KycStatus.PENDING || p.getKycStatus() == KycStatus.SUSPENDED).count();
         long verified = all.stream().filter(p -> p.getKycStatus() == KycStatus.VERIFIED).count();
         long rejected = all.stream().filter(p -> p.getKycStatus() == KycStatus.REJECTED).count();
         BigDecimal totalCash = all.stream()
@@ -304,7 +310,9 @@ public class AdminDeliveryController {
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
-    @RequestMapping(value = {"/{id}/kyc-approve", "/{id}/approve-kyc"}, method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST})
+    @RequestMapping(value = { "/{id}/kyc-approve", "/{id}/approve-kyc" }, method = {
+            org.springframework.web.bind.annotation.RequestMethod.PATCH,
+            org.springframework.web.bind.annotation.RequestMethod.POST })
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Approve delivery partner KYC")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> approveKyc(
@@ -341,7 +349,8 @@ public class AdminDeliveryController {
         return suspendPartner(null, principal, null, partnerId, body);
     }
 
-    @RequestMapping(value = {"/{id}/suspend"}, method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST})
+    @RequestMapping(value = { "/{id}/suspend" }, method = { org.springframework.web.bind.annotation.RequestMethod.PATCH,
+            org.springframework.web.bind.annotation.RequestMethod.POST })
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Suspend delivery partner account (set KYC status to SUSPENDED)")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> suspendPartner(
@@ -371,7 +380,9 @@ public class AdminDeliveryController {
         return rejectKyc(null, principal, null, partnerId, body);
     }
 
-    @RequestMapping(value = {"/{id}/kyc-reject", "/{id}/reject-kyc"}, method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.POST})
+    @RequestMapping(value = { "/{id}/kyc-reject", "/{id}/reject-kyc" }, method = {
+            org.springframework.web.bind.annotation.RequestMethod.PATCH,
+            org.springframework.web.bind.annotation.RequestMethod.POST })
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Reject delivery partner KYC")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> rejectKyc(
@@ -388,7 +399,8 @@ public class AdminDeliveryController {
                     "Cannot reject KYC: delivery partner has not completed KYC onboarding requirements.");
         }
         assertPartnerInZone(authentication, partner, activeZoneHeader);
-        String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Documents incomplete or invalid.";
+        String reason = (body != null && body.containsKey("reason")) ? body.get("reason")
+                : "Documents incomplete or invalid.";
         partner.rejectKyc(reason);
         deliveryPartnerRepository.save(partner);
         UUID adminUserId = resolveAdminUserId(principal != null ? principal.userId() : null);
@@ -411,9 +423,12 @@ public class AdminDeliveryController {
             return false;
         }
         List<DeliveryPartnerDocument> docs = deliveryPartnerDocumentRepository.findByDeliveryPartnerId(partner.getId());
-        boolean hasIdentity = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.IDENTITY && d.getS3Key() != null && !d.getS3Key().isBlank());
-        boolean hasLicense = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.LICENSE && d.getS3Key() != null && !d.getS3Key().isBlank());
-        boolean hasVehicleRc = docs.stream().anyMatch(d -> d.getDocType() == DeliveryDocType.VEHICLE_RC && d.getS3Key() != null && !d.getS3Key().isBlank());
+        boolean hasIdentity = docs.stream().anyMatch(
+                d -> d.getDocType() == DeliveryDocType.IDENTITY && d.getS3Key() != null && !d.getS3Key().isBlank());
+        boolean hasLicense = docs.stream().anyMatch(
+                d -> d.getDocType() == DeliveryDocType.LICENSE && d.getS3Key() != null && !d.getS3Key().isBlank());
+        boolean hasVehicleRc = docs.stream().anyMatch(
+                d -> d.getDocType() == DeliveryDocType.VEHICLE_RC && d.getS3Key() != null && !d.getS3Key().isBlank());
         return hasIdentity && hasLicense && hasVehicleRc;
     }
 
@@ -423,7 +438,8 @@ public class AdminDeliveryController {
         }
         return adminUserRepository.findByUserCredentialId(userCredentialId)
                 .map(com.foodie.admin.entity.AdminUser::getId)
-                .orElseGet(() -> adminUserRepository.findAll().stream().findFirst().map(com.foodie.admin.entity.AdminUser::getId).orElse(null));
+                .orElseGet(() -> adminUserRepository.findAll().stream().findFirst()
+                        .map(com.foodie.admin.entity.AdminUser::getId).orElse(null));
     }
 
     @GetMapping("/live-locations")
@@ -479,10 +495,11 @@ public class AdminDeliveryController {
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id,
             @RequestParam(required = false, defaultValue = "Deposit verification failed.") String reason) {
-        return ResponseEntity.ok(ApiResponse.success(deliveryService.rejectCashDeposit(id, principal.userId(), reason)));
+        return ResponseEntity
+                .ok(ApiResponse.success(deliveryService.rejectCashDeposit(id, principal.userId(), reason)));
     }
 
-    @PatchMapping({"/delivery-partners/{id}/max-cash-limit", "/{id}/max-cash-limit"})
+    @PatchMapping({ "/delivery-partners/{id}/max-cash-limit", "/{id}/max-cash-limit" })
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Update maximum allowed COD cash in hand limit for a delivery partner")
     public ResponseEntity<ApiResponse<AdminDeliveryPartnerResponseDto>> updateMaxCashLimit(
@@ -500,14 +517,15 @@ public class AdminDeliveryController {
             partner.setMaxCashInHandLimit(newLimit);
             partner = deliveryPartnerRepository.save(partner);
             log.info("Admin updated max COD cash limit for partner {} to ₹{}", partner.getId(), newLimit);
-            // If new limit is higher and unblocks partner, assign any waiting orders immediately
+            // If new limit is higher and unblocks partner, assign any waiting orders
+            // immediately
             deliveryService.assignPendingOrders();
         }
 
         return ResponseEntity.ok(ApiResponse.success(toAdminDto(partner)));
     }
 
-    @PostMapping({"/delivery-partners/max-cash-limit/global", "/max-cash-limit/global"})
+    @PostMapping({ "/delivery-partners/max-cash-limit/global", "/max-cash-limit/global" })
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Set global maximum COD cash limit for all delivery partners")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateGlobalMaxCashLimit(
@@ -530,7 +548,8 @@ public class AdminDeliveryController {
     private AdminDeliveryPartnerResponseDto toAdminDto(DeliveryPartner partner) {
         UserCredential cred = userCredentialRepository.findById(partner.getUserCredentialId()).orElse(null);
         String phone = (cred != null && cred.getPhoneNumber() != null) ? cred.getPhoneNumber() : "+91 98765 43210";
-        String email = (cred != null && cred.getEmail() != null) ? cred.getEmail() : partner.getFullName().toLowerCase().replace(" ", ".") + "@foodie.local";
+        String email = (cred != null && cred.getEmail() != null) ? cred.getEmail()
+                : partner.getFullName().toLowerCase().replace(" ", ".") + "@foodie.local";
 
         List<DeliveryDocumentResponseDto> docs = deliveryPartnerDocumentRepository
                 .findByDeliveryPartnerId(partner.getId())
@@ -562,18 +581,20 @@ public class AdminDeliveryController {
                 completedDeliveries,
                 zone,
                 docs,
-                partner.getCreatedAt()
-        );
+                partner.getCreatedAt());
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private void seedPartnerDocuments(DeliveryPartner partner, boolean verified) {
-        DeliveryDocType[] requiredTypes = { DeliveryDocType.IDENTITY, DeliveryDocType.LICENSE, DeliveryDocType.VEHICLE_RC };
-        UUID adminId = adminUserRepository.findAll().stream().findFirst().map(com.foodie.admin.entity.AdminUser::getId).orElse(null);
+        DeliveryDocType[] requiredTypes = { DeliveryDocType.IDENTITY, DeliveryDocType.LICENSE,
+                DeliveryDocType.VEHICLE_RC };
+        UUID adminId = adminUserRepository.findAll().stream().findFirst().map(com.foodie.admin.entity.AdminUser::getId)
+                .orElse(null);
         for (DeliveryDocType type : requiredTypes) {
-            String key = "delivery-partners/" + partner.getId() + "/documents/" + type.name() + "/sample-" + type.name().toLowerCase() + ".png";
+            String key = "delivery-partners/" + partner.getId() + "/documents/" + type.name() + "/sample-"
+                    + type.name().toLowerCase() + ".png";
             DeliveryPartnerDocument doc = deliveryPartnerDocumentRepository
                     .findByDeliveryPartnerIdAndDocType(partner.getId(), type)
                     .orElseGet(() -> deliveryPartnerDocumentRepository.save(
@@ -590,17 +611,27 @@ public class AdminDeliveryController {
         try {
             if (jdbcTemplate != null) {
                 try {
-                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"latitude\" DOUBLE PRECISION");
-                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"longitude\" DOUBLE PRECISION");
-                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_id\" VARCHAR(100)");
-                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_name\" VARCHAR(200)");
-                    jdbcTemplate.execute("ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_verified\" BOOLEAN DEFAULT FALSE");
-                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
-                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"latitude\" DOUBLE PRECISION");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"longitude\" DOUBLE PRECISION");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_id\" VARCHAR(100)");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_name\" VARCHAR(200)");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE \"delivery_partner\" ADD COLUMN IF NOT EXISTS \"zone_verified\" BOOLEAN DEFAULT FALSE");
+                    jdbcTemplate
+                            .execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
                     jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_id VARCHAR(100)");
-                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_name VARCHAR(200)");
-                    jdbcTemplate.execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_verified BOOLEAN DEFAULT FALSE");
-                } catch (Exception ignored) {}
+                    jdbcTemplate
+                            .execute("ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_name VARCHAR(200)");
+                    jdbcTemplate.execute(
+                            "ALTER TABLE delivery_partner ADD COLUMN IF NOT EXISTS zone_verified BOOLEAN DEFAULT FALSE");
+                } catch (Exception ignored) {
+                }
             }
             if (deliveryPartnerRepository.count() == 0) {
                 System.out.println("Seeding Initial Delivery Partners in Database...");
@@ -631,7 +662,8 @@ public class AdminDeliveryController {
                 dp2 = deliveryPartnerRepository.save(dp2);
                 seedPartnerDocuments(dp2, true);
 
-                // 3. Siddharth Rao (Pending KYC - Tumkur, completed zone & docs, waiting for admin approval)
+                // 3. Siddharth Rao (Pending KYC - Tumkur, completed zone & docs, waiting for
+                // admin approval)
                 UserCredential cred3 = userCredentialRepository.save(
                         UserCredential.phoneSignup("+919833344455", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
                 DeliveryPartner dp3 = DeliveryPartner.create(
@@ -641,12 +673,14 @@ public class AdminDeliveryController {
                 dp3 = deliveryPartnerRepository.save(dp3);
                 seedPartnerDocuments(dp3, false);
 
-                // 4. Rajesh Kumar (Pending KYC - Bangalore, Incomplete: No docs yet, must NOT appear in Admin)
+                // 4. Rajesh Kumar (Pending KYC - Bangalore, Incomplete: No docs yet, must NOT
+                // appear in Admin)
                 UserCredential cred4 = userCredentialRepository.save(
                         UserCredential.phoneSignup("+919844455566", com.foodie.common.enums.UserType.DELIVERY_PARTNER));
                 DeliveryPartner dp4 = DeliveryPartner.create(
                         cred4.getId(), "Rajesh Kumar", VehicleType.CYCLE, "KA-01-SC-3319");
-                dp4.updateAddress("80 Feet Rd, 4th Block Koramangala", "Koramangala", "Bangalore", "Karnataka", "560034");
+                dp4.updateAddress("80 Feet Rd, 4th Block Koramangala", "Koramangala", "Bangalore", "Karnataka",
+                        "560034");
                 dp4.verifyZone("dz-bangalore", "Bangalore Zone", 12.9352, 77.6245);
                 deliveryPartnerRepository.save(dp4);
 
