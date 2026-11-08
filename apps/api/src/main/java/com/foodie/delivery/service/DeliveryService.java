@@ -101,4 +101,7 @@ public interface DeliveryService {
 
         com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
                 UUID userCredentialId, UUID assignmentId, String cfOrderId);
+
+        com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
+                UUID userCredentialId, UUID assignmentId, String cfOrderId, boolean simulate);
 }

@@ -290,8 +290,9 @@ public class DeliveryController {
     public ResponseEntity<ApiResponse<com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto>> verifyOnlinePayment(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id,
-            @RequestParam(required = false) String cfOrderId) {
+            @RequestParam(required = false) String cfOrderId,
+            @RequestParam(required = false, defaultValue = "false") boolean simulate) {
         return ResponseEntity.ok(ApiResponse.success(
-                deliveryService.verifyCodOnlinePayment(principal.userId(), id, cfOrderId)));
+                deliveryService.verifyCodOnlinePayment(principal.userId(), id, cfOrderId, simulate)));
     }
 }

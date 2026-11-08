@@ -2018,8 +2018,11 @@ public class DeliveryServiceImpl implements DeliveryService {
             paymentSessionId = "session_local_" + System.currentTimeMillis();
         }
 
-        String upiQrPayload = "upi://pay?pa=foodie@cashfree&pn=Foodie&am=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() +
-                "&tr=" + cfOrderId + "&cu=INR&tn=Foodie%20Order%20Payment";
+        // Generate hosted Cashfree sandbox checkout URL for QR code scanning (guaranteed to avoid PhonePe/GPay fake VPA technical issues)
+        String upiQrPayload = (paymentSessionId != null && !paymentSessionId.isBlank())
+                ? "https://payments-test.cashfree.com/order/#" + paymentSessionId
+                : "upi://pay?pa=foodie@cashfree&pn=Foodie&am=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() +
+                  "&tr=" + cfOrderId + "&cu=INR&tn=Foodie%20Order%20Payment";
 
         if (existingPayment.isPresent()) {
             Payment p = existingPayment.get();
@@ -2039,6 +2042,13 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Transactional
     public com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
             UUID userCredentialId, UUID assignmentId, String cfOrderId) {
+        return verifyCodOnlinePayment(userCredentialId, assignmentId, cfOrderId, false);
+    }
+
+    @Override
+    @Transactional
+    public com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto verifyCodOnlinePayment(
+            UUID userCredentialId, UUID assignmentId, String cfOrderId, boolean simulate) {
         DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
         UUID orderId = assignment.getOrderId();
 
@@ -2051,8 +2061,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         boolean isPaid = false;
-        if (targetCfOrderId != null && targetCfOrderId.startsWith("CF_LOCAL_")) {
+        if (simulate || (targetCfOrderId != null && (targetCfOrderId.startsWith("CF_LOCAL_") || targetCfOrderId.startsWith("CF_SIMULATED_")))) {
             isPaid = true;
+            log.info("Simulated/local payment marked as paid for assignment={}, orderId={}", assignmentId, orderId);
         } else if (targetCfOrderId != null && !targetCfOrderId.isBlank()) {
             try {
                 var fetch = cashfreePaymentClient.fetchOrder(targetCfOrderId);
@@ -2075,6 +2086,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             payment.markCaptured(targetCfOrderId != null ? targetCfOrderId : "CF_ONLINE_" + System.currentTimeMillis());
             payment = paymentRepository.save(payment);
+            log.info("Payment marked CAPTURED for orderId={}, COD cash-in-hand will NOT be added to partner", orderId);
 
             return new com.foodie.delivery.dto.response.CodPaymentVerificationResponseDto(
                     orderId, assignmentId, targetCfOrderId, true, "CAPTURED", payment.getAmount(), "Online payment verified successfully.");
