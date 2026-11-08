@@ -501,19 +501,41 @@ public class DeliveryServiceImpl implements DeliveryService {
         // Update Cash in Hand if COD payment (not captured online)
         OrderDeliveryPort.OrderDeliverySnapshot orderForCash = orderDeliveryPort.findByOrderId(assignment.getOrderId())
                 .orElse(null);
-        Optional<com.foodie.payment.entity.Payment> paymentOpt = paymentRepository
-                .findByOrderId(assignment.getOrderId());
+        Optional<com.foodie.payment.entity.Payment> paymentOpt = paymentRepository != null
+                ? paymentRepository.findByOrderId(assignment.getOrderId())
+                : Optional.empty();
         BigDecimal cashAmountToCollect = BigDecimal.ZERO;
+
+        boolean isOnlinePayment = "ONLINE".equalsIgnoreCase(request != null ? request.collectionMethod() : null);
 
         if (paymentOpt.isPresent()) {
             com.foodie.payment.entity.Payment payment = paymentOpt.get();
             if (payment.getStatus() != PaymentStatus.CAPTURED && payment.getAmount() != null) {
-                cashAmountToCollect = payment.getAmount();
+                // If payment was verified via Cashfree or online, check before treating as cash!
+                if (payment.getCashfreeOrderId() != null && !payment.getCashfreeOrderId().isBlank()) {
+                    try {
+                        var fetch = cashfreePaymentClient.fetchOrder(payment.getCashfreeOrderId());
+                        if ("PAID".equalsIgnoreCase(fetch.status()) || "SUCCESS".equalsIgnoreCase(fetch.status())) {
+                            payment.markCaptured(payment.getCashfreeOrderId());
+                            paymentRepository.save(payment);
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (payment.getStatus() == PaymentStatus.CAPTURED || isOnlinePayment) {
+                    cashAmountToCollect = BigDecimal.ZERO;
+                } else {
+                    cashAmountToCollect = payment.getAmount();
+                }
             } else if (payment.getStatus() == PaymentStatus.CAPTURED) {
                 cashAmountToCollect = BigDecimal.ZERO;
             }
-        } else if (orderForCash != null && orderForCash.totalAmount() != null) {
+        } else if (!isOnlinePayment && orderForCash != null && orderForCash.totalAmount() != null) {
             cashAmountToCollect = orderForCash.totalAmount();
+        }
+
+        if (isOnlinePayment) {
+            cashAmountToCollect = BigDecimal.ZERO;
+            log.info("Order {} delivery completed with ONLINE collectionMethod — no cash added to partner COD balance", assignment.getOrderId());
         }
 
         if (cashAmountToCollect != null && cashAmountToCollect.compareTo(BigDecimal.ZERO) > 0) {
@@ -744,6 +766,11 @@ public class DeliveryServiceImpl implements DeliveryService {
         log.info("createAssignmentForOrder for order {}: restaurant='{}', zoneId='{}', zoneName='{}'",
                 orderId, pickup.restaurantName(), finalOrderZoneId, finalOrderZoneName);
 
+        // Check if order is prepaid online (prepaid orders do not collect cash, cash limit does not apply)
+        boolean isPrepaid = paymentRepository != null && paymentRepository.findByOrderId(orderId)
+                .map(p -> p.getStatus() == PaymentStatus.CAPTURED)
+                .orElse(false);
+
         // Get partner ID that previously was offered this assignment
         UUID previousPartnerId = existingAssignmentOpt.map(a -> a.getDeliveryPartner().getId()).orElse(null);
 
@@ -758,7 +785,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 if (candidate.isPresent()
                         && candidate.get().isOnline()
                         && candidate.get().getKycStatus() == KycStatus.VERIFIED
-                        && !candidate.get().isCashLimitExceeded()) {
+                        && (isPrepaid || !candidate.get().isCashLimitExceeded())) {
                     DeliveryPartner p = candidate.get();
                     // STRICT REQUIREMENT: Only assign if delivery partner selected zone matches restaurant zone!
                     if (!isPartnerInSameZone(p, finalOrderZoneId, finalOrderZoneName)) {
@@ -782,8 +809,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (selectedPartner.isEmpty()) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
             log.info(
-                    "createAssignmentForOrder candidate search for order {}: targetZone='{}'/'{}', busyPartnerIds={}, previousPartnerId={}, onlineList={}",
-                    orderId, finalOrderZoneId, finalOrderZoneName, busyPartnerIds, previousPartnerId,
+                    "createAssignmentForOrder candidate search for order {}: targetZone='{}'/'{}', busyPartnerIds={}, previousPartnerId={}, isPrepaid={}, onlineList={}",
+                    orderId, finalOrderZoneId, finalOrderZoneName, busyPartnerIds, previousPartnerId, isPrepaid,
                     onlineList.stream().map(p -> p.getId() + ":" + p.getFullName() + ":zone=" + p.getZoneId() + ":kyc=" + p.getKycStatus()
                             + ":cashExceeded=" + p.isCashLimitExceeded()).toList());
 
@@ -791,7 +818,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             for (DeliveryPartner candidate : onlineList) {
                 if (candidate.isOnline()
                         && candidate.getKycStatus() == KycStatus.VERIFIED
-                        && !candidate.isCashLimitExceeded()
+                        && (isPrepaid || !candidate.isCashLimitExceeded())
                         && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))
                         && (previousPartnerId == null || !previousPartnerId.equals(candidate.getId()))) {
                     // STRICT REQUIREMENT: Partner must have selected the SAME zone in KYC!
@@ -815,7 +842,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     if (java.util.Objects.equals(candidate.getId(), previousPartnerId)
                             && candidate.isOnline()
                             && candidate.getKycStatus() == KycStatus.VERIFIED
-                            && !candidate.isCashLimitExceeded()
+                            && (isPrepaid || !candidate.isCashLimitExceeded())
                             && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))) {
                         if (isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
                             selectedPartner = Optional.of(candidate);
@@ -824,6 +851,22 @@ public class DeliveryServiceImpl implements DeliveryService {
                                     orderId, candidate.getId(), candidate.getFullName(), finalOrderZoneName);
                             break;
                         }
+                    }
+                }
+            }
+
+            // Third pass: fallback to any online verified non-busy partner in matching zone (do not starve orders)
+            if (selectedPartner.isEmpty()) {
+                for (DeliveryPartner candidate : onlineList) {
+                    if (candidate.isOnline()
+                            && candidate.getKycStatus() == KycStatus.VERIFIED
+                            && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))
+                            && isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
+                        selectedPartner = Optional.of(candidate);
+                        selectedDistance = 2.5;
+                        log.info("Fallback assigned partner {} ({}) in matching zone '{}' for order {}",
+                                candidate.getId(), candidate.getFullName(), finalOrderZoneName, orderId);
+                        break;
                     }
                 }
             }
@@ -2003,6 +2046,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         String cfOrderId = null;
         String paymentSessionId = null;
+        com.foodie.infrastructure.cashfree.CashfreePaymentClient.CashfreeQrResult qrResult = null;
         try {
             String customerPhone = "9999999999";
             var created = cashfreePaymentClient.createOrder(
@@ -2012,17 +2056,26 @@ public class DeliveryServiceImpl implements DeliveryService {
                     "COD_" + orderId.toString().replace("-", "").substring(0, 8));
             cfOrderId = created.cfOrderId();
             paymentSessionId = created.paymentSessionId();
+            if (paymentSessionId != null && !paymentSessionId.isBlank()) {
+                qrResult = cashfreePaymentClient.createUpiQr(paymentSessionId);
+            }
         } catch (Exception ex) {
             log.error("Failed to create Cashfree order for delivery COD collection", ex);
             cfOrderId = "CF_LOCAL_" + UUID.randomUUID().toString().substring(0, 8);
             paymentSessionId = "session_local_" + System.currentTimeMillis();
         }
 
-        // Generate hosted Cashfree sandbox checkout URL for QR code scanning (guaranteed to avoid PhonePe/GPay fake VPA technical issues)
-        String upiQrPayload = (paymentSessionId != null && !paymentSessionId.isBlank())
-                ? "https://payments-test.cashfree.com/order/#" + paymentSessionId
-                : "upi://pay?pa=foodie@cashfree&pn=Foodie&am=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() +
-                  "&tr=" + cfOrderId + "&cu=INR&tn=Foodie%20Order%20Payment";
+        String qrBase64 = (qrResult != null && qrResult.qrBase64() != null && !qrResult.qrBase64().isBlank())
+                ? qrResult.qrBase64()
+                : null;
+
+        // Cashfree real payment gateway checkout / dynamic QR payload
+        String upiQrPayload = (qrResult != null && qrResult.upiUrl() != null && !qrResult.upiUrl().isBlank())
+                ? qrResult.upiUrl()
+                : ((paymentSessionId != null && !paymentSessionId.isBlank())
+                    ? "https://payments-test.cashfree.com/order/#" + paymentSessionId
+                    : "upi://pay?pa=foodie@cashfree&pn=Foodie&am=" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() +
+                      "&tr=" + cfOrderId + "&cu=INR&tn=Foodie%20Order%20Payment");
 
         if (existingPayment.isPresent()) {
             Payment p = existingPayment.get();
@@ -2035,7 +2088,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         return new com.foodie.delivery.dto.response.CodPaymentInitiationResponseDto(
-                orderId, assignmentId, paymentSessionId, cfOrderId, amount, upiQrPayload);
+                orderId, assignmentId, paymentSessionId, cfOrderId, amount, upiQrPayload, qrBase64);
     }
 
     @Override

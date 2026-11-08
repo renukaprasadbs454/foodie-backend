@@ -10,6 +10,8 @@ public interface CashfreePaymentClient {
 
     CashfreeRefundResult createRefund(String cashfreeOrderId, BigDecimal amount, String reason);
 
+    CashfreeQrResult createUpiQr(String paymentSessionId);
+
     record CashfreeOrderCreateResult(String paymentSessionId, String cfOrderId) {
     }
 
@@ -17,5 +19,8 @@ public interface CashfreePaymentClient {
     }
 
     record CashfreeRefundResult(String cfRefundId) {
+    }
+
+    record CashfreeQrResult(String upiUrl, String qrBase64, String qrImageUrl) {
     }
 }

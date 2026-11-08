@@ -123,6 +123,28 @@ public class CashfreePaymentClientImpl implements CashfreePaymentClient {
         return new CashfreeRefundResult(cfRefundId);
     }
 
+    @Override
+    public CashfreeQrResult createUpiQr(String paymentSessionId) {
+        if (paymentSessionId == null || paymentSessionId.isBlank()) {
+            return new CashfreeQrResult(null, null, null);
+        }
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("payment_session_id", paymentSessionId);
+            body.put("payment_method", Map.of(
+                "upi", Map.of("channel", "qrcode")
+            ));
+            JsonNode node = post("/orders/sessions", body);
+            JsonNode data = node.path("data");
+            String url = data.path("url").asText(null);
+            String payload = data.path("payload").asText(null);
+            return new CashfreeQrResult(url, payload, null);
+        } catch (Exception ex) {
+            log.warn("Cashfree Order Pay API for dynamic UPI QR did not return session QR: {}", ex.getMessage());
+            return new CashfreeQrResult(null, null, null);
+        }
+    }
+
     private JsonNode post(String path, Object body) {
         try {
             String json = restClient.post()

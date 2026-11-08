@@ -6,6 +6,10 @@ import jakarta.validation.constraints.Pattern;
 public record VerifyOtpRequestDto(
         @NotBlank
         @Pattern(regexp = "^\\d{6}$", message = "otp must be 6 digits")
-        String otp
+        String otp,
+        String collectionMethod
 ) {
+    public VerifyOtpRequestDto(String otp) {
+        this(otp, null);
+    }
 }
