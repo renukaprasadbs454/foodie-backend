@@ -146,19 +146,6 @@ public class AdminDeliveryController {
                 && (status.equalsIgnoreCase("online") || status.equalsIgnoreCase("available"));
         if (isOnlineQuery) {
             List<DeliveryPartner> onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
-            if (onlineList.isEmpty()) {
-                List<DeliveryPartner> verified = deliveryPartnerRepository.findAll().stream()
-                        .filter(p -> p.getKycStatus() == KycStatus.VERIFIED || isKycOnboardingComplete(p))
-                        .collect(Collectors.toList());
-                if (verified.isEmpty()) {
-                    verified = deliveryPartnerRepository.findAll();
-                }
-                for (DeliveryPartner p : verified) {
-                    p.setOnline(true);
-                    deliveryPartnerRepository.save(p);
-                }
-                onlineList = deliveryPartnerRepository.findByOnlineTrueOrderByUpdatedAtDesc();
-            }
 
             if (search != null && !search.trim().isBlank()) {
                 String cleanSearch = search.trim().toLowerCase();
