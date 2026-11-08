@@ -487,13 +487,34 @@ public class AdminOrderController {
                 assignment = deliveryAssignmentRepository.save(assignment);
             }
 
+            String restName = "Restaurant";
+            String restLocation = "Restaurant Location";
+            if (restaurantRepository != null && order.getRestaurantId() != null) {
+                var rOpt = restaurantRepository.findById(order.getRestaurantId());
+                if (rOpt.isPresent()) {
+                    var r = rOpt.get();
+                    if (r.getName() != null && !r.getName().isBlank()) {
+                        restName = r.getName();
+                    }
+                    if (r.getAddress() != null) {
+                        var addr = r.getAddress();
+                        String loc = (addr.getLine1() != null ? addr.getLine1() : "") +
+                                (addr.getCity() != null ? (addr.getLine1() != null ? ", " : "") + addr.getCity() : "");
+                        if (!loc.isBlank()) {
+                            restLocation = loc;
+                        }
+                    }
+                }
+            }
+
             if (eventPublisher != null) {
                 eventPublisher.publishEvent(DeliveryOfferCreatedEvent.of(
                         order.getId(),
                         partner.getId(),
                         assignment.getId(),
                         2.5,
-                        java.time.Instant.now().plusSeconds(120)
+                        restName,
+                        restLocation
                 ));
             }
         }
