@@ -61,6 +61,14 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
 
     @Override
     @Transactional
+    public void unassignPartner(UUID orderId) {
+        Order order = require(orderId);
+        order.assignDeliveryPartner(null);
+        apply(order, OrderStatus.WAITING_FOR_DELIVERY_PARTNER, null);
+    }
+
+    @Override
+    @Transactional
     public void markPickedUpAndOutForDelivery(UUID orderId) {
         Order order = require(orderId);
         if (order.getStatus() != OrderStatus.PICKED_UP && order.getStatus() != OrderStatus.OUT_FOR_DELIVERY

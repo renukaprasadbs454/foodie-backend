@@ -14,6 +14,8 @@ public interface OrderDeliveryPort {
 
     void assignPartner(UUID orderId, UUID deliveryPartnerId);
 
+    void unassignPartner(UUID orderId);
+
     void markPickedUpAndOutForDelivery(UUID orderId);
 
     void markDelivered(UUID orderId);

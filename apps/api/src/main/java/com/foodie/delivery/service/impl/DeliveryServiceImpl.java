@@ -404,6 +404,16 @@ public class DeliveryServiceImpl implements DeliveryService {
         return deliveryAssignmentRepository
                 .findByDeliveryPartnerIdAndStatus(partner.getId(), DeliveryAssignmentStatus.OFFERED)
                 .stream()
+                .filter(assignment -> {
+                    if (partner.isCashLimitExceeded()) {
+                        // Filter out non-prepaid orders if COD cash limit is reached
+                        boolean isPrepaid = paymentRepository != null && paymentRepository.findByOrderId(assignment.getOrderId())
+                                .map(p -> p.getStatus() == PaymentStatus.CAPTURED)
+                                .orElse(false);
+                        return isPrepaid;
+                    }
+                    return true;
+                })
                 .map(assignment -> toOffer(assignment, partner.getId()))
                 .toList();
     }
@@ -640,12 +650,23 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .findByIdAndDeliveryPartnerId(assignmentId, partner.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Assignment not found."));
 
-        if (assignment.getStatus() == DeliveryAssignmentStatus.OFFERED) {
-            log.info("Partner {} rejected assignment {} for order {}", partner.getId(), assignmentId,
-                    assignment.getOrderId());
+        if (assignment.getStatus() == DeliveryAssignmentStatus.OFFERED
+                || assignment.getStatus() == DeliveryAssignmentStatus.ACCEPTED) {
+            boolean wasAccepted = assignment.getStatus() == DeliveryAssignmentStatus.ACCEPTED;
+            log.info("Partner {} rejected assignment {} (wasAccepted={}) for order {}", partner.getId(), assignmentId,
+                    wasAccepted, assignment.getOrderId());
             assignment.markRejected();
             deliveryAssignmentRepository.save(assignment);
-            // Attempt to reassign to another available partner
+
+            if (wasAccepted) {
+                try {
+                    orderDeliveryPort.unassignPartner(assignment.getOrderId());
+                } catch (Exception e) {
+                    log.error("Failed to unassign partner for order {}: {}", assignment.getOrderId(), e.getMessage());
+                }
+            }
+
+            // Attempt to reassign to another available partner immediately
             createAssignmentForOrder(assignment.getOrderId());
         }
     }
@@ -671,7 +692,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         // Get list of partners currently assigned to active non-delivered orders or
         // active pending offers
-        java.time.Instant offerCutoff = java.time.Instant.now().minusSeconds(120);
+        java.time.Instant offerCutoff = java.time.Instant.now().minusSeconds(60);
         List<UUID> busyPartnerIds = deliveryAssignmentRepository.findAll().stream()
                 .filter(a -> {
                     // Do not mark partner busy because of an assignment for THIS SAME ORDER
@@ -870,11 +891,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                 }
             }
 
-            // Third pass: fallback to any online verified non-busy partner in matching zone (do not starve orders)
+            // Third pass: fallback to any online verified non-busy partner in matching zone (do not starve orders, but enforce cash limit for COD)
             if (selectedPartner.isEmpty()) {
                 for (DeliveryPartner candidate : onlineList) {
                     if (candidate.isOnline()
                             && candidate.getKycStatus() == KycStatus.VERIFIED
+                            && (isPrepaid || !candidate.isCashLimitExceeded())
                             && (candidate.getId() == null || !busyPartnerIds.contains(candidate.getId()))
                             && isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
                         selectedPartner = Optional.of(candidate);
@@ -886,12 +908,13 @@ public class DeliveryServiceImpl implements DeliveryService {
                 }
             }
 
-            // Fourth pass: if only previousPartnerId was available in matching zone, re-offer to them so order does not starve
+            // Fourth pass: if only previousPartnerId was available in matching zone, re-offer to them so order does not starve (enforcing cash limit for COD)
             if (selectedPartner.isEmpty() && previousPartnerId != null) {
                 for (DeliveryPartner candidate : onlineList) {
                     if (java.util.Objects.equals(candidate.getId(), previousPartnerId)
                             && candidate.isOnline()
                             && candidate.getKycStatus() == KycStatus.VERIFIED
+                            && (isPrepaid || !candidate.isCashLimitExceeded())
                             && isPartnerInSameZone(candidate, finalOrderZoneId, finalOrderZoneName)) {
                         selectedPartner = Optional.of(candidate);
                         selectedDistance = 2.5;

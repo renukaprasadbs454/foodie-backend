@@ -34,20 +34,20 @@ public class DeliveryAssignmentScheduler {
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
     }
 
-    @Scheduled(fixedDelay = 10000)
+    @Scheduled(fixedDelay = 5000)
     @Transactional
     public void processScheduledAssignments() {
         Instant now = Instant.now();
 
-        // 1. Process timed-out OFFERED assignments (> 120s without acceptance)
-        Instant offerTimeoutCutoff = now.minusSeconds(120);
+        // 1. Process timed-out OFFERED assignments (> 60s without acceptance)
+        Instant offerTimeoutCutoff = now.minusSeconds(60);
         List<DeliveryAssignment> staleOffers = deliveryAssignmentRepository.findByStatusAndAssignedAtBefore(
                 DeliveryAssignmentStatus.OFFERED,
                 offerTimeoutCutoff
         );
         for (DeliveryAssignment stale : staleOffers) {
             try {
-                log.info("Delivery offer for order {} timed out after 120s. Reassigning...", stale.getOrderId());
+                log.info("Delivery offer for order {} timed out after 60s. Reassigning to next nearby partner...", stale.getOrderId());
                 stale.markRejected();
                 deliveryAssignmentRepository.save(stale);
                 deliveryService.createAssignmentForOrder(stale.getOrderId());
