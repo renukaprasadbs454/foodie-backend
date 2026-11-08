@@ -94,10 +94,7 @@ class DeliveryIncentiveServiceImplTest {
     }
 
     @Test
-    void processDeliveryCompletion_awardsDailyTargetWhenTargetReached() {
-        UUID orderId = UUID.randomUUID();
-        UUID assignmentId = UUID.randomUUID();
-
+    void processOfflineIncentives_awardsDailyTargetWhenTargetReached() {
         // 15 deliveries completed today
         when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
                 eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
@@ -108,7 +105,7 @@ class DeliveryIncentiveServiceImplTest {
 
         when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Daily target bonus ₹150 awarded
         verify(walletService).credit(
@@ -121,10 +118,29 @@ class DeliveryIncentiveServiceImplTest {
     }
 
     @Test
-    void processDeliveryCompletion_doesNotAwardDailyTargetWhenBelowTarget() {
+    void processDeliveryCompletion_doesNotAwardDailyTargetImmediately() {
         UUID orderId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
 
+        // 15 deliveries completed today
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(15L);
+
+        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+
+        // Daily target is NOT awarded immediately on order delivery (awaits shift offline)
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("150.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void processOfflineIncentives_doesNotAwardDailyTargetWhenBelowTarget() {
         // 14 deliveries completed today
         when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
                 eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
@@ -133,7 +149,7 @@ class DeliveryIncentiveServiceImplTest {
         when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
                 eq(partnerId), any(), any(), any())).thenReturn(false);
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Daily target ₹150 is NOT awarded
         verify(walletService, never()).credit(
@@ -146,15 +162,12 @@ class DeliveryIncentiveServiceImplTest {
     }
 
     @Test
-    void processDeliveryCompletion_avoidsDoubleCounting() {
-        UUID orderId = UUID.randomUUID();
-        UUID assignmentId = UUID.randomUUID();
-
+    void processOfflineIncentives_avoidsDoubleCounting() {
         // Already exists in repo
         when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
                 eq(partnerId), any(), any(), any())).thenReturn(true);
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Zero wallet credits because all were already awarded
         verify(walletService, never()).credit(any(), any(), any(), any(), any());
@@ -463,7 +476,7 @@ class DeliveryIncentiveServiceImplTest {
         when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
                 eq(partnerId), any(), any(), any())).thenReturn(false);
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Verify that walletService.credit was NEVER called because condition failed!
         verify(walletService, never()).credit(
@@ -732,7 +745,7 @@ class DeliveryIncentiveServiceImplTest {
         when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
                 eq(partnerId), any(), any(), any())).thenReturn(false);
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Daily target reward must NOT be granted because mandatory login slot is unfulfilled!
         verify(walletService, never()).credit(
@@ -776,7 +789,7 @@ class DeliveryIncentiveServiceImplTest {
                 eq(partnerId), any(), any(), any())).thenReturn(false);
         when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        incentiveService.processDeliveryCompletion(partnerId, orderId, assignmentId);
+        incentiveService.processOfflineIncentives(partnerId);
 
         // Daily target reward ₹150 IS granted!
         verify(walletService).credit(
@@ -784,6 +797,57 @@ class DeliveryIncentiveServiceImplTest {
                 eq(partnerId),
                 eq(new BigDecimal("150.00")),
                 eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+    }
+
+    @Test
+    void processOfflineIncentives_awardsHighestTierOnly_6OrdersVs9Orders() {
+        // Admin configures 6 orders for 45 rs, 9 orders for 75 rs
+        String json = """
+        {
+          "incentives": [
+            {
+              "id": "dailyTargetBonus",
+              "title": "Daily Milestone Incentive",
+              "value": "75.00",
+              "active": true,
+              "milestones": [
+                { "trips": 6, "reward": "45.00" },
+                { "trips": 9, "reward": "75.00" }
+              ]
+            }
+          ]
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "ZONE", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        // Partner completed 9 deliveries
+        when(deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                eq(partnerId), eq(DeliveryAssignmentStatus.DELIVERED), any(), any()))
+                .thenReturn(9L);
+
+        when(earningRepository.existsByDeliveryPartnerIdAndRuleIdAndReferenceTypeAndReferenceId(
+                eq(partnerId), any(), any(), any())).thenReturn(false);
+        when(earningRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        incentiveService.processOfflineIncentives(partnerId);
+
+        // ONLY highest tier (₹75.00) is credited, NOT 45 + 75 = 120!
+        verify(walletService).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("75.00")),
+                eq(LedgerReferenceType.INCENTIVE),
+                any()
+        );
+        verify(walletService, never()).credit(
+                eq(OwnerType.DELIVERY_PARTNER),
+                eq(partnerId),
+                eq(new BigDecimal("45.00")),
+                any(),
                 any()
         );
     }

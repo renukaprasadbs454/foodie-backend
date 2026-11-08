@@ -57,8 +57,8 @@ public class DeliveryAssignmentScheduler {
         }
 
         // 2. Process pending unassigned orders scheduled for partner assignment
+        // Orders in CONFIRMED / PLACED must wait for restaurant acceptance first!
         List<OrderStatus> eligibleStatuses = List.of(
-                OrderStatus.CONFIRMED,
                 OrderStatus.ACCEPTED,
                 OrderStatus.PREPARING,
                 OrderStatus.WAITING_FOR_DELIVERY_PARTNER,
@@ -69,14 +69,20 @@ public class DeliveryAssignmentScheduler {
 
         for (Order order : unassignedOrders) {
             Instant scheduledAt = order.getAssignmentScheduledAt();
-            if (scheduledAt == null || !scheduledAt.isAfter(now)) {
-                // If an active offer is already pending for this order, do not overwrite it — let the partner respond or wait for 120s timeout
+            boolean isReadyOrWaiting = order.getStatus() == OrderStatus.WAITING_FOR_DELIVERY_PARTNER
+                    || order.getStatus() == OrderStatus.READY_FOR_PICKUP;
+            boolean isLeadTimeReached = scheduledAt != null && !scheduledAt.isAfter(now);
+
+            // Only assign delivery partner if food is ready / waiting OR remaining prep time is <= 10 mins
+            if (isReadyOrWaiting || isLeadTimeReached) {
+                // If an active offer is already pending for this order, do not overwrite it — let the partner respond or wait for 60s timeout
                 Optional<DeliveryAssignment> existingOpt = deliveryAssignmentRepository.findByOrderId(order.getId());
                 if (existingOpt.isPresent() && existingOpt.get().getStatus() == DeliveryAssignmentStatus.OFFERED) {
                     continue;
                 }
                 try {
-                    log.info("Scheduler processing delivery assignment for order {}", order.getId());
+                    log.info("Scheduler processing delivery assignment for order {} (status={}, scheduledAt={})",
+                            order.getId(), order.getStatus(), scheduledAt);
                     deliveryService.createAssignmentForOrder(order.getId());
                 } catch (Exception ex) {
                     log.error("Failed scheduled assignment attempt for order {}: {}", order.getId(), ex.getMessage());

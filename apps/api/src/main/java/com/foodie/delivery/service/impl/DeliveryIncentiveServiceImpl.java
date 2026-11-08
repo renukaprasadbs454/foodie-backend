@@ -289,7 +289,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 switch (rule.id()) {
                     case "basePay" -> evaluateBasePay(partner, rule, assignmentId, orderId, periodDate);
                     case "peakHourBonus" -> evaluatePeakHour(partner, rule, assignmentId, orderId, periodDate, zdt.toLocalTime());
-                    case "dailyTargetBonus" -> evaluateDailyTarget(partner, rule, periodDate);
+                    case "dailyTargetBonus" -> {
+                        // Daily target / milestones are credited when shift is completed and partner goes offline
+                        log.info("Partner {} delivered order. Daily target progress updated (credits upon shift offline).", partner.getId());
+                    }
                     case "weeklyTargetBonus" -> evaluateWeeklyTarget(partner, rule, periodDate);
                     case "longDistanceBonus" -> evaluateLongDistance(partner, rule, assignmentId, orderId, periodDate);
                     case "rainBonus" -> evaluateRainBonus(partner, rule, assignmentId, orderId, periodDate);
@@ -367,12 +370,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private void evaluateCustomRule(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId, LocalDate periodDate) {
-        if (rule.milestones() != null && !rule.milestones().isEmpty()) {
-            evaluateDailyTarget(partner, rule, periodDate);
-            return;
-        }
-        if (rule.targetCount() != null && rule.targetCount() > 1) {
-            evaluateDailyTarget(partner, rule, periodDate);
+        if ((rule.milestones() != null && !rule.milestones().isEmpty()) || (rule.targetCount() != null && rule.targetCount() > 1)) {
+            // Milestone / tiered targets are credited only when shift completes and partner goes offline
             return;
         }
         if (rule.conditions() != null && !rule.conditions().isEmpty()) {
@@ -388,7 +387,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
     }
 
-    private void evaluateDailyTarget(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
+    @Override
+    @Transactional
+    public void processOfflineIncentives(UUID deliveryPartnerId) {
+        log.info("Processing offline incentives for partner {}", deliveryPartnerId);
+        DeliveryPartner partner = deliveryPartnerRepository.findById(deliveryPartnerId).orElse(null);
+        if (partner == null) return;
+
+        LocalDate today = LocalDate.now(ZONE_IST);
         ZonedDateTime startOfDay = today.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfDay = today.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
@@ -399,48 +405,86 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 endOfDay.toInstant()
         );
 
-        // Partner MUST have completed at least 1 delivery
         if (completedToday <= 0) {
-            log.info("Partner {} has completed 0 trips today, no daily incentive awarded", partner.getId());
+            log.info("Partner {} has completed 0 trips today upon going offline, no daily incentive awarded", partner.getId());
             return;
         }
 
-        // Verify conditions: if any condition has failed (e.g. rejection limit exceeded, or expired slot requirement failed), do not award
-        List<IncentiveConditionProgressDto> conditions = evaluateConditionsForPartner(partner, rule, today);
-        if (conditions != null && !conditions.isEmpty()) {
-            boolean anyFailed = conditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
-            if (anyFailed) {
-                log.info("Partner {} daily target reward pending: condition failed (mandatory login slot or order rejections)", partner.getId());
-                return;
-            }
-        }
+        List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
+        for (IncentiveRuleDef rule : activeRules) {
+            if (!rule.active()) continue;
+            boolean isDailyOrMilestone = "dailyTargetBonus".equalsIgnoreCase(rule.id())
+                    || (rule.milestones() != null && !rule.milestones().isEmpty())
+                    || (rule.targetCount() != null && rule.targetCount() > 1);
 
-        // Evaluate milestone ladder if configured
-        if (rule.milestones() != null && !rule.milestones().isEmpty()) {
-            for (MilestoneDef milestone : rule.milestones()) {
-                if (completedToday >= milestone.trips() && milestone.reward().compareTo(BigDecimal.ZERO) > 0) {
-                    UUID milestoneRefId = UUID.nameUUIDFromBytes(
-                            (partner.getId() + ":DAILY_TARGET_MILESTONE:" + today + ":" + milestone.trips()).getBytes(StandardCharsets.UTF_8)
-                    );
-                    awardIncentive(
-                            partner,
-                            rule.id() + "_m" + milestone.trips(),
-                            rule.title() + " (" + milestone.trips() + " trips milestone)",
-                            milestone.reward(),
-                            "DAILY_TARGET_MILESTONE",
-                            milestoneRefId,
-                            null,
-                            today
-                    );
+            if (!isDailyOrMilestone) continue;
+
+            // 1. ALL conditions must be strictly satisfied: if any condition has failed, do not award
+            List<IncentiveConditionProgressDto> conditions = evaluateConditionsForPartner(partner, rule, today);
+            if (conditions != null && !conditions.isEmpty()) {
+                boolean anyFailed = conditions.stream().anyMatch(c -> {
+                    if ("FAILED".equalsIgnoreCase(c.status())) return true;
+                    if ("LOGIN_SLOT".equalsIgnoreCase(c.type()) || "LOGIN_SLOT".equalsIgnoreCase(c.id())) {
+                        if (shiftBookingRepository != null && partner.getId() != null) {
+                            List<DeliveryShiftBooking> bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+                            boolean hasBookedShift = bookings != null && bookings.stream().anyMatch(b -> "BOOKED".equalsIgnoreCase(b.getStatus()));
+                            if (hasBookedShift && c.progressPercentage() < 100.0) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                });
+                if (anyFailed) {
+                    log.info("Partner {} condition failed for rule {}. Statuses: {}. No incentive awarded.",
+                            partner.getId(), rule.id(), conditions.stream().map(c -> c.id() + "=" + c.status() + " (" + c.progressPercentage() + "%)").toList());
+                    continue;
                 }
             }
-        }
 
-        // Evaluate main target
-        int target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
-        if (rule.value().compareTo(BigDecimal.ZERO) > 0 && completedToday >= target) {
-            UUID dailyRefId = UUID.nameUUIDFromBytes((partner.getId() + ":DAILY_TARGET:" + today).getBytes(StandardCharsets.UTF_8));
-            awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DAILY_TARGET", dailyRefId, null, today);
+            // 2. Select ONLY the SINGLE HIGHEST tier achieved (Non-cumulative!)
+            // e.g. 6 orders -> ₹45, 9 orders -> ₹75. If partner completed 9 orders, award ONLY ₹75 (not 45 + 75).
+            BigDecimal highestReward = BigDecimal.ZERO;
+            String highestTitle = rule.title();
+            String highestRuleKey = rule.id();
+
+            if (rule.milestones() != null && !rule.milestones().isEmpty()) {
+                List<MilestoneDef> sorted = new ArrayList<>(rule.milestones());
+                sorted.sort((a, b) -> Integer.compare(b.trips(), a.trips()));
+                for (MilestoneDef m : sorted) {
+                    if (completedToday >= m.trips() && m.reward() != null && m.reward().compareTo(highestReward) > 0) {
+                        highestReward = m.reward();
+                        highestTitle = rule.title() + " (" + m.trips() + " trips tier)";
+                        highestRuleKey = rule.id() + "_m" + m.trips();
+                        break; // First match is highest achieved tier!
+                    }
+                }
+            }
+
+            int mainTarget = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
+            if (completedToday >= mainTarget && rule.value() != null && rule.value().compareTo(highestReward) > 0) {
+                highestReward = rule.value();
+                highestTitle = rule.title() + " (" + mainTarget + " trips target)";
+                highestRuleKey = rule.id();
+            }
+
+            if (highestReward.compareTo(BigDecimal.ZERO) > 0) {
+                UUID offlineRefId = UUID.nameUUIDFromBytes(
+                        (partner.getId() + ":DAILY_TARGET_OFFLINE:" + today).getBytes(StandardCharsets.UTF_8)
+                );
+                awardIncentive(
+                        partner,
+                        highestRuleKey,
+                        highestTitle,
+                        highestReward,
+                        "DAILY_TARGET_OFFLINE",
+                        offlineRefId,
+                        null,
+                        today
+                );
+                log.info("Successfully awarded highest tier daily incentive ₹{} to partner {} upon going offline",
+                        highestReward, partner.getId());
+            }
         }
     }
 
@@ -526,7 +570,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     orderId,
                     periodDate
             );
-            earning = earningRepository.save(earning);
+            DeliveryPartnerIncentiveEarning savedEarning = earningRepository.save(earning);
+            UUID earningId = savedEarning != null && savedEarning.getId() != null ? savedEarning.getId() : (earning.getId() != null ? earning.getId() : referenceId);
 
             log.info("Awarded incentive {} ({}) amount ₹{} to partner {}", ruleId, ruleTitle, amount, partner.getId());
 
@@ -535,7 +580,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     partner.getId(),
                     amount,
                     LedgerReferenceType.INCENTIVE,
-                    earning.getId()
+                    earningId
             );
         } catch (DataIntegrityViolationException e) {
             log.info("Concurrent incentive award prevented for partner {} rule {} ref {}", partner.getId(), ruleId, referenceId);
@@ -915,11 +960,16 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 double progressPct = Math.min(100.0, ((double) eligibleMinutes / (double) requiredMinutes) * 100.0);
 
                 Instant now = Instant.now();
-                String status;
-                String subtext;
-                String progressText;
+                String status = "PENDING";
+                String subtext = requiredDurationStr;
+                String progressText = "";
 
-                if (progressPct >= 100.0) {
+                if (shiftBookingRepository == null && onlineSessionRepository == null) {
+                    status = "SATISFIED";
+                    progressPct = 100.0;
+                    subtext = requiredDurationStr;
+                    progressText = "Not configured";
+                } else if (progressPct >= 100.0) {
                     status = "SATISFIED";
                     subtext = requiredDurationStr;
                     progressText = "Slot fulfilled (" + requiredDurationStr + ")";

@@ -39,6 +39,7 @@ import com.foodie.admin.repository.LocationZoneRepository;
 import com.foodie.delivery.dto.request.DeliveryZoneVerificationRequestDto;
 import com.foodie.delivery.dto.response.DeliveryZoneVerificationResponseDto;
 import com.foodie.delivery.service.DeliveryService;
+import com.foodie.delivery.service.DeliveryIncentiveService;
 import com.foodie.delivery.service.biometrics.FaceBiometricsService;
 import com.foodie.delivery.service.PartnerGeoService.GeoPartnerHit;
 import com.foodie.delivery.service.PartnerGeoService;
@@ -177,6 +178,13 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     @Autowired(required = false)
     private DeliveryShiftBookingRepository shiftBookingRepository;
+
+    @Autowired(required = false)
+    private DeliveryIncentiveService deliveryIncentiveService;
+
+    public void setDeliveryIncentiveService(DeliveryIncentiveService deliveryIncentiveService) {
+        this.deliveryIncentiveService = deliveryIncentiveService;
+    }
 
     @Autowired(required = false)
     private com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService;
@@ -386,6 +394,13 @@ public class DeliveryServiceImpl implements DeliveryService {
                     session.setOfflineAt(now);
                     session.setDurationSeconds(Duration.between(session.getOnlineAt(), now).toSeconds());
                     onlineSessionRepository.save(session);
+                }
+                if (deliveryIncentiveService != null) {
+                    try {
+                        deliveryIncentiveService.processOfflineIncentives(partner.getId());
+                    } catch (Exception ex) {
+                        log.error("Error processing offline incentives for partner {}: {}", partner.getId(), ex.getMessage());
+                    }
                 }
             }
         }
@@ -682,6 +697,23 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         OrderDeliveryPort.OrderDeliverySnapshot order = orderDeliveryPort.findByOrderId(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+
+        // Do not search/assign delivery partner until restaurant accepts the order (CONFIRMED/PLACED orders wait for restaurant)
+        if (order.status() == OrderStatus.PLACED || order.status() == OrderStatus.CONFIRMED) {
+            log.info("Order {} is in status {}, waiting for restaurant acceptance before assigning delivery partner.", orderId, order.status());
+            return;
+        }
+
+        // Check if food preparation lead time has arrived (food prep time <= 10 mins or food ready)
+        boolean isReadyOrWaiting = order.status() == OrderStatus.WAITING_FOR_DELIVERY_PARTNER
+                || order.status() == OrderStatus.READY_FOR_PICKUP;
+        boolean isLeadTimeReached = order.assignmentScheduledAt() != null && !order.assignmentScheduledAt().isAfter(java.time.Instant.now());
+
+        if (!isReadyOrWaiting && !isLeadTimeReached) {
+            log.info("Order {} food preparation time not yet within 10-minute lead time (scheduledAt={}), waiting before searching delivery partner.",
+                    orderId, order.assignmentScheduledAt());
+            return;
+        }
 
         RestaurantPickupQuery.PickupLocation pickup = restaurantPickupQuery.findByRestaurantId(order.restaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant pickup location not found."));

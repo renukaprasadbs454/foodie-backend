@@ -16,6 +16,12 @@ public interface DeliveryIncentiveService {
     void processDeliveryCompletion(UUID deliveryPartnerId, UUID orderId, UUID assignmentId);
 
     /**
+     * Process shift completion / going offline: evaluates all conditions (shift attendance, mandatory login, rejections)
+     * and awards only the single highest non-cumulative tier achieved.
+     */
+    void processOfflineIncentives(UUID deliveryPartnerId);
+
+    /**
      * Get real-time incentives progress and applicable offers for a given calendar date.
      */
     IncentivesProgressResponseDto getIncentivesProgress(UUID userCredentialId, LocalDate date);
