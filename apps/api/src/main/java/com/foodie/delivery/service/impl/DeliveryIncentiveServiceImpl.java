@@ -29,6 +29,7 @@ import com.foodie.delivery.repository.DeliveryPartnerRepository;
 import com.foodie.delivery.repository.DeliveryPricingConfigRepository;
 import com.foodie.delivery.repository.DeliveryShiftBookingRepository;
 import com.foodie.delivery.service.DeliveryIncentiveService;
+import com.foodie.review.repository.ReviewRepository;
 import com.foodie.wallet.repository.LedgerEntryRepository;
 import com.foodie.wallet.repository.PayoutRepository;
 import com.foodie.wallet.repository.WalletAccountRepository;
@@ -89,6 +90,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     @Autowired(required = false)
     private LocationZoneRepository locationZoneRepository;
+
+    @Autowired(required = false)
+    private ReviewRepository reviewRepository;
 
     @Autowired
     public DeliveryIncentiveServiceImpl(
@@ -152,6 +156,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     public void setLocationZoneRepository(LocationZoneRepository locationZoneRepository) {
         this.locationZoneRepository = locationZoneRepository;
+    }
+
+    public void setReviewRepository(ReviewRepository reviewRepository) {
+        this.reviewRepository = reviewRepository;
     }
 
     public record MilestoneDef(
@@ -397,13 +405,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             return;
         }
 
-        // Verify ALL conditions configured for this incentive rule (e.g. mandatory login slot, rejection limits)
+        // Verify conditions: if any condition has failed (e.g. rejection limit exceeded, or expired slot requirement failed), do not award
         List<IncentiveConditionProgressDto> conditions = evaluateConditionsForPartner(partner, rule, today);
         if (conditions != null && !conditions.isEmpty()) {
-            boolean allSatisfied = conditions.stream()
-                    .allMatch(c -> "SATISFIED".equalsIgnoreCase(c.status()) || c.progressPercentage() >= 100.0);
-            if (!allSatisfied) {
-                log.info("Partner {} daily target reward pending: not all conditions fulfilled (mandatory login slot or order rejections)", partner.getId());
+            boolean anyFailed = conditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
+            if (anyFailed) {
+                log.info("Partner {} daily target reward pending: condition failed (mandatory login slot or order rejections)", partner.getId());
                 return;
             }
         }
@@ -477,7 +484,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
         int minTrips = rule.targetCount() != null ? rule.targetCount() : 25;
         double minRating = 4.85;
-        double partnerRating = partner.getRating() != null ? partner.getRating().doubleValue() : 5.0;
+        Double avgRating = (reviewRepository != null && partner.getId() != null)
+                ? reviewRepository.averageDeliveryRating(partner.getId())
+                : null;
+        double partnerRating = (avgRating != null && avgRating > 0.0) ? avgRating : 5.0;
 
         if (completedThisWeek >= minTrips && partnerRating >= minRating) {
             UUID perfRefId = UUID.nameUUIDFromBytes((partner.getId() + ":PERFORMANCE:" + weekStart).getBytes(StandardCharsets.UTF_8));
@@ -735,10 +745,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
                     offerConditions = evaluateConditionsForPartner(partner, rule, date);
                     boolean conditionsFailed = offerConditions != null && offerConditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
-                    boolean allConditionsSatisfied = offerConditions != null && !offerConditions.isEmpty() && offerConditions.stream()
-                            .allMatch(c -> "SATISFIED".equalsIgnoreCase(c.status()) || c.progressPercentage() >= 100.0);
 
-                    isEarned = allConditionsSatisfied && ((tripsToday >= target && tripsToday > 0) || earnedMap.containsKey(rule.id()));
+                    isEarned = !conditionsFailed && ((tripsToday >= target && tripsToday > 0) || earnedMap.containsKey(rule.id()));
                     remaining = Math.max(0, target - (int) tripsToday);
                     status = isEarned ? "Completed" : (tripsToday > 0 ? "In Progress" : "Upcoming");
 
@@ -746,12 +754,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         offerMilestones = new ArrayList<>();
                         boolean firstUnearnedSeen = false;
                         for (MilestoneDef m : rule.milestones()) {
-                            boolean mEarned = allConditionsSatisfied && ((tripsToday >= m.trips() && tripsToday > 0) || earnedMap.containsKey(rule.id() + "_m" + m.trips()));
+                            boolean mEarned = !conditionsFailed && ((tripsToday >= m.trips() && tripsToday > 0) || earnedMap.containsKey(rule.id() + "_m" + m.trips()));
                             int mRemaining = Math.max(0, m.trips() - (int) tripsToday);
                             String mStatus;
                             if (mEarned) {
                                 mStatus = "Completed";
-                            } else if (conditionsFailed || !allConditionsSatisfied) {
+                            } else if (conditionsFailed) {
                                 mStatus = "Locked";
                             } else if (!firstUnearnedSeen) {
                                 mStatus = "In Progress";
