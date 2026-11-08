@@ -1365,8 +1365,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .map(partner -> {
                     var locOpt = deliveryLocationHistoryRepository
                             .findFirstByDeliveryPartnerIdOrderByRecordedAtDesc(partner.getId());
-                    BigDecimal lat = locOpt.map(DeliveryLocationHistory::getLatitude).orElse(BigDecimal.ZERO);
-                    BigDecimal lng = locOpt.map(DeliveryLocationHistory::getLongitude).orElse(BigDecimal.ZERO);
+                    BigDecimal lat = (partner.getLatitude() != null && partner.getLatitude() != 0.0)
+                            ? BigDecimal.valueOf(partner.getLatitude())
+                            : locOpt.map(DeliveryLocationHistory::getLatitude).orElse(BigDecimal.ZERO);
+                    BigDecimal lng = (partner.getLongitude() != null && partner.getLongitude() != 0.0)
+                            ? BigDecimal.valueOf(partner.getLongitude())
+                            : locOpt.map(DeliveryLocationHistory::getLongitude).orElse(BigDecimal.ZERO);
                     return new com.foodie.delivery.dto.response.LivePartnerLocationDto(
                             partner.getId(),
                             partner.getFullName(),

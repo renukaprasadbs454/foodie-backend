@@ -572,6 +572,9 @@ public class AdminDeliveryController {
                 ? partner.getZoneName()
                 : (partner.getZoneId() != null && !partner.getZoneId().isBlank() ? partner.getZoneId() : null);
 
+        Double latitude = partner.getLatitude();
+        Double longitude = partner.getLongitude();
+
         return new AdminDeliveryPartnerResponseDto(
                 partner.getId(),
                 partner.getUserCredentialId(),
@@ -589,7 +592,9 @@ public class AdminDeliveryController {
                 completedDeliveries,
                 zone,
                 docs,
-                partner.getCreatedAt());
+                partner.getCreatedAt(),
+                latitude,
+                longitude);
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)

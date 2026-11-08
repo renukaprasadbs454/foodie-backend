@@ -25,8 +25,33 @@ public record AdminDeliveryPartnerResponseDto(
         long totalDeliveries,
         String zone,
         List<DeliveryDocumentResponseDto> documents,
-        Instant createdAt
+        Instant createdAt,
+        Double latitude,
+        Double longitude
 ) {
+    public AdminDeliveryPartnerResponseDto(
+            UUID id,
+            UUID userCredentialId,
+            String fullName,
+            String phoneNumber,
+            String email,
+            VehicleType vehicleType,
+            String vehicleNumber,
+            String profileImageUrl,
+            KycStatus kycStatus,
+            String kycRejectionReason,
+            boolean isOnline,
+            BigDecimal cashInHand,
+            BigDecimal maxCashInHandLimit,
+            long totalDeliveries,
+            String zone,
+            List<DeliveryDocumentResponseDto> documents,
+            Instant createdAt
+    ) {
+        this(id, userCredentialId, fullName, phoneNumber, email, vehicleType, vehicleNumber, profileImageUrl,
+             kycStatus, kycRejectionReason, isOnline, cashInHand, maxCashInHandLimit, totalDeliveries, zone, documents, createdAt,
+             null, null);
+    }
     @JsonProperty("online")
     public boolean online() {
         return isOnline;
