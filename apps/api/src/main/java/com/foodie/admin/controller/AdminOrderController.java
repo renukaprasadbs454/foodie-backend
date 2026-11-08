@@ -32,6 +32,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.foodie.admin.entity.LocationZone;
 import com.foodie.admin.service.AdminZoneService;
+import com.foodie.delivery.entity.DeliveryAssignment;
+import com.foodie.delivery.entity.DeliveryPartner;
+import com.foodie.delivery.repository.DeliveryAssignmentRepository;
+import com.foodie.delivery.repository.DeliveryPartnerRepository;
+import com.foodie.common.util.HashUtils;
+import com.foodie.shared.event.DeliveryOfferCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -84,6 +92,15 @@ public class AdminOrderController {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DeliveryAssignmentRepository deliveryAssignmentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PasswordEncoder passwordEncoder;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ApplicationEventPublisher eventPublisher;
 
 
     public record AdminOrderSummaryDto(
@@ -433,25 +450,59 @@ public class AdminOrderController {
             dpUuid = UUID.nameUUIDFromBytes(dpIdStr.getBytes());
         }
 
-        order.assignDeliveryPartner(dpUuid);
-        if (order.getStatus() != OrderStatus.ASSIGNED) {
-            order.transitionTo(OrderStatus.ASSIGNED);
-        }
-        orderRepository.save(order);
-
-        // Find delivery partner to get userCredentialId
+        // Find delivery partner
+        DeliveryPartner partner = null;
         UUID userCredId = null;
         if (deliveryPartnerRepository != null) {
             var dpOpt = deliveryPartnerRepository.findById(dpUuid);
             if (dpOpt.isPresent()) {
-                userCredId = dpOpt.get().getUserCredentialId();
+                partner = dpOpt.get();
+                userCredId = partner.getUserCredentialId();
             }
         }
+        if (partner == null) {
+            throw new com.foodie.common.exception.ResourceNotFoundException("Delivery partner not found.");
+        }
+
+        order.assignDeliveryPartner(partner.getId());
+        if (order.getStatus() == OrderStatus.PLACED || order.getStatus() == OrderStatus.CONFIRMED) {
+            order.transitionTo(OrderStatus.WAITING_FOR_DELIVERY_PARTNER);
+        }
+        orderRepository.save(order);
+
+        // Crucial: Create or re-offer DeliveryAssignment entity with OFFERED status so partner receives the order request!
+        DeliveryAssignment assignment = null;
+        if (deliveryAssignmentRepository != null) {
+            var existingAssignmentOpt = deliveryAssignmentRepository.findByOrderId(order.getId());
+            if (existingAssignmentOpt.isPresent()) {
+                assignment = existingAssignmentOpt.get();
+                assignment.reofferTo(partner);
+                assignment = deliveryAssignmentRepository.save(assignment);
+            } else {
+                String pickupOtp = HashUtils.sixDigitOtp();
+                String deliveryOtp = HashUtils.sixDigitOtp();
+                String encodedPickup = passwordEncoder != null ? passwordEncoder.encode(pickupOtp) : pickupOtp;
+                String encodedDelivery = passwordEncoder != null ? passwordEncoder.encode(deliveryOtp) : deliveryOtp;
+                assignment = DeliveryAssignment.createOffered(order.getId(), partner, encodedPickup, encodedDelivery);
+                assignment = deliveryAssignmentRepository.save(assignment);
+            }
+
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(DeliveryOfferCreatedEvent.of(
+                        order.getId(),
+                        partner.getId(),
+                        assignment.getId(),
+                        2.5,
+                        java.time.Instant.now().plusSeconds(120)
+                ));
+            }
+        }
+
         UUID targetCredId = userCredId != null ? userCredId : dpUuid;
 
-        // Bug 3: Create notification document for that specific delivery partner only
-        String notifTitle = "New Order Assigned";
-        String notifBody = "Order #" + order.getOrderNumber() + " has been assigned to you.";
+        // Create notification document for that specific delivery partner
+        String notifTitle = "New Order Offer";
+        String notifBody = "Order #" + order.getOrderNumber() + " has been assigned to you. Tap to accept now!";
         if (notificationLogRepository != null) {
             try {
                 com.foodie.notification.entity.NotificationLog notif =
@@ -468,26 +519,28 @@ public class AdminOrderController {
             }
         }
 
-        // Bug 3: Send socket event to that particular partner room using deliveryPartner_partnerId (do NOT broadcast to all)
+        // Send socket event to partner room so mobile app immediately rings with Swiggy sound and pops the offer banner
         if (messagingTemplate != null) {
             try {
                 java.util.Map<String, Object> socketPayload = new java.util.LinkedHashMap<>();
-                socketPayload.put("type", "ORDER_ASSIGNED");
-                socketPayload.put("event", "ORDER_ASSIGNED");
+                socketPayload.put("type", "DELIVERY_OFFER_CREATED");
+                socketPayload.put("event", "DELIVERY_OFFER_CREATED");
+                socketPayload.put("assignmentId", assignment != null ? assignment.getId().toString() : null);
                 socketPayload.put("orderId", order.getId().toString());
                 socketPayload.put("orderNumber", order.getOrderNumber());
-                socketPayload.put("deliveryPartnerId", dpIdStr);
+                socketPayload.put("deliveryPartnerId", partner.getId().toString());
                 socketPayload.put("title", notifTitle);
                 socketPayload.put("body", notifBody);
-                socketPayload.put("status", "ASSIGNED");
+                socketPayload.put("status", "OFFERED");
                 socketPayload.put("timestamp", java.time.Instant.now().toString());
 
-                String partnerRoom = "deliveryPartner_" + dpIdStr;
+                String partnerRoom = "deliveryPartner_" + partner.getId();
                 messagingTemplate.convertAndSend("/topic/" + partnerRoom, socketPayload);
                 messagingTemplate.convertAndSend(partnerRoom, socketPayload);
 
                 if (userCredId != null) {
                     messagingTemplate.convertAndSend("/topic/user/" + userCredId + "/notifications", socketPayload);
+                    messagingTemplate.convertAndSend("/topic/user/" + userCredId + "/offers", socketPayload);
                 }
             } catch (Exception ex) {
                 System.err.println("Warning: failed to send WebSocket notification: " + ex.getMessage());
@@ -497,8 +550,9 @@ public class AdminOrderController {
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("orderId", order.getId().toString());
         result.put("orderNumber", order.getOrderNumber());
-        result.put("assignedDeliveryPartnerId", dpIdStr);
-        result.put("status", "ASSIGNED");
+        result.put("assignedDeliveryPartnerId", partner.getId().toString());
+        result.put("status", order.getStatus().name());
+        result.put("assignmentId", assignment != null ? assignment.getId().toString() : null);
 
         return ResponseEntity.ok(ApiResponse.success(result));
     }
