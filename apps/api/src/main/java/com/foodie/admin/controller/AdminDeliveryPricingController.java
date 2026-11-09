@@ -94,6 +94,9 @@ public class AdminDeliveryPricingController {
             configDataStr = body.get("configData").toString();
         } else {
             try {
+                if (body.containsKey("universalConfig") && body.get("universalConfig") instanceof Map<?, ?> uMap && uMap.containsKey("incentives")) {
+                    body.put("incentives", uMap.get("incentives"));
+                }
                 configDataStr = objectMapper.writeValueAsString(body);
             } catch (Exception e) {
                 configDataStr = "{}";
@@ -122,6 +125,9 @@ public class AdminDeliveryPricingController {
                 JsonNode parsed = objectMapper.readTree(config.getConfigData());
                 if (parsed.has("universalConfig")) {
                     data.put("universalConfig", objectMapper.convertValue(parsed.get("universalConfig"), Object.class));
+                }
+                if (parsed.has("incentives")) {
+                    data.put("incentives", objectMapper.convertValue(parsed.get("incentives"), Object.class));
                 }
                 if (parsed.has("zoneConfigs")) {
                     data.put("zoneConfigs", objectMapper.convertValue(parsed.get("zoneConfigs"), Object.class));

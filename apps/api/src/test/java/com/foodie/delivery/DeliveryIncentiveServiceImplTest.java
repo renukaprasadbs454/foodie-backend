@@ -1329,4 +1329,111 @@ class DeliveryIncentiveServiceImplTest {
         // Cannot payout duplicate
         verify(walletService, never()).credit(any(), any(), any(), any(), any());
     }
+
+    @Test
+    void getIncentivesProgress_dynamicMilestonesReflectedAccurately() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        String json = """
+        {
+          "pricingBasis": "UNIVERSAL",
+          "universalConfig": {
+            "minPrice": 200,
+            "moneyPerKm": 25,
+            "incentives": [
+              {
+                "id": "dailyTargetBonus",
+                "title": "Daily Target Bonus",
+                "value": 150,
+                "unit": "₹ / day",
+                "active": true,
+                "description": "Bonus awarded upon completing daily order targets.",
+                "category": "Target & Mileage",
+                "milestones": [
+                  { "trips": 6, "reward": 28 },
+                  { "orders": 9, "reward": 30 }
+                ]
+              }
+            ]
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "UNIVERSAL", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        assertThat(dailyOffer.milestones()).hasSize(2);
+        assertThat(dailyOffer.milestones().get(0).trips()).isEqualTo(6);
+        assertThat(dailyOffer.milestones().get(0).rewardAmount()).isEqualByComparingTo("28.00");
+        assertThat(dailyOffer.milestones().get(1).trips()).isEqualTo(9);
+        assertThat(dailyOffer.milestones().get(1).rewardAmount()).isEqualByComparingTo("30.00");
+    }
+
+    @Test
+    void getIncentivesProgress_universalUpdatedMilestonesNotOverriddenByStaleZoneClone() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+        String json = """
+        {
+          "pricingBasis": "UNIVERSAL",
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "dailyTargetBonus",
+                "title": "Daily Target Bonus",
+                "value": 150,
+                "active": true,
+                "creatorRole": "SUPER_ADMIN",
+                "scope": "GLOBAL",
+                "milestones": [
+                  { "trips": 6, "reward": 28 },
+                  { "trips": 9, "reward": 30 }
+                ]
+              }
+            ]
+          },
+          "zoneConfigs": {
+            "dz-tumkur": {
+              "incentives": [
+                {
+                  "id": "dailyTargetBonus",
+                  "title": "Daily Target Bonus",
+                  "value": 150,
+                  "active": true,
+                  "creatorRole": "SUPER_ADMIN",
+                  "scope": "GLOBAL",
+                  "milestones": [
+                    { "trips": 6, "reward": 50 },
+                    { "trips": 9, "reward": 75 }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "UNIVERSAL", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        partner.verifyZone("dz-tumkur", "Tumkur Zone", 13.3379, 77.1173);
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        // In UNIVERSAL mode, Super Admin's new milestones (28 and 30) take precedence over stale zone copy
+        assertThat(dailyOffer.milestones().get(0).rewardAmount()).isEqualByComparingTo("28.00");
+        assertThat(dailyOffer.milestones().get(1).rewardAmount()).isEqualByComparingTo("30.00");
+    }
 }

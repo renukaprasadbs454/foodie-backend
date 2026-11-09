@@ -1,5 +1,6 @@
 package com.foodie.delivery.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 
 public record IncentiveMilestoneDto(
@@ -9,4 +10,13 @@ public record IncentiveMilestoneDto(
         int remaining,
         boolean isEarned
 ) {
+    @JsonProperty("orders")
+    public int orders() {
+        return trips;
+    }
+
+    @JsonProperty("reward")
+    public BigDecimal reward() {
+        return rewardAmount;
+    }
 }

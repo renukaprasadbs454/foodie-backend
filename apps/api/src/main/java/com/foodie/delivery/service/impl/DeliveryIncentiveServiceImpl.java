@@ -64,7 +64,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private static final Logger log = LoggerFactory.getLogger(DeliveryIncentiveServiceImpl.class);
     private static final UUID DEFAULT_CONFIG_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     private static final ZoneId ZONE_IST = ZoneId.of("Asia/Kolkata");
-    private static final Pattern TARGET_PATTERN = Pattern.compile("(\\d+)\\s*(?:or more\\s*)?(?:orders|deliveries|trips)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TARGET_PATTERN = Pattern
+            .compile("(\\d+)\\s*(?:or more\\s*)?(?:orders|deliveries|trips)", Pattern.CASE_INSENSITIVE);
 
     private final DeliveryPartnerRepository deliveryPartnerRepository;
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
@@ -101,8 +102,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             DeliveryPricingConfigRepository pricingConfigRepository,
             DeliveryPartnerIncentiveEarningRepository earningRepository,
             WalletService walletService,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.deliveryPartnerRepository = deliveryPartnerRepository;
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
         this.pricingConfigRepository = pricingConfigRepository;
@@ -120,9 +120,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             ObjectMapper objectMapper,
             WalletAccountRepository walletAccountRepository,
             LedgerEntryRepository ledgerEntryRepository,
-            PayoutRepository payoutRepository
-    ) {
-        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository, walletService, objectMapper);
+            PayoutRepository payoutRepository) {
+        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository,
+                walletService, objectMapper);
         this.walletAccountRepository = walletAccountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.payoutRepository = payoutRepository;
@@ -139,9 +139,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             LedgerEntryRepository ledgerEntryRepository,
             PayoutRepository payoutRepository,
             DeliveryShiftBookingRepository shiftBookingRepository,
-            DeliveryOnlineSessionRepository onlineSessionRepository
-    ) {
-        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository, walletService, objectMapper, walletAccountRepository, ledgerEntryRepository, payoutRepository);
+            DeliveryOnlineSessionRepository onlineSessionRepository) {
+        this(deliveryPartnerRepository, deliveryAssignmentRepository, pricingConfigRepository, earningRepository,
+                walletService, objectMapper, walletAccountRepository, ledgerEntryRepository, payoutRepository);
         this.shiftBookingRepository = shiftBookingRepository;
         this.onlineSessionRepository = onlineSessionRepository;
     }
@@ -164,8 +164,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     public record MilestoneDef(
             int trips,
-            BigDecimal reward
-    ) {}
+            BigDecimal reward) {
+    }
 
     public record ConditionDef(
             String id,
@@ -176,8 +176,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String timeSlot,
             String duration,
             Integer minDurationMinutes,
-            Integer maxRejections
-    ) {}
+            Integer maxRejections) {
+    }
 
     public record IncentiveRuleDef(
             String id,
@@ -193,8 +193,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             List<ConditionDef> conditions,
             String zoneId,
             String creatorRole,
-            String scope
-    ) {
+            String scope) {
         public IncentiveRuleDef(
                 String id,
                 String title,
@@ -203,8 +202,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 boolean active,
                 String description,
                 String category,
-                String condition
-        ) {
+                String condition) {
             this(id, title, value, unit, active, description, category, condition, null, null, null, null, null, null);
         }
 
@@ -218,9 +216,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String category,
                 String condition,
                 Integer targetCount,
-                List<MilestoneDef> milestones
-        ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null, null, null, null);
+                List<MilestoneDef> milestones) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, null, null,
+                    null, null);
         }
 
         public IncentiveRuleDef(
@@ -234,9 +232,9 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 String condition,
                 Integer targetCount,
                 List<MilestoneDef> milestones,
-                List<ConditionDef> conditions
-        ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, null, null, null);
+                List<ConditionDef> conditions) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions,
+                    null, null, null);
         }
 
         public IncentiveRuleDef(
@@ -251,16 +249,17 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 Integer targetCount,
                 List<MilestoneDef> milestones,
                 List<ConditionDef> conditions,
-                String zoneId
-        ) {
-            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions, zoneId, null, null);
+                String zoneId) {
+            this(id, title, value, unit, active, description, category, condition, targetCount, milestones, conditions,
+                    zoneId, null, null);
         }
     }
 
     @Override
     @Transactional
     public void processDeliveryCompletion(UUID deliveryPartnerId, UUID orderId, UUID assignmentId) {
-        log.info("Evaluating incentives for partner {} assignment {} order {}", deliveryPartnerId, assignmentId, orderId);
+        log.info("Evaluating incentives for partner {} assignment {} order {}", deliveryPartnerId, assignmentId,
+                orderId);
 
         DeliveryPartner partner = deliveryPartnerRepository.findById(deliveryPartnerId)
                 .orElse(null);
@@ -288,10 +287,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             try {
                 switch (rule.id()) {
                     case "basePay" -> evaluateBasePay(partner, rule, assignmentId, orderId, periodDate);
-                    case "peakHourBonus" -> evaluatePeakHour(partner, rule, assignmentId, orderId, periodDate, zdt.toLocalTime());
+                    case "peakHourBonus" ->
+                        evaluatePeakHour(partner, rule, assignmentId, orderId, periodDate, zdt.toLocalTime());
                     case "dailyTargetBonus" -> {
-                        // Daily target / milestones are credited when shift is completed and partner goes offline
-                        log.info("Partner {} delivered order. Daily target progress updated (credits upon shift offline).", partner.getId());
+                        // Daily target / milestones are credited when shift is completed and partner
+                        // goes offline
+                        log.info(
+                                "Partner {} delivered order. Daily target progress updated (credits upon shift offline).",
+                                partner.getId());
                     }
                     case "weeklyTargetBonus" -> evaluateWeeklyTarget(partner, rule, periodDate);
                     case "longDistanceBonus" -> evaluateLongDistance(partner, rule, assignmentId, orderId, periodDate);
@@ -306,14 +309,18 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     }
                 }
             } catch (Exception e) {
-                log.error("Error evaluating incentive rule {} for partner {}: {}", rule.id(), partner.getId(), e.getMessage(), e);
+                log.error("Error evaluating incentive rule {} for partner {}: {}", rule.id(), partner.getId(),
+                        e.getMessage(), e);
             }
         }
     }
 
-    private void evaluateBasePay(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId, LocalDate periodDate) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
-        awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
+    private void evaluateBasePay(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId,
+            LocalDate periodDate) {
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
+        awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId,
+                periodDate);
     }
 
     private void evaluatePeakHour(
@@ -322,11 +329,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             UUID assignmentId,
             UUID orderId,
             LocalDate periodDate,
-            LocalTime completionTime
-    ) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
+            LocalTime completionTime) {
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
         if (isPeakHour(completionTime)) {
-            awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
+            awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId,
+                    periodDate);
         }
     }
 
@@ -335,21 +343,26 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             IncentiveRuleDef rule,
             UUID assignmentId,
             UUID orderId,
-            LocalDate periodDate
-    ) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
+            LocalDate periodDate) {
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
         double distanceKm = 8.0;
         if (distanceKm > 5.0) {
             double extraKm = distanceKm - 5.0;
-            BigDecimal extraAmount = rule.value().multiply(BigDecimal.valueOf(extraKm)).setScale(2, RoundingMode.HALF_UP);
-            awardIncentive(partner, rule.id(), rule.title(), extraAmount, "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
+            BigDecimal extraAmount = rule.value().multiply(BigDecimal.valueOf(extraKm)).setScale(2,
+                    RoundingMode.HALF_UP);
+            awardIncentive(partner, rule.id(), rule.title(), extraAmount, "DELIVERY_ASSIGNMENT", assignmentId, orderId,
+                    periodDate);
         }
     }
 
-    private void evaluateRainBonus(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId, LocalDate periodDate) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
+    private void evaluateRainBonus(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId,
+            LocalDate periodDate) {
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
         if (isBadWeatherConditionActive(assignmentId, orderId)) {
-            awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
+            awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId,
+                    periodDate);
         }
     }
 
@@ -361,17 +374,22 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         try {
             DeliveryPricingConfig config = pricingConfigRepository.findById(DEFAULT_CONFIG_ID).orElse(null);
             if (config != null && config.getConfigData() != null) {
-                if (config.getConfigData().contains("\"condition\":\"BAD_WEATHER\"") || config.getConfigData().contains("\"condition\": \"BAD_WEATHER\"")) {
+                if (config.getConfigData().contains("\"condition\":\"BAD_WEATHER\"")
+                        || config.getConfigData().contains("\"condition\": \"BAD_WEATHER\"")) {
                     return true;
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return false;
     }
 
-    private void evaluateCustomRule(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId, LocalDate periodDate) {
-        if ((rule.milestones() != null && !rule.milestones().isEmpty()) || (rule.targetCount() != null && rule.targetCount() > 1)) {
-            // Milestone / tiered targets are credited only when shift completes and partner goes offline
+    private void evaluateCustomRule(DeliveryPartner partner, IncentiveRuleDef rule, UUID assignmentId, UUID orderId,
+            LocalDate periodDate) {
+        if ((rule.milestones() != null && !rule.milestones().isEmpty())
+                || (rule.targetCount() != null && rule.targetCount() > 1)) {
+            // Milestone / tiered targets are credited only when shift completes and partner
+            // goes offline
             return;
         }
         if (rule.conditions() != null && !rule.conditions().isEmpty()) {
@@ -383,8 +401,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 return;
             }
         }
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
-        awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId, periodDate);
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
+        awardIncentive(partner, rule.id(), rule.title(), rule.value(), "DELIVERY_ASSIGNMENT", assignmentId, orderId,
+                periodDate);
     }
 
     @Override
@@ -392,42 +412,50 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     public void processOfflineIncentives(UUID deliveryPartnerId) {
         log.info("Processing offline incentives for partner {}", deliveryPartnerId);
         DeliveryPartner partner = deliveryPartnerRepository.findById(deliveryPartnerId).orElse(null);
-        if (partner == null) return;
+        if (partner == null)
+            return;
 
         LocalDate today = LocalDate.now(ZONE_IST);
         ZonedDateTime startOfDay = today.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfDay = today.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
-        long completedToday = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
-                partner.getId(),
-                DeliveryAssignmentStatus.DELIVERED,
-                startOfDay.toInstant(),
-                endOfDay.toInstant()
-        );
+        long completedToday = deliveryAssignmentRepository
+                .countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.DELIVERED,
+                        startOfDay.toInstant(),
+                        endOfDay.toInstant());
 
         if (completedToday <= 0) {
-            log.info("Partner {} has completed 0 trips today upon going offline, no daily incentive awarded", partner.getId());
+            log.info("Partner {} has completed 0 trips today upon going offline, no daily incentive awarded",
+                    partner.getId());
             return;
         }
 
         List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
         for (IncentiveRuleDef rule : activeRules) {
-            if (!rule.active()) continue;
+            if (!rule.active())
+                continue;
             boolean isDailyOrMilestone = "dailyTargetBonus".equalsIgnoreCase(rule.id())
                     || (rule.milestones() != null && !rule.milestones().isEmpty())
                     || (rule.targetCount() != null && rule.targetCount() > 1);
 
-            if (!isDailyOrMilestone) continue;
+            if (!isDailyOrMilestone)
+                continue;
 
-            // 1. ALL conditions must be strictly satisfied: if any condition has failed, do not award
+            // 1. ALL conditions must be strictly satisfied: if any condition has failed, do
+            // not award
             List<IncentiveConditionProgressDto> conditions = evaluateConditionsForPartner(partner, rule, today);
             if (conditions != null && !conditions.isEmpty()) {
                 boolean anyFailed = conditions.stream().anyMatch(c -> {
-                    if ("FAILED".equalsIgnoreCase(c.status())) return true;
+                    if ("FAILED".equalsIgnoreCase(c.status()))
+                        return true;
                     if ("LOGIN_SLOT".equalsIgnoreCase(c.type()) || "LOGIN_SLOT".equalsIgnoreCase(c.id())) {
                         if (shiftBookingRepository != null && partner.getId() != null) {
-                            List<DeliveryShiftBooking> bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
-                            boolean hasBookedShift = bookings != null && bookings.stream().anyMatch(b -> "BOOKED".equalsIgnoreCase(b.getStatus()));
+                            List<DeliveryShiftBooking> bookings = shiftBookingRepository
+                                    .findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+                            boolean hasBookedShift = bookings != null
+                                    && bookings.stream().anyMatch(b -> "BOOKED".equalsIgnoreCase(b.getStatus()));
                             if (hasBookedShift && c.progressPercentage() < 100.0) {
                                 return true;
                             }
@@ -437,13 +465,17 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 });
                 if (anyFailed) {
                     log.info("Partner {} condition failed for rule {}. Statuses: {}. No incentive awarded.",
-                            partner.getId(), rule.id(), conditions.stream().map(c -> c.id() + "=" + c.status() + " (" + c.progressPercentage() + "%)").toList());
+                            partner.getId(), rule.id(),
+                            conditions.stream()
+                                    .map(c -> c.id() + "=" + c.status() + " (" + c.progressPercentage() + "%)")
+                                    .toList());
                     continue;
                 }
             }
 
             // 2. Select ONLY the SINGLE HIGHEST tier achieved (Non-cumulative!)
-            // e.g. 6 orders -> ₹45, 9 orders -> ₹75. If partner completed 9 orders, award ONLY ₹75 (not 45 + 75).
+            // e.g. 6 orders -> ₹45, 9 orders -> ₹75. If partner completed 9 orders, award
+            // ONLY ₹75 (not 45 + 75).
             BigDecimal highestReward = BigDecimal.ZERO;
             String highestTitle = rule.title();
             String highestRuleKey = rule.id();
@@ -461,7 +493,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
             }
 
-            int mainTarget = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
+            int mainTarget = rule.targetCount() != null ? rule.targetCount()
+                    : parseTargetFromDescription(rule.description(), 15);
             if (completedToday >= mainTarget && rule.value() != null && rule.value().compareTo(highestReward) > 0) {
                 highestReward = rule.value();
                 highestTitle = rule.title() + " (" + mainTarget + " trips target)";
@@ -470,8 +503,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
             if (highestReward.compareTo(BigDecimal.ZERO) > 0) {
                 UUID offlineRefId = UUID.nameUUIDFromBytes(
-                        (partner.getId() + ":DAILY_TARGET_OFFLINE:" + today).getBytes(StandardCharsets.UTF_8)
-                );
+                        (partner.getId() + ":DAILY_TARGET_OFFLINE:" + today).getBytes(StandardCharsets.UTF_8));
                 awardIncentive(
                         partner,
                         highestRuleKey,
@@ -480,8 +512,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         "DAILY_TARGET_OFFLINE",
                         offlineRefId,
                         null,
-                        today
-                );
+                        today);
                 log.info("Successfully awarded highest tier daily incentive ₹{} to partner {} upon going offline",
                         highestReward, partner.getId());
             }
@@ -489,42 +520,46 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private void evaluateWeeklyTarget(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
 
-        int target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 80);
+        int target = rule.targetCount() != null ? rule.targetCount()
+                : parseTargetFromDescription(rule.description(), 80);
         LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate weekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
 
         ZonedDateTime startOfWeek = weekStart.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfWeek = weekEnd.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
-        long completedThisWeek = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
-                partner.getId(),
-                DeliveryAssignmentStatus.DELIVERED,
-                startOfWeek.toInstant(),
-                endOfWeek.toInstant()
-        );
+        long completedThisWeek = deliveryAssignmentRepository
+                .countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.DELIVERED,
+                        startOfWeek.toInstant(),
+                        endOfWeek.toInstant());
 
         if (completedThisWeek >= target && completedThisWeek > 0) {
-            UUID weeklyRefId = UUID.nameUUIDFromBytes((partner.getId() + ":WEEKLY_TARGET:" + weekStart).getBytes(StandardCharsets.UTF_8));
+            UUID weeklyRefId = UUID.nameUUIDFromBytes(
+                    (partner.getId() + ":WEEKLY_TARGET:" + weekStart).getBytes(StandardCharsets.UTF_8));
             awardIncentive(partner, rule.id(), rule.title(), rule.value(), "WEEKLY_TARGET", weeklyRefId, null, today);
         }
     }
 
     private void evaluatePerformanceBonus(DeliveryPartner partner, IncentiveRuleDef rule, LocalDate today) {
-        if (rule.value().compareTo(BigDecimal.ZERO) <= 0) return;
+        if (rule.value().compareTo(BigDecimal.ZERO) <= 0)
+            return;
 
         LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate weekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
         ZonedDateTime startOfWeek = weekStart.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfWeek = weekEnd.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
-        long completedThisWeek = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
-                partner.getId(),
-                DeliveryAssignmentStatus.DELIVERED,
-                startOfWeek.toInstant(),
-                endOfWeek.toInstant()
-        );
+        long completedThisWeek = deliveryAssignmentRepository
+                .countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.DELIVERED,
+                        startOfWeek.toInstant(),
+                        endOfWeek.toInstant());
 
         int minTrips = rule.targetCount() != null ? rule.targetCount() : 25;
         double minRating = 4.85;
@@ -534,7 +569,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         double partnerRating = (avgRating != null && avgRating > 0.0) ? avgRating : 5.0;
 
         if (completedThisWeek >= minTrips && partnerRating >= minRating) {
-            UUID perfRefId = UUID.nameUUIDFromBytes((partner.getId() + ":PERFORMANCE:" + weekStart).getBytes(StandardCharsets.UTF_8));
+            UUID perfRefId = UUID.nameUUIDFromBytes(
+                    (partner.getId() + ":PERFORMANCE:" + weekStart).getBytes(StandardCharsets.UTF_8));
             awardIncentive(partner, rule.id(), rule.title(), rule.value(), "PERFORMANCE", perfRefId, null, today);
         }
     }
@@ -547,8 +583,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             String referenceType,
             UUID referenceId,
             UUID orderId,
-            LocalDate periodDate
-    ) {
+            LocalDate periodDate) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
@@ -568,10 +603,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     referenceType,
                     referenceId,
                     orderId,
-                    periodDate
-            );
+                    periodDate);
             DeliveryPartnerIncentiveEarning savedEarning = earningRepository.save(earning);
-            UUID earningId = savedEarning != null && savedEarning.getId() != null ? savedEarning.getId() : (earning.getId() != null ? earning.getId() : referenceId);
+            UUID earningId = savedEarning != null && savedEarning.getId() != null ? savedEarning.getId()
+                    : (earning.getId() != null ? earning.getId() : referenceId);
 
             log.info("Awarded incentive {} ({}) amount ₹{} to partner {}", ruleId, ruleTitle, amount, partner.getId());
 
@@ -580,10 +615,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     partner.getId(),
                     amount,
                     LedgerReferenceType.INCENTIVE,
-                    earningId
-            );
+                    earningId);
         } catch (DataIntegrityViolationException e) {
-            log.info("Concurrent incentive award prevented for partner {} rule {} ref {}", partner.getId(), ruleId, referenceId);
+            log.info("Concurrent incentive award prevented for partner {} rule {} ref {}", partner.getId(), ruleId,
+                    referenceId);
         }
     }
 
@@ -596,12 +631,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         ZonedDateTime startOfDay = targetDate.atStartOfDay(ZONE_IST);
         ZonedDateTime endOfDay = targetDate.atTime(LocalTime.MAX).atZone(ZONE_IST);
 
-        long tripsCompleted = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
-                partner.getId(),
-                DeliveryAssignmentStatus.DELIVERED,
-                startOfDay.toInstant(),
-                endOfDay.toInstant()
-        );
+        long tripsCompleted = deliveryAssignmentRepository
+                .countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.DELIVERED,
+                        startOfDay.toInstant(),
+                        endOfDay.toInstant());
 
         List<DeliveryPartnerIncentiveEarning> dayEarnings = earningRepository
                 .findByDeliveryPartnerIdAndPeriodDate(partner.getId(), targetDate);
@@ -611,14 +646,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<IncentiveRuleDef> activeRules = loadActiveRules(partner);
-        List<IncentiveOfferProgressDto> offerDtos = buildOfferProgressList(partner, activeRules, targetDate, tripsCompleted, dayEarnings);
+        List<IncentiveOfferProgressDto> offerDtos = buildOfferProgressList(partner, activeRules, targetDate,
+                tripsCompleted, dayEarnings);
 
         return new IncentivesProgressResponseDto(
                 targetDate,
                 tripsCompleted,
                 totalEarned,
-                offerDtos
-        );
+                offerDtos);
     }
 
     @Override
@@ -634,8 +669,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 partner.getId(),
                 DeliveryAssignmentStatus.DELIVERED,
                 startOfDay.toInstant(),
-                endOfDay.toInstant()
-        );
+                endOfDay.toInstant());
 
         List<DeliveryPartnerIncentiveEarning> dayEarnings = earningRepository
                 .findByDeliveryPartnerIdAndPeriodDate(partner.getId(), today);
@@ -659,8 +693,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         e.getReferenceId(),
                         e.getOrderId(),
                         e.getPeriodDate(),
-                        e.getEarnedAt()
-                ))
+                        e.getEarnedAt()))
                 .toList();
     }
 
@@ -682,18 +715,20 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
                 if (ledgerEntryRepository != null) {
                     BigDecimal reg = ledgerEntryRepository.sumDeliveryCreditsByWalletAccountId(acc.getId());
-                    if (reg != null) regularEarnings = reg;
+                    if (reg != null)
+                        regularEarnings = reg;
 
                     BigDecimal inc = ledgerEntryRepository.sumIncentiveCreditsByWalletAccountId(acc.getId());
-                    if (inc != null) incentiveEarnings = inc;
+                    if (inc != null)
+                        incentiveEarnings = inc;
                 }
 
                 if (payoutRepository != null) {
                     BigDecimal paid = payoutRepository.sumAmountByWalletAccountIdAndStatusIn(
                             acc.getId(),
-                            List.of(PayoutStatus.COMPLETED)
-                    );
-                    if (paid != null) paidOutIncentives = paid;
+                            List.of(PayoutStatus.COMPLETED));
+                    if (paid != null)
+                        paidOutIncentives = paid;
                 }
             }
         }
@@ -703,7 +738,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             earnedIncentives = incentiveEarnings;
         }
 
-        // Calculate pending incentives (potential reward of offers currently In Progress today)
+        // Calculate pending incentives (potential reward of offers currently In
+        // Progress today)
         LocalDate today = LocalDate.now(ZONE_IST);
         IncentivesProgressResponseDto progress = getIncentivesProgress(userCredentialId, today);
         BigDecimal pendingIncentives = BigDecimal.ZERO;
@@ -712,11 +748,13 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 if (offer.milestones() != null && !offer.milestones().isEmpty()) {
                     for (var m : offer.milestones()) {
                         if ("In Progress".equalsIgnoreCase(m.status())) {
-                            pendingIncentives = pendingIncentives.add(m.rewardAmount() != null ? m.rewardAmount() : BigDecimal.ZERO);
+                            pendingIncentives = pendingIncentives
+                                    .add(m.rewardAmount() != null ? m.rewardAmount() : BigDecimal.ZERO);
                         }
                     }
                 } else if ("In Progress".equalsIgnoreCase(offer.status()) && !offer.isEarned()) {
-                    pendingIncentives = pendingIncentives.add(offer.rewardAmount() != null ? offer.rewardAmount() : BigDecimal.ZERO);
+                    pendingIncentives = pendingIncentives
+                            .add(offer.rewardAmount() != null ? offer.rewardAmount() : BigDecimal.ZERO);
                 }
             }
         }
@@ -730,8 +768,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 pendingIncentives.setScale(2, RoundingMode.HALF_UP),
                 paidOutIncentives.setScale(2, RoundingMode.HALF_UP),
                 availableBalance.setScale(2, RoundingMode.HALF_UP),
-                history
-        );
+                history);
     }
 
     private List<IncentiveOfferProgressDto> buildOfferProgressList(
@@ -739,8 +776,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             List<IncentiveRuleDef> rules,
             LocalDate date,
             long tripsToday,
-            List<DeliveryPartnerIncentiveEarning> dayEarnings
-    ) {
+            List<DeliveryPartnerIncentiveEarning> dayEarnings) {
         List<IncentiveOfferProgressDto> list = new ArrayList<>();
         Map<String, BigDecimal> earnedMap = new LinkedHashMap<>();
         for (DeliveryPartnerIncentiveEarning e : dayEarnings) {
@@ -749,12 +785,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
         LocalDate weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate weekEnd = date.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
-        long tripsThisWeek = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
-                partner.getId(),
-                DeliveryAssignmentStatus.DELIVERED,
-                weekStart.atStartOfDay(ZONE_IST).toInstant(),
-                weekEnd.atTime(LocalTime.MAX).atZone(ZONE_IST).toInstant()
-        );
+        long tripsThisWeek = deliveryAssignmentRepository
+                .countByDeliveryPartnerIdAndStatusAndDeliveredVerifiedAtBetween(
+                        partner.getId(),
+                        DeliveryAssignmentStatus.DELIVERED,
+                        weekStart.atStartOfDay(ZONE_IST).toInstant(),
+                        weekEnd.atTime(LocalTime.MAX).atZone(ZONE_IST).toInstant());
 
         LocalTime nowTime = LocalTime.now(ZONE_IST);
         boolean isPeak = isPeakHour(nowTime);
@@ -784,14 +820,19 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     validity = "Per Order Completed";
                 }
                 case "dailyTargetBonus" -> {
-                    target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 15);
+                    int maxMilestone = (rule.milestones() != null && !rule.milestones().isEmpty())
+                            ? rule.milestones().stream().mapToInt(MilestoneDef::trips).max().orElse(15)
+                            : 15;
+                    target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), maxMilestone);
                     currentProgress = (int) Math.min(tripsToday, target);
                     validity = "Today (Ends 11:59 PM)";
 
                     offerConditions = evaluateConditionsForPartner(partner, rule, date);
-                    boolean conditionsFailed = offerConditions != null && offerConditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
+                    boolean conditionsFailed = offerConditions != null
+                            && offerConditions.stream().anyMatch(c -> "FAILED".equalsIgnoreCase(c.status()));
 
-                    isEarned = !conditionsFailed && ((tripsToday >= target && tripsToday > 0) || earnedMap.containsKey(rule.id()));
+                    isEarned = !conditionsFailed
+                            && ((tripsToday >= target && tripsToday > 0) || earnedMap.containsKey(rule.id()));
                     remaining = Math.max(0, target - (int) tripsToday);
                     status = isEarned ? "Completed" : (tripsToday > 0 ? "In Progress" : "Upcoming");
 
@@ -799,7 +840,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         offerMilestones = new ArrayList<>();
                         boolean firstUnearnedSeen = false;
                         for (MilestoneDef m : rule.milestones()) {
-                            boolean mEarned = !conditionsFailed && ((tripsToday >= m.trips() && tripsToday > 0) || earnedMap.containsKey(rule.id() + "_m" + m.trips()));
+                            boolean mEarned = !conditionsFailed && ((tripsToday >= m.trips() && tripsToday > 0)
+                                    || earnedMap.containsKey(rule.id() + "_m" + m.trips()));
                             int mRemaining = Math.max(0, m.trips() - (int) tripsToday);
                             String mStatus;
                             if (mEarned) {
@@ -812,17 +854,20 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                             } else {
                                 mStatus = "Locked";
                             }
-                            offerMilestones.add(new IncentiveMilestoneDto(m.trips(), m.reward(), mStatus, mRemaining, mEarned));
+                            offerMilestones.add(
+                                    new IncentiveMilestoneDto(m.trips(), m.reward(), mStatus, mRemaining, mEarned));
                         }
                     }
                 }
                 case "weeklyTargetBonus" -> {
-                    target = rule.targetCount() != null ? rule.targetCount() : parseTargetFromDescription(rule.description(), 80);
+                    target = rule.targetCount() != null ? rule.targetCount()
+                            : parseTargetFromDescription(rule.description(), 80);
                     currentProgress = (int) Math.min(tripsThisWeek, target);
                     isEarned = (tripsThisWeek >= target);
                     remaining = Math.max(0, target - (int) tripsThisWeek);
                     status = isEarned ? "Completed" : (tripsThisWeek > 0 ? "In Progress" : "Upcoming");
-                    validity = "This Week (" + weekStart.getDayOfMonth() + "-" + weekEnd.getDayOfMonth() + " " + weekEnd.getMonth().name().substring(0, 3) + ")";
+                    validity = "This Week (" + weekStart.getDayOfMonth() + "-" + weekEnd.getDayOfMonth() + " "
+                            + weekEnd.getMonth().name().substring(0, 3) + ")";
                 }
                 case "peakHourBonus" -> {
                     target = 1;
@@ -874,6 +919,29 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
             }
 
+            if (offerMilestones == null && rule.milestones() != null && !rule.milestones().isEmpty()) {
+                offerMilestones = new ArrayList<>();
+                boolean firstUnearnedSeen = false;
+                for (MilestoneDef m : rule.milestones()) {
+                    boolean mEarned = (currentProgress >= m.trips() && currentProgress > 0) || earnedMap.containsKey(rule.id() + "_m" + m.trips());
+                    int mRemaining = Math.max(0, m.trips() - currentProgress);
+                    String mStatus;
+                    if (mEarned) {
+                        mStatus = "Completed";
+                    } else if (!firstUnearnedSeen) {
+                        mStatus = "In Progress";
+                        firstUnearnedSeen = true;
+                    } else {
+                        mStatus = "Locked";
+                    }
+                    offerMilestones.add(new IncentiveMilestoneDto(m.trips(), m.reward(), mStatus, mRemaining, mEarned));
+                }
+            }
+
+            if (offerConditions == null && rule.conditions() != null && !rule.conditions().isEmpty()) {
+                offerConditions = evaluateConditionsForPartner(partner, rule, date);
+            }
+
             list.add(new IncentiveOfferProgressDto(
                     rule.id(),
                     rule.title(),
@@ -892,8 +960,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     offerConditions,
                     rule.creatorRole(),
                     rule.scope(),
-                    rule.zoneId()
-            ));
+                    rule.zoneId()));
         }
 
         return list;
@@ -902,15 +969,15 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     private List<IncentiveConditionProgressDto> evaluateConditionsForPartner(
             DeliveryPartner partner,
             IncentiveRuleDef rule,
-            LocalDate date
-    ) {
+            LocalDate date) {
         List<IncentiveConditionProgressDto> result = new ArrayList<>();
         List<ConditionDef> conditionDefs = rule.conditions();
         if (conditionDefs == null || conditionDefs.isEmpty()) {
             conditionDefs = List.of(
-                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
-                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
-            );
+                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am",
+                            "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject",
+                            "more than 1 order", null, null, null, 1));
         }
 
         LocalDate today = LocalDate.now(ZONE_IST);
@@ -920,7 +987,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         // Find active shift booking for partner
         DeliveryShiftBooking bookedShift = null;
         if (shiftBookingRepository != null && partner != null) {
-            List<DeliveryShiftBooking> bookings = shiftBookingRepository.findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
+            List<DeliveryShiftBooking> bookings = shiftBookingRepository
+                    .findByDeliveryPartnerIdOrderByBookedAtDesc(partner.getId());
             for (DeliveryShiftBooking b : bookings) {
                 if ("BOOKED".equalsIgnoreCase(b.getStatus())) {
                     bookedShift = b;
@@ -941,11 +1009,13 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     rawEndTime = bookedShift.getEndTime();
                     rawDuration = bookedShift.getDurationHours();
                 } else {
-                    String configuredSlot = (c.timeSlot() != null && !c.timeSlot().isBlank()) ? c.timeSlot() : (c.value() != null ? c.value() : "7pm - 12am");
+                    String configuredSlot = (c.timeSlot() != null && !c.timeSlot().isBlank()) ? c.timeSlot()
+                            : (c.value() != null ? c.value() : "7pm - 12am");
                     String[] parts = configuredSlot.split("\\s*[-–—]\\s*");
                     rawStartTime = parts.length > 0 ? parts[0] : "7pm";
                     rawEndTime = parts.length > 1 ? parts[1] : "12am";
-                    rawDuration = (c.duration() != null && !c.duration().isBlank()) ? c.duration() : (c.subtext() != null ? c.subtext() : "4h 30m");
+                    rawDuration = (c.duration() != null && !c.duration().isBlank()) ? c.duration()
+                            : (c.subtext() != null ? c.subtext() : "4h 30m");
                 }
 
                 String timeSlot = formatTimeSlotDisplay(rawStartTime, rawEndTime);
@@ -991,16 +1061,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         subtext,
                         status,
                         progressPct,
-                        progressText
-                ));
+                        progressText));
             } else if ("ORDER_REJECTION".equalsIgnoreCase(c.type())) {
                 int maxRejections = c.maxRejections() != null ? c.maxRejections() : 1;
                 long rejectedCount = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
                         partner.getId(),
                         DeliveryAssignmentStatus.REJECTED,
                         startOfDay.toInstant(),
-                        endOfDay.toInstant()
-                );
+                        endOfDay.toInstant());
 
                 String status;
                 double progressPct;
@@ -1021,7 +1089,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
 
                 String val = (c.value() != null && !c.value().isBlank()) ? c.value() : "Do not reject";
-                String sub = (c.subtext() != null && !c.subtext().isBlank()) ? c.subtext() : ("more than " + maxRejections + (maxRejections == 1 ? " order" : " orders"));
+                String sub = (c.subtext() != null && !c.subtext().isBlank()) ? c.subtext()
+                        : ("more than " + maxRejections + (maxRejections == 1 ? " order" : " orders"));
 
                 result.add(new IncentiveConditionProgressDto(
                         c.id(),
@@ -1031,8 +1100,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         sub,
                         status,
                         progressPct,
-                        progressText
-                ));
+                        progressText));
             } else {
                 result.add(new IncentiveConditionProgressDto(
                         c.id(),
@@ -1042,25 +1110,27 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                         c.subtext(),
                         "SATISFIED",
                         100.0,
-                        c.subtext()
-                ));
+                        c.subtext()));
             }
         }
         return result;
     }
 
-    private long calculateEligibleOnlineMinutes(DeliveryPartner partner, Instant shiftStartInstant, Instant shiftEndInstant) {
+    private long calculateEligibleOnlineMinutes(DeliveryPartner partner, Instant shiftStartInstant,
+            Instant shiftEndInstant) {
         if (onlineSessionRepository == null || partner == null) {
             return 0;
         }
-        List<DeliveryOnlineSession> sessions = onlineSessionRepository.findByDeliveryPartnerIdOrderByOnlineAtDesc(partner.getId());
+        List<DeliveryOnlineSession> sessions = onlineSessionRepository
+                .findByDeliveryPartnerIdOrderByOnlineAtDesc(partner.getId());
         long totalSeconds = 0;
         Instant now = Instant.now();
         boolean hasOpenSession = false;
 
         for (DeliveryOnlineSession session : sessions) {
             Instant sStart = session.getOnlineAt();
-            if (sStart == null) continue;
+            if (sStart == null)
+                continue;
             Instant sEnd = session.getOfflineAt();
             if (sEnd == null) {
                 hasOpenSession = true;
@@ -1090,14 +1160,18 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     public static String formatTimeSlotDisplay(String startTime, String endTime) {
         String s = formatSingleTimeForCard(startTime);
         String e = formatSingleTimeForCard(endTime);
-        if (s == null && e == null) return "7pm - 12am";
-        if (s == null) return e;
-        if (e == null) return s;
+        if (s == null && e == null)
+            return "7pm - 12am";
+        if (s == null)
+            return e;
+        if (e == null)
+            return s;
         return s + " - " + e;
     }
 
     public static String formatSingleTimeForCard(String t) {
-        if (t == null || t.isBlank()) return null;
+        if (t == null || t.isBlank())
+            return null;
         String trimmed = t.trim();
         LocalTime lt = parseLocalTimeFlexible(trimmed);
         if (lt != null) {
@@ -1105,7 +1179,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
             int minute = lt.getMinute();
             String ampm = (hour >= 12) ? "pm" : "am";
             int h12 = hour % 12;
-            if (h12 == 0) h12 = 12;
+            if (h12 == 0)
+                h12 = 12;
             if (minute == 0) {
                 return h12 + ampm;
             } else {
@@ -1121,15 +1196,18 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     public static LocalTime parseLocalTimeFlexible(String t) {
-        if (t == null || t.isBlank()) return null;
+        if (t == null || t.isBlank())
+            return null;
         String s = t.trim().toUpperCase();
         Matcher m12 = Pattern.compile("^(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)$").matcher(s);
         if (m12.matches()) {
             int hour = Integer.parseInt(m12.group(1));
             int minute = (m12.group(2) != null) ? Integer.parseInt(m12.group(2)) : 0;
             String ampm = m12.group(3);
-            if ("PM".equals(ampm) && hour < 12) hour += 12;
-            if ("AM".equals(ampm) && hour == 12) hour = 0;
+            if ("PM".equals(ampm) && hour < 12)
+                hour += 12;
+            if ("AM".equals(ampm) && hour == 12)
+                hour = 0;
             return LocalTime.of(hour, minute);
         }
         Matcher m24 = Pattern.compile("^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?$").matcher(s);
@@ -1146,8 +1224,10 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     public static Instant[] getShiftBounds(LocalDate date, String startTimeStr, String endTimeStr) {
         LocalTime startLt = parseLocalTimeFlexible(startTimeStr);
         LocalTime endLt = parseLocalTimeFlexible(endTimeStr);
-        if (startLt == null) startLt = LocalTime.of(19, 0); // 7:00 PM
-        if (endLt == null) endLt = LocalTime.of(0, 0);      // 12:00 AM
+        if (startLt == null)
+            startLt = LocalTime.of(19, 0); // 7:00 PM
+        if (endLt == null)
+            endLt = LocalTime.of(0, 0); // 12:00 AM
 
         ZonedDateTime startZdt = date.atTime(startLt).atZone(ZONE_IST);
         ZonedDateTime endZdt;
@@ -1156,30 +1236,34 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         } else {
             endZdt = date.atTime(endLt).atZone(ZONE_IST);
         }
-        return new Instant[]{startZdt.toInstant(), endZdt.toInstant()};
+        return new Instant[] { startZdt.toInstant(), endZdt.toInstant() };
     }
 
     public static int parseDurationMinutes(String durationStr, int defaultMinutes) {
-        if (durationStr == null || durationStr.isBlank()) return defaultMinutes;
+        if (durationStr == null || durationStr.isBlank())
+            return defaultMinutes;
         String s = durationStr.trim().toLowerCase();
         Matcher mHm = Pattern.compile("(?:(\\d+)\\s*h)?\\s*(?:(\\d+)\\s*m)?").matcher(s);
         if (mHm.matches() && (mHm.group(1) != null || mHm.group(2) != null)) {
             int h = mHm.group(1) != null ? Integer.parseInt(mHm.group(1)) : 0;
             int m = mHm.group(2) != null ? Integer.parseInt(mHm.group(2)) : 0;
             int total = h * 60 + m;
-            if (total > 0) return total;
+            if (total > 0)
+                return total;
         }
         Matcher mDec = Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*h?$").matcher(s);
         if (mDec.matches()) {
             double hrs = Double.parseDouble(mDec.group(1));
             int total = (int) Math.round(hrs * 60.0);
-            if (total > 0) return total;
+            if (total > 0)
+                return total;
         }
         return defaultMinutes;
     }
 
     public static String formatDurationDisplay(long minutes) {
-        if (minutes <= 0) return "0m";
+        if (minutes <= 0)
+            return "0m";
         long h = minutes / 60;
         long m = minutes % 60;
         if (h > 0 && m > 0) {
@@ -1192,19 +1276,27 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private boolean matchZoneEntity(LocationZone z, String query) {
-        if (z == null || query == null || query.isBlank()) return false;
+        if (z == null || query == null || query.isBlank())
+            return false;
         String q = query.trim().toLowerCase();
-        if (z.getId() != null && z.getId().trim().equalsIgnoreCase(q)) return true;
-        if (z.getZoneName() != null && z.getZoneName().trim().equalsIgnoreCase(q)) return true;
-        if (z.getCityName() != null && z.getCityName().trim().equalsIgnoreCase(q)) return true;
+        if (z.getId() != null && z.getId().trim().equalsIgnoreCase(q))
+            return true;
+        if (z.getZoneName() != null && z.getZoneName().trim().equalsIgnoreCase(q))
+            return true;
+        if (z.getCityName() != null && z.getCityName().trim().equalsIgnoreCase(q))
+            return true;
 
         String cleanQ = q.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim();
-        String cleanId = z.getId() != null ? z.getId().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
-        String cleanName = z.getZoneName() != null ? z.getZoneName().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
-        String cleanCity = z.getCityName() != null ? z.getCityName().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
+        String cleanId = z.getId() != null ? z.getId().trim().toLowerCase().replaceFirst("^(dz[-_]|zone[-_])", "")
+                .replaceAll("[-_]zone$", "").trim() : "";
+        String cleanName = z.getZoneName() != null ? z.getZoneName().trim().toLowerCase()
+                .replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
+        String cleanCity = z.getCityName() != null ? z.getCityName().trim().toLowerCase()
+                .replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "").trim() : "";
 
         if (!cleanQ.isEmpty()) {
-            if (cleanQ.equalsIgnoreCase(cleanId) || cleanQ.equalsIgnoreCase(cleanName) || cleanQ.equalsIgnoreCase(cleanCity)) {
+            if (cleanQ.equalsIgnoreCase(cleanId) || cleanQ.equalsIgnoreCase(cleanName)
+                    || cleanQ.equalsIgnoreCase(cleanCity)) {
                 return true;
             }
         }
@@ -1212,11 +1304,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     public boolean isZoneMatch(String ruleZone, String partnerZone) {
-        if (ruleZone == null || partnerZone == null) return false;
+        if (ruleZone == null || partnerZone == null)
+            return false;
         String r = ruleZone.trim().toLowerCase();
         String p = partnerZone.trim().toLowerCase();
-        if (r.isEmpty() || p.isEmpty()) return false;
-        if (r.equals(p)) return true;
+        if (r.isEmpty() || p.isEmpty())
+            return false;
+        if (r.equals(p))
+            return true;
 
         if (locationZoneRepository != null) {
             try {
@@ -1226,7 +1321,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 if (rZone != null && pZone != null) {
                     return rZone.getId().equalsIgnoreCase(pZone.getId());
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         String cleanR = r.replaceFirst("^(dz[-_]|zone[-_])", "").replaceAll("[-_]zone$", "");
@@ -1239,7 +1335,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     public String resolvePartnerZone(DeliveryPartner partner) {
-        if (partner == null) return null;
+        if (partner == null)
+            return null;
         if (partner.getZoneId() != null && !partner.getZoneId().isBlank()) {
             return partner.getZoneId().trim();
         }
@@ -1253,9 +1350,11 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private IncentiveRuleDef parseRuleFromJson(JsonNode item, String fallbackZoneId) {
-        if (item == null || !item.isObject()) return null;
+        if (item == null || !item.isObject())
+            return null;
         String id = item.has("id") ? item.get("id").asText("") : "";
-        if (id.isBlank()) return null;
+        if (id.isBlank())
+            return null;
 
         String title = item.has("title") ? item.get("title").asText("") : "";
         BigDecimal value = item.has("value") ? new BigDecimal(item.get("value").asText("0")) : BigDecimal.ZERO;
@@ -1275,15 +1374,17 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 ? item.get("zoneId").asText().trim()
                 : fallbackZoneId;
 
-        String creatorRole = item.has("creatorRole") && !item.get("creatorRole").isNull() && !item.get("creatorRole").asText().isBlank()
-                ? item.get("creatorRole").asText().trim()
-                : null;
+        String creatorRole = item.has("creatorRole") && !item.get("creatorRole").isNull()
+                && !item.get("creatorRole").asText().isBlank()
+                        ? item.get("creatorRole").asText().trim()
+                        : null;
         String scope = item.has("scope") && !item.get("scope").isNull() && !item.get("scope").asText().isBlank()
                 ? item.get("scope").asText().trim()
                 : null;
 
         if (scope == null) {
-            scope = (ruleZoneId != null && !ruleZoneId.isBlank() && !"ALL".equalsIgnoreCase(ruleZoneId)) ? "ZONE" : "GLOBAL";
+            scope = (ruleZoneId != null && !ruleZoneId.isBlank() && !"ALL".equalsIgnoreCase(ruleZoneId)) ? "ZONE"
+                    : "GLOBAL";
         }
         if (creatorRole == null) {
             creatorRole = "ZONE".equalsIgnoreCase(scope) ? "ZONE_ADMIN" : "SUPER_ADMIN";
@@ -1298,49 +1399,100 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         }
 
         List<MilestoneDef> milestones = null;
-        if (item.has("milestones") && item.get("milestones").isArray()) {
-            milestones = new ArrayList<>();
-            for (JsonNode mNode : item.get("milestones")) {
-                if (mNode.has("trips")) {
-                    int mTrips = mNode.get("trips").asInt();
-                    BigDecimal mReward = mNode.has("reward")
-                            ? new BigDecimal(mNode.get("reward").asText("0"))
-                            : (mNode.has("rewardAmount") ? new BigDecimal(mNode.get("rewardAmount").asText("0")) : BigDecimal.ZERO);
-                    milestones.add(new MilestoneDef(mTrips, mReward));
+        if (item.has("milestones")) {
+            JsonNode mArray = item.get("milestones");
+            if (mArray.isTextual()) {
+                try {
+                    mArray = objectMapper.readTree(mArray.asText());
+                } catch (Exception ignored) {}
+            }
+            if (mArray != null && mArray.isArray()) {
+                milestones = new ArrayList<>();
+                for (JsonNode mNode : mArray) {
+                    int mTrips = 0;
+                    if (mNode.has("trips") && !mNode.get("trips").isNull()) {
+                        mTrips = mNode.get("trips").asInt();
+                    } else if (mNode.has("orders") && !mNode.get("orders").isNull()) {
+                        mTrips = mNode.get("orders").asInt();
+                    } else if (mNode.has("target") && !mNode.get("target").isNull()) {
+                        mTrips = mNode.get("target").asInt();
+                    } else if (mNode.has("count") && !mNode.get("count").isNull()) {
+                        mTrips = mNode.get("count").asInt();
+                    } else if (mNode.has("targetCount") && !mNode.get("targetCount").isNull()) {
+                        mTrips = mNode.get("targetCount").asInt();
+                    } else if (mNode.has("tripsCount") && !mNode.get("tripsCount").isNull()) {
+                        mTrips = mNode.get("tripsCount").asInt();
+                    } else if (mNode.has("ordersCount") && !mNode.get("ordersCount").isNull()) {
+                        mTrips = mNode.get("ordersCount").asInt();
+                    }
+
+                    BigDecimal mReward = BigDecimal.ZERO;
+                    if (mNode.has("reward") && !mNode.get("reward").isNull()) {
+                        mReward = new BigDecimal(mNode.get("reward").asText("0"));
+                    } else if (mNode.has("rewardAmount") && !mNode.get("rewardAmount").isNull()) {
+                        mReward = new BigDecimal(mNode.get("rewardAmount").asText("0"));
+                    } else if (mNode.has("amount") && !mNode.get("amount").isNull()) {
+                        mReward = new BigDecimal(mNode.get("amount").asText("0"));
+                    } else if (mNode.has("cost") && !mNode.get("cost").isNull()) {
+                        mReward = new BigDecimal(mNode.get("cost").asText("0"));
+                    } else if (mNode.has("value") && !mNode.get("value").isNull()) {
+                        mReward = new BigDecimal(mNode.get("value").asText("0"));
+                    } else if (mNode.has("payout") && !mNode.get("payout").isNull()) {
+                        mReward = new BigDecimal(mNode.get("payout").asText("0"));
+                    }
+
+                    if (mTrips > 0) {
+                        milestones.add(new MilestoneDef(mTrips, mReward));
+                    }
                 }
             }
-        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+        }
+        if ((milestones == null || milestones.isEmpty()) && "dailyTargetBonus".equalsIgnoreCase(id)) {
             milestones = List.of(
                     new MilestoneDef(6, new BigDecimal("50.00")),
                     new MilestoneDef(9, new BigDecimal("75.00")),
                     new MilestoneDef(13, new BigDecimal("120.00")),
-                    new MilestoneDef(18, new BigDecimal("190.00"))
-            );
+                    new MilestoneDef(18, new BigDecimal("190.00")));
+        }
+
+        if (targetCount == null && milestones != null && !milestones.isEmpty()) {
+            targetCount = milestones.stream().mapToInt(MilestoneDef::trips).max().orElse(15);
         }
 
         List<ConditionDef> conditions = null;
-        if (item.has("conditions") && item.get("conditions").isArray()) {
-            conditions = new ArrayList<>();
-            for (JsonNode cNode : item.get("conditions")) {
-                String cId = cNode.has("id") ? cNode.get("id").asText() : UUID.randomUUID().toString();
-                String cType = cNode.has("type") ? cNode.get("type").asText() : "CUSTOM";
-                String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
-                String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
-                String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
-                String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
-                String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
-                Integer cMinDur = cNode.has("minDurationMinutes") ? cNode.get("minDurationMinutes").asInt() : null;
-                Integer cMaxRej = cNode.has("maxRejections") ? cNode.get("maxRejections").asInt() : null;
-                conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
+        if (item.has("conditions")) {
+            JsonNode cArray = item.get("conditions");
+            if (cArray.isTextual()) {
+                try {
+                    cArray = objectMapper.readTree(cArray.asText());
+                } catch (Exception ignored) {}
             }
-        } else if ("dailyTargetBonus".equalsIgnoreCase(id)) {
+            if (cArray != null && cArray.isArray()) {
+                conditions = new ArrayList<>();
+                for (JsonNode cNode : cArray) {
+                    String cId = cNode.has("id") ? cNode.get("id").asText() : UUID.randomUUID().toString();
+                    String cType = cNode.has("type") ? cNode.get("type").asText() : "CUSTOM";
+                    String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
+                    String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
+                    String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
+                    String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
+                    String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
+                    Integer cMinDur = (cNode.has("minDurationMinutes") && !cNode.get("minDurationMinutes").isNull()) ? cNode.get("minDurationMinutes").asInt() : null;
+                    Integer cMaxRej = (cNode.has("maxRejections") && !cNode.get("maxRejections").isNull()) ? cNode.get("maxRejections").asInt() : null;
+                    conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
+                }
+            }
+        }
+        if ((conditions == null || conditions.isEmpty()) && "dailyTargetBonus".equalsIgnoreCase(id)) {
             conditions = List.of(
-                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
-                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
-            );
+                    new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am",
+                            "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                    new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject",
+                            "more than 1 order", null, null, null, 1));
         }
 
-        return new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones, conditions, ruleZoneId, creatorRole, scope);
+        return new IncentiveRuleDef(id, title, value, unit, active, desc, category, condition, targetCount, milestones,
+                conditions, ruleZoneId, creatorRole, scope);
     }
 
     private List<IncentiveRuleDef> loadActiveRules() {
@@ -1360,7 +1512,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 // 1. Universal Incentives (Created by Super Admin, displayed across all zones)
                 List<IncentiveRuleDef> universalRules = new ArrayList<>();
                 JsonNode universalNode = null;
-                if (root.has("universalConfig") && root.get("universalConfig").has("incentives") && root.get("universalConfig").get("incentives").isArray()) {
+                if (root.has("universalConfig") && root.get("universalConfig").has("incentives")
+                        && root.get("universalConfig").get("incentives").isArray()) {
                     universalNode = root.get("universalConfig").get("incentives");
                     configFound = true;
                 } else if (root.has("incentives") && root.get("incentives").isArray()) {
@@ -1372,9 +1525,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     for (JsonNode item : universalNode) {
                         IncentiveRuleDef rule = parseRuleFromJson(item, null);
                         if (rule != null) {
-                            // If an individual rule in universal has a specific zone assigned, only show to partners in that zone
+                            // If an individual rule in universal has a specific zone assigned, only show to
+                            // partners in that zone
                             if (rule.zoneId() != null && !rule.zoneId().isBlank()
-                                    && !"ALL".equalsIgnoreCase(rule.zoneId()) && !"UNIVERSAL".equalsIgnoreCase(rule.zoneId()) && !"GLOBAL".equalsIgnoreCase(rule.scope())) {
+                                    && !"ALL".equalsIgnoreCase(rule.zoneId())
+                                    && !"UNIVERSAL".equalsIgnoreCase(rule.zoneId())
+                                    && !"GLOBAL".equalsIgnoreCase(rule.scope())) {
                                 if (partnerZoneId != null && isZoneMatch(rule.zoneId(), partnerZoneId)) {
                                     universalRules.add(rule);
                                 }
@@ -1389,7 +1545,7 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 List<IncentiveRuleDef> zoneRules = new ArrayList<>();
                 if (partnerZoneId != null && root.has("zoneConfigs") && !root.get("zoneConfigs").isNull()) {
                     JsonNode zoneConfigs = root.get("zoneConfigs");
-                    for (var it = zoneConfigs.fieldNames(); it.hasNext(); ) {
+                    for (var it = zoneConfigs.fieldNames(); it.hasNext();) {
                         String zKey = it.next();
                         if (isZoneMatch(zKey, partnerZoneId)) {
                             JsonNode zNode = zoneConfigs.get(zKey);
@@ -1399,7 +1555,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                                     IncentiveRuleDef rule = parseRuleFromJson(item, zKey);
                                     if (rule != null) {
                                         // Include only if rule belongs to this matching zone
-                                        if (rule.zoneId() == null || rule.zoneId().isBlank() || isZoneMatch(rule.zoneId(), partnerZoneId)) {
+                                        if (rule.zoneId() == null || rule.zoneId().isBlank()
+                                                || isZoneMatch(rule.zoneId(), partnerZoneId)) {
                                             zoneRules.add(rule);
                                         }
                                     }
@@ -1409,15 +1566,27 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     }
                 }
 
-                // 3. Merge: Super Admin universal incentives + partner's Zone-specific incentives
+                // 3. Merge: Super Admin universal incentives + partner's Zone-specific
+                // incentives
                 // Zone-specific rules override universal rules with matching ID for that zone;
                 // new zone-specific incentives are added to the list.
+                String pricingBasisStr = (config.getPricingBasis() != null && !config.getPricingBasis().isBlank())
+                        ? config.getPricingBasis()
+                        : (root.has("pricingBasis") ? root.get("pricingBasis").asText("UNIVERSAL") : "UNIVERSAL");
+
                 Map<String, IncentiveRuleDef> merged = new LinkedHashMap<>();
                 for (IncentiveRuleDef uRule : universalRules) {
                     merged.put(uRule.id(), uRule);
                 }
                 for (IncentiveRuleDef zRule : zoneRules) {
-                    merged.put(zRule.id(), zRule);
+                    if ("UNIVERSAL".equalsIgnoreCase(pricingBasisStr)) {
+                        // In Universal mode, only authentic ZONE_ADMIN created incentives or custom zone rules override universal
+                        if (!merged.containsKey(zRule.id()) || "ZONE_ADMIN".equalsIgnoreCase(zRule.creatorRole())) {
+                            merged.put(zRule.id(), zRule);
+                        }
+                    } else {
+                        merged.put(zRule.id(), zRule);
+                    }
                 }
 
                 rules.addAll(merged.values());
@@ -1434,27 +1603,41 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
 
     private List<IncentiveRuleDef> defaultRules() {
         return List.of(
-                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true, "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true, "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).", "Weather & Surge", "PEAK_HOUR", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day", true, "Bonus awarded upon completing daily order targets.", "Target & Mileage", "DAILY_TARGET", 15,
+                new IncentiveRuleDef("basePay", "Base Pay per Order", new BigDecimal("50.00"), "₹ / order", true,
+                        "Standard baseline compensation per fulfilled delivery assignment.", "Base & Distance", "", 1,
+                        null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("peakHourBonus", "Peak Hour Bonus", new BigDecimal("100.00"), "₹ / order", true,
+                        "Extra surge payout during high-demand meal hours (12 PM–3 PM & 7 PM–11 PM).",
+                        "Weather & Surge", "PEAK_HOUR", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("dailyTargetBonus", "Daily Target Bonus", new BigDecimal("150.00"), "₹ / day",
+                        true, "Bonus awarded upon completing daily order targets.", "Target & Mileage", "DAILY_TARGET",
+                        15,
                         List.of(
                                 new MilestoneDef(6, new BigDecimal("50.00")),
                                 new MilestoneDef(9, new BigDecimal("75.00")),
                                 new MilestoneDef(13, new BigDecimal("120.00")),
-                                new MilestoneDef(18, new BigDecimal("190.00"))
-                        ),
+                                new MilestoneDef(18, new BigDecimal("190.00"))),
                         List.of(
-                                new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot", "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
-                                new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition", "Do not reject", "more than 1 order", null, null, null, 1)
-                        ),
-                        null, "SUPER_ADMIN", "GLOBAL"
-                ),
-                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week", true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage", "WEEKLY_TARGET", 80, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"), "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.", "Base & Distance", "LONG_DISTANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true, "Weather surge bonus automatically applied during rain or severe weather conditions.", "Weather & Surge", "BAD_WEATHER", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true, "Onboarding reward paid after referred delivery partner completes 25 orders.", "Reward & Rating", "REFERRAL", 25, null, null, null, "SUPER_ADMIN", "GLOBAL"),
-                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"), "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.", "Reward & Rating", "PERFORMANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL")
-        );
+                                new ConditionDef("loginSlot", "LOGIN_SLOT", "Mandatory Login: Complete below slot",
+                                        "7pm - 12am", "4h 30m", "7pm - 12am", "4h 30m", 270, null),
+                                new ConditionDef("orderRejection", "ORDER_REJECTION", "Other condition",
+                                        "Do not reject", "more than 1 order", null, null, null, 1)),
+                        null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("weeklyTargetBonus", "Weekly Target Bonus", new BigDecimal("800.00"), "₹ / week",
+                        true, "Tier-1 weekly payout bonus for completing 80+ deliveries per week.", "Target & Mileage",
+                        "WEEKLY_TARGET", 80, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("longDistanceBonus", "Long-Distance Bonus", new BigDecimal("15.00"),
+                        "₹ / extra km", true, "Additional mileage incentive for deliveries exceeding 5 km radius.",
+                        "Base & Distance", "LONG_DISTANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("rainBonus", "Rain/Bad Weather Bonus", new BigDecimal("70.00"), "₹ / order", true,
+                        "Weather surge bonus automatically applied during rain or severe weather conditions.",
+                        "Weather & Surge", "BAD_WEATHER", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("referralBonus", "Referral Bonus", new BigDecimal("500.00"), "₹ / referral", true,
+                        "Onboarding reward paid after referred delivery partner completes 25 orders.",
+                        "Reward & Rating", "REFERRAL", 25, null, null, null, "SUPER_ADMIN", "GLOBAL"),
+                new IncentiveRuleDef("performanceBonus", "Performance/Rating Bonus", new BigDecimal("250.00"),
+                        "₹ / week", true, "Weekly quality incentive for maintaining customer rating of 4.85+ stars.",
+                        "Reward & Rating", "PERFORMANCE", 1, null, null, null, "SUPER_ADMIN", "GLOBAL"));
     }
 
     private boolean isPeakHour(LocalTime time) {
@@ -1463,12 +1646,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
     }
 
     private int parseTargetFromDescription(String description, int defaultValue) {
-        if (description == null || description.isBlank()) return defaultValue;
+        if (description == null || description.isBlank())
+            return defaultValue;
         Matcher matcher = TARGET_PATTERN.matcher(description);
         if (matcher.find()) {
             try {
                 return Integer.parseInt(matcher.group(1));
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
         return defaultValue;
     }
