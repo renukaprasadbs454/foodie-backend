@@ -476,6 +476,25 @@ public class AdminOrderController {
             var existingAssignmentOpt = deliveryAssignmentRepository.findByOrderId(order.getId());
             if (existingAssignmentOpt.isPresent()) {
                 assignment = existingAssignmentOpt.get();
+                // If previously assigned to another partner, notify the old partner of cancellation without penalizing them
+                if (assignment.getDeliveryPartner() != null && !assignment.getDeliveryPartner().getId().equals(partner.getId())) {
+                    DeliveryPartner oldPartner = assignment.getDeliveryPartner();
+                    if (notificationLogRepository != null && oldPartner.getUserCredentialId() != null) {
+                        try {
+                            notificationLogRepository.save(
+                                    com.foodie.notification.entity.NotificationLog.create(
+                                            oldPartner.getUserCredentialId(),
+                                            null,
+                                            "Order Cancelled",
+                                            "Order #" + order.getOrderNumber() + " has been cancelled.",
+                                            com.foodie.common.enums.NotificationDeliveryStatus.SENT
+                                    )
+                            );
+                        } catch (Exception ex) {
+                            // ignore notification save failure
+                        }
+                    }
+                }
                 assignment.reofferTo(partner);
                 assignment = deliveryAssignmentRepository.save(assignment);
             } else {

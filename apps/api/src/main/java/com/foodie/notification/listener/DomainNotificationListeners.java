@@ -90,9 +90,17 @@ public class DomainNotificationListeners {
             if (!shouldNotifyStatus(event.toStatus())) {
                 return;
             }
+            String friendlyStatus = event.toStatus().name();
+            if (event.toStatus() == OrderStatus.PICKED_UP || event.toStatus() == OrderStatus.OUT_FOR_DELIVERY) {
+                friendlyStatus = "collected and on the way!";
+            } else if (event.toStatus() == OrderStatus.READY_FOR_PICKUP) {
+                friendlyStatus = "ready for pickup!";
+            } else if (event.toStatus() == OrderStatus.PREPARING) {
+                friendlyStatus = "being prepared!";
+            }
             notifyCustomer(event.orderId(), NotificationEventType.ORDER_STATUS_CHANGED, Map.of(
                     "fromStatus", event.fromStatus().name(),
-                    "toStatus", event.toStatus().name()
+                    "toStatus", friendlyStatus
             ));
         });
     }

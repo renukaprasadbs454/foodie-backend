@@ -14,4 +14,6 @@ public interface DeliveryCashDepositRepository extends JpaRepository<DeliveryCas
     List<DeliveryCashDeposit> findByDeliveryPartnerIdOrderByCreatedAtDesc(UUID deliveryPartnerId);
 
     List<DeliveryCashDeposit> findByStatusOrderByCreatedAtDesc(DepositStatus status);
+
+    java.util.Optional<DeliveryCashDeposit> findByReferenceNumber(String referenceNumber);
 }

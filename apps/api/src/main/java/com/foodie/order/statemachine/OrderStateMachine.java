@@ -35,16 +35,19 @@ public final class OrderStateMachine {
             return Decision.ILLEGAL;
         }
 
+        if (actor == OrderActorType.ADMIN) {
+            return Decision.ALLOW;
+        }
+
         if (from == to) {
+            if (actor == OrderActorType.SYSTEM) {
+                return Decision.ALLOW;
+            }
             if (actor == OrderActorType.RESTAURANT && (to == OrderStatus.ACCEPTED || to == OrderStatus.PREPARING
                     || to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)) {
                 return Decision.ALLOW;
             }
             return Decision.ILLEGAL;
-        }
-
-        if (actor == OrderActorType.ADMIN) {
-            return Decision.ALLOW;
         }
 
         if (actor == OrderActorType.CUSTOMER) {
@@ -100,7 +103,11 @@ public final class OrderStateMachine {
                 || (from == OrderStatus.PREPARING && to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)
                 || (from == OrderStatus.READY_FOR_PICKUP && to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)
                 || (from == OrderStatus.CONFIRMED && to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)
+                || (from == OrderStatus.ASSIGNED && to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)
+                || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.WAITING_FOR_DELIVERY_PARTNER)
                 || (from == OrderStatus.WAITING_FOR_DELIVERY_PARTNER && to == OrderStatus.ASSIGNED)
+                || (from == OrderStatus.ASSIGNED && to == OrderStatus.ASSIGNED)
+                || (from == OrderStatus.REACHED_RESTAURANT && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.ACCEPTED && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.PREPARING && to == OrderStatus.ASSIGNED)
                 || (from == OrderStatus.CONFIRMED && to == OrderStatus.ASSIGNED)

@@ -55,7 +55,13 @@ public class OrderDeliveryPortImpl implements OrderDeliveryPort {
     @Transactional
     public void assignPartner(UUID orderId, UUID deliveryPartnerId) {
         Order order = require(orderId);
-        apply(order, OrderStatus.ASSIGNED, null);
+        if (order.getStatus() != OrderStatus.ASSIGNED) {
+            apply(order, OrderStatus.ASSIGNED, null);
+        } else {
+            orderStatusEventRepository.save(OrderStatusEvent.append(
+                    order.getId(), OrderStatus.ASSIGNED, OrderStatus.ASSIGNED, OrderActorType.SYSTEM, null, "Reassigned"));
+            eventPublisher.publishEvent(OrderStatusChangedEvent.of(order.getId(), OrderStatus.ASSIGNED, OrderStatus.ASSIGNED));
+        }
         order.assignDeliveryPartner(deliveryPartnerId);
     }
 
