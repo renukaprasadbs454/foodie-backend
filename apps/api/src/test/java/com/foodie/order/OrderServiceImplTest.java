@@ -135,6 +135,24 @@ class OrderServiceImplTest {
         }
 
         @Test
+        void createFromCart_codDisabled_throws400() {
+                when(idempotencyService.findCachedResponse(any(), any())).thenReturn(Optional.empty());
+                when(orderRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
+                when(customerSummaryProvider.findByUserCredentialId(credentialId)).thenReturn(Optional.of(
+                                new CustomerSummaryProvider.CustomerSummary(customerId, "Test Customer", null)));
+
+                com.foodie.admin.controller.AdminCustomerController.COD_DISABLED_CUSTOMERS.put(customerId.toString(), true);
+                try {
+                        assertThatThrownBy(() -> service.createFromCart(
+                                        credentialId, new CreateOrderRequestDto(addressId, null, "COD"), UUID.randomUUID().toString()))
+                                        .isInstanceOf(BadRequestException.class)
+                                        .hasMessageContaining("Cash on Delivery has been disabled");
+                } finally {
+                        com.foodie.admin.controller.AdminCustomerController.COD_DISABLED_CUSTOMERS.remove(customerId.toString());
+                }
+        }
+
+        @Test
         void createFromCart_snapshotsPricesAndClearsCart() {
                 String key = UUID.randomUUID().toString();
                 when(idempotencyService.findCachedResponse(any(), any())).thenReturn(Optional.empty());

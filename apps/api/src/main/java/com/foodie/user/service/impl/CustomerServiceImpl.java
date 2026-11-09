@@ -274,12 +274,18 @@ public class CustomerServiceImpl implements CustomerService {
         }
         UserCredential credential = userCredentialRepository.findById(anyUserIdOrCustomerId).orElse(null);
         if (credential != null) {
+            boolean isCodDisabled = com.foodie.admin.controller.AdminCustomerController.isCodDisabled(
+                    null, credential.getId(), credential.getEmail(), credential.getPhoneNumber());
             return new CustomerProfileResponseDto(
                     credential.getId(),
                     credential.getEmail() != null ? credential.getEmail() : "Customer",
                     credential.getEmail(),
                     credential.getPhoneNumber() != null ? credential.getPhoneNumber() : "",
-                    null);
+                    null,
+                    credential.isActive() ? "ACTIVE" : "SUSPENDED",
+                    !credential.isActive(),
+                    null,
+                    isCodDisabled);
         }
         throw new ResourceNotFoundException("Customer profile not found for ID: " + anyUserIdOrCustomerId);
     }

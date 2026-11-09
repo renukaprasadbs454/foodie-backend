@@ -17,7 +17,8 @@ public class CustomerMapper {
         if (customer != null && customer.getId() != null) {
             String cid = customer.getId().toString();
             reason = com.foodie.admin.controller.AdminCustomerController.SUSPENSION_REASONS.get(cid);
-            isCodDisabled = Boolean.TRUE.equals(com.foodie.admin.controller.AdminCustomerController.COD_DISABLED_CUSTOMERS.get(cid));
+            isCodDisabled = com.foodie.admin.controller.AdminCustomerController.isCodDisabled(
+                    customer.getId(), customer.getUserCredentialId(), customer.getEmail(), phoneNumber);
             if (reason != null && !reason.isBlank()) {
                 isSuspended = true;
             }

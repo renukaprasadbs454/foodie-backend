@@ -74,8 +74,10 @@ public class RestaurantController {
             @RequestParam(required = false) String zoneId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String sort) {
-        var result = restaurantService.search(search, cuisineType, minRating, lat, lng, zoneId, page, size, sort);
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String email) {
+        var result = restaurantService.search(search, cuisineType, minRating, lat, lng, zoneId, page, size, sort, phone, email);
         return ResponseEntity.ok(ApiResponse.success(result.items(), result.pagination()));
     }
 
@@ -83,8 +85,10 @@ public class RestaurantController {
     @Operation(summary = "Detect active admin operating zone for given coordinates (public)")
     public ResponseEntity<ApiResponse<com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto>> detectZone(
             @RequestParam(required = false) Double lat,
-            @RequestParam(required = false) Double lng) {
-        return ResponseEntity.ok(ApiResponse.success(restaurantService.detectCustomerZone(lat, lng)));
+            @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String email) {
+        return ResponseEntity.ok(ApiResponse.success(restaurantService.detectCustomerZone(lat, lng, phone, email)));
     }
 
     @GetMapping("/{restaurantId}/menu-items-with-ratings")

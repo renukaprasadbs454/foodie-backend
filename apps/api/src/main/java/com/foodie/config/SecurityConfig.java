@@ -77,6 +77,11 @@ public class SecurityConfig {
                                                                 "/api/v1/admin/location/unserviceable-requests/**")
                                                 .permitAll()
                                                 .requestMatchers(
+                                                                "/api/v1/admin/customers/*/cod",
+                                                                "/api/v1/admin/customers/status-check",
+                                                                "/api/v1/admin/customers/*/status")
+                                                .permitAll()
+                                                .requestMatchers(
                                                                 HttpMethod.GET,
                                                                 "/api/v1/webhooks/whatsapp")
                                                 .permitAll()

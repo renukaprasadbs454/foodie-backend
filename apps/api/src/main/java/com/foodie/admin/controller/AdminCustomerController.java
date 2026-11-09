@@ -59,6 +59,83 @@ public class AdminCustomerController {
     public static final Map<String, Boolean> COD_DISABLED_CUSTOMERS = new ConcurrentHashMap<>();
     public static final Map<String, String> SUSPENSION_REASONS = new ConcurrentHashMap<>();
 
+    public static boolean isCodDisabled(UUID customerId, UUID userCredentialId, String email, String phone) {
+        if (customerId != null && isCodDisabledKey(customerId.toString())) return true;
+        if (userCredentialId != null && isCodDisabledKey(userCredentialId.toString())) return true;
+        if (email != null && !email.isBlank()) {
+            if (isCodDisabledKey(email.trim().toLowerCase())) return true;
+        }
+        if (phone != null && !phone.isBlank()) {
+            String cleanDigits = phone.replaceAll("[^0-9]", "");
+            if (isCodDisabledKey(phone.trim())) return true;
+            if (isCodDisabledKey(cleanDigits)) return true;
+            if (cleanDigits.length() >= 10) {
+                String last10 = cleanDigits.substring(cleanDigits.length() - 10);
+                if (isCodDisabledKey(last10)) return true;
+                if (isCodDisabledKey("+91" + last10)) return true;
+                if (isCodDisabledKey("91" + last10)) return true;
+                if (isCodDisabledKey("ord-cust-" + last10)) return true;
+                if (isCodDisabledKey("ord-cust-+91" + last10)) return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isCodDisabled(String key) {
+        if (key == null || key.isBlank()) return false;
+        if (isCodDisabledKey(key)) return true;
+        String lower = key.trim().toLowerCase();
+        if (isCodDisabledKey(lower)) return true;
+        String digits = key.replaceAll("[^0-9]", "");
+        if (!digits.isEmpty()) {
+            if (isCodDisabledKey(digits)) return true;
+            if (digits.length() >= 10) {
+                String last10 = digits.substring(digits.length() - 10);
+                if (isCodDisabledKey(last10)) return true;
+                if (isCodDisabledKey("+91" + last10)) return true;
+                if (isCodDisabledKey("91" + last10)) return true;
+                if (isCodDisabledKey("ord-cust-" + last10)) return true;
+                if (isCodDisabledKey("ord-cust-+91" + last10)) return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isCodDisabledKey(String key) {
+        if (key == null) return false;
+        Boolean val = COD_DISABLED_CUSTOMERS.get(key);
+        return Boolean.TRUE.equals(val);
+    }
+
+    public static void saveCodDisabledCustomersToFile() {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+            for (String p : List.of("./data", "apps/api/data")) {
+                java.io.File dir = new java.io.File(p);
+                if (dir.exists()) {
+                    java.io.File file = new java.io.File(dir, "cod_disabled_customers.json");
+                    om.writerWithDefaultPrettyPrinter().writeValue(file, COD_DISABLED_CUSTOMERS);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static void loadCodDisabledCustomersFromFile() {
+        try {
+            java.io.File file = new java.io.File("./data/cod_disabled_customers.json");
+            if (!file.exists()) {
+                file = new java.io.File("apps/api/data/cod_disabled_customers.json");
+            }
+            if (file.exists() && file.length() > 0) {
+                com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                Map<String, Boolean> loaded = om.readValue(file, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Boolean>>() {});
+                if (loaded != null) {
+                    COD_DISABLED_CUSTOMERS.putAll(loaded);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.order.repository.OrderRepository orderRepository;
 
@@ -202,6 +279,7 @@ public class AdminCustomerController {
                 customerRepository.save(chandu);
             }
         }
+        loadCodDisabledCustomersFromFile();
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -313,6 +391,8 @@ public class AdminCustomerController {
                 }
             }
 
+            boolean isCodDisabled = isCodDisabled(c.getId(), c.getUserCredentialId(), email, phone);
+
             return new AdminCustomerDto(
                     c.getId().toString(),
                     c.getFullName(),
@@ -327,7 +407,8 @@ public class AdminCustomerController {
                     tier,
                     custZoneId,
                     custZoneName,
-                    custCity);
+                    custCity,
+                    isCodDisabled);
         }).collect(Collectors.toList());
 
         long activeCount = dtos.stream().filter(c -> "ACTIVE".equals(c.accountStatus())).count();
@@ -362,7 +443,27 @@ public class AdminCustomerController {
             String loyaltyTier,
             String zoneId,
             String zoneName,
-            String city) {
+            String city,
+            Boolean isCodDisabled) {
+
+        public AdminCustomerDto(
+                String id,
+                String name,
+                String email,
+                String phone,
+                int totalOrders,
+                double totalSpend,
+                int savedAddressesCount,
+                String accountStatus,
+                String joinedDate,
+                String lastOrderDate,
+                String loyaltyTier,
+                String zoneId,
+                String zoneName,
+                String city) {
+            this(id, name, email, phone, totalOrders, totalSpend, savedAddressesCount, accountStatus, joinedDate, lastOrderDate, loyaltyTier, zoneId, zoneName, city, false);
+        }
+
         public AdminCustomerDto(
                 String id,
                 String name,
@@ -375,7 +476,7 @@ public class AdminCustomerController {
                 String joinedDate,
                 String lastOrderDate,
                 String loyaltyTier) {
-            this(id, name, email, phone, totalOrders, totalSpend, savedAddressesCount, accountStatus, joinedDate, lastOrderDate, loyaltyTier, null, null, null);
+            this(id, name, email, phone, totalOrders, totalSpend, savedAddressesCount, accountStatus, joinedDate, lastOrderDate, loyaltyTier, null, null, null, false);
         }
     }
 
@@ -622,7 +723,7 @@ public class AdminCustomerController {
             }
         }
 
-        boolean isCodDisabled = Boolean.TRUE.equals(COD_DISABLED_CUSTOMERS.get(custId.toString()));
+        boolean isCodDisabled = isCodDisabled(custId, customer.getUserCredentialId(), email, phone);
         String suspensionReason = SUSPENSION_REASONS.get(custId.toString());
 
         BigDecimal walletBalance = BigDecimal.ZERO;
@@ -694,7 +795,23 @@ public class AdminCustomerController {
             }
         }
         if (customer == null) {
-            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found.");
+            String cleanPhone = id.replaceAll("[^0-9]", "");
+            for (Customer c : customerRepository.findAll()) {
+                if (c.getUserCredentialId() != null && !cleanPhone.isBlank()) {
+                    var cred = userCredentialRepository.findById(c.getUserCredentialId()).orElse(null);
+                    if (cred != null && cred.getPhoneNumber() != null) {
+                        String p = cred.getPhoneNumber().replaceAll("[^0-9]", "");
+                        if (p.equals(cleanPhone) || (p.length() >= 10 && cleanPhone.length() >= 10 && p.endsWith(cleanPhone.substring(cleanPhone.length() - 10)))) {
+                            customer = c;
+                            break;
+                        }
+                    }
+                }
+                if (c.getEmail() != null && c.getEmail().equalsIgnoreCase(id.trim())) {
+                    customer = c;
+                    break;
+                }
+            }
         }
 
         String targetStatus = (String) body.get("accountStatus");
@@ -707,26 +824,79 @@ public class AdminCustomerController {
         }
 
         boolean willSuspend = "SUSPENDED".equalsIgnoreCase(targetStatus) || "BLOCKED".equalsIgnoreCase(targetStatus);
-        if (willSuspend) {
-            String suspendReason = (reason != null && !reason.trim().isBlank()) ? reason.trim() : "Account blocked by administrator";
-            SUSPENSION_REASONS.put(customer.getId().toString(), suspendReason);
-        } else {
-            SUSPENSION_REASONS.remove(customer.getId().toString());
-        }
+        if (customer != null) {
+            if (willSuspend) {
+                String suspendReason = (reason != null && !reason.trim().isBlank()) ? reason.trim() : "Account blocked by administrator";
+                SUSPENSION_REASONS.put(customer.getId().toString(), suspendReason);
+            } else {
+                SUSPENSION_REASONS.remove(customer.getId().toString());
+            }
 
-        UserCredential cred = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
-        if (cred != null) {
-            cred.setActive(!willSuspend);
-            userCredentialRepository.save(cred);
+            UserCredential cred = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+            if (cred != null) {
+                cred.setActive(!willSuspend);
+                userCredentialRepository.save(cred);
+            }
+        } else {
+            if (willSuspend) {
+                String suspendReason = (reason != null && !reason.trim().isBlank()) ? reason.trim() : "Account blocked by administrator";
+                SUSPENSION_REASONS.put(id, suspendReason);
+            } else {
+                SUSPENSION_REASONS.remove(id);
+            }
         }
 
         Map<String, Object> res = new HashMap<>();
-        res.put("id", customer.getId().toString());
+        res.put("id", customer != null ? customer.getId().toString() : id);
         res.put("accountStatus", willSuspend ? "SUSPENDED" : "ACTIVE");
         res.put("reason", reason);
         res.put("updatedAt", java.time.Instant.now().toString());
 
         return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
+    @GetMapping("/status-check")
+    @Operation(summary = "Check account suspension and COD status for a customer")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> checkCustomerStatus(
+            @RequestParam(value = "id", required = false) String id,
+            @RequestParam(value = "phone", required = false) String phone,
+            @RequestParam(value = "email", required = false) String email) {
+
+        UUID custId = null;
+        UUID credId = null;
+        try {
+            if (id != null && !id.isBlank()) {
+                UUID u = UUID.fromString(id.trim());
+                var cOpt = customerRepository.findById(u);
+                if (cOpt.isPresent()) {
+                    custId = cOpt.get().getId();
+                    credId = cOpt.get().getUserCredentialId();
+                    if (email == null) email = cOpt.get().getEmail();
+                } else {
+                    var uOpt = customerRepository.findByUserCredentialId(u);
+                    if (uOpt.isPresent()) {
+                        custId = uOpt.get().getId();
+                        credId = u;
+                        if (email == null) email = uOpt.get().getEmail();
+                    } else {
+                        credId = u;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        boolean codDisabled = isCodDisabled(custId, credId, email, phone);
+        if (!codDisabled && id != null) {
+            codDisabled = isCodDisabled(id);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", id != null ? id : (custId != null ? custId.toString() : ""));
+        data.put("isCodDisabled", codDisabled);
+        data.put("accountStatus", "ACTIVE");
+        data.put("isSuspended", false);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     @PatchMapping("/{id}/cod")
@@ -739,12 +909,48 @@ public class AdminCustomerController {
             customer = customerRepository.findById(UUID.fromString(id)).orElse(null);
         } catch (IllegalArgumentException ignored) {}
         if (customer == null) {
-            for (Customer c : customerRepository.findAll()) {
-                if (c.getId().toString().equalsIgnoreCase(id)) { customer = c; break; }
-            }
+            try {
+                customer = customerRepository.findByUserCredentialId(UUID.fromString(id)).orElse(null);
+            } catch (IllegalArgumentException ignored) {}
         }
         if (customer == null) {
-            throw new com.foodie.common.exception.ResourceNotFoundException("Customer not found.");
+            String cleanQuery = id != null ? id.trim() : "";
+            String cleanDigits = cleanQuery.replaceAll("[^0-9]", "");
+            for (Customer c : customerRepository.findAll()) {
+                if (c.getId().toString().equalsIgnoreCase(cleanQuery) ||
+                    (c.getEmail() != null && c.getEmail().equalsIgnoreCase(cleanQuery))) {
+                    customer = c;
+                    break;
+                }
+                if (cleanDigits.length() >= 10) {
+                    UserCredential uc = userCredentialRepository.findById(c.getUserCredentialId()).orElse(null);
+                    if (uc != null && uc.getPhoneNumber() != null) {
+                        String ucDigits = uc.getPhoneNumber().replaceAll("[^0-9]", "");
+                        if (ucDigits.endsWith(cleanDigits.substring(cleanDigits.length() - 10))) {
+                            customer = c;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        UserCredential credential = null;
+        if (customer != null) {
+            credential = userCredentialRepository.findById(customer.getUserCredentialId()).orElse(null);
+        } else {
+            try {
+                credential = userCredentialRepository.findById(UUID.fromString(id)).orElse(null);
+            } catch (Exception ignored) {}
+            if (credential == null) {
+                String cleanDigits = id.replaceAll("[^0-9]", "");
+                if (cleanDigits.length() >= 10) {
+                    String last10 = cleanDigits.substring(cleanDigits.length() - 10);
+                    credential = userCredentialRepository.findByPhoneNumberAndUserType("+91" + last10, UserType.CUSTOMER)
+                            .or(() -> userCredentialRepository.findAllByPhoneNumber("+91" + last10).stream().findFirst())
+                            .orElse(null);
+                }
+            }
         }
 
         Object codVal = body.get("isCodDisabled");
@@ -755,10 +961,57 @@ public class AdminCustomerController {
             disabled = Boolean.parseBoolean(codVal.toString());
         }
 
-        COD_DISABLED_CUSTOMERS.put(customer.getId().toString(), disabled);
+        // Store under raw ID
+        COD_DISABLED_CUSTOMERS.put(id, disabled);
+
+        // Store under Customer entity fields if present
+        if (customer != null) {
+            COD_DISABLED_CUSTOMERS.put(customer.getId().toString(), disabled);
+            if (customer.getUserCredentialId() != null) {
+                COD_DISABLED_CUSTOMERS.put(customer.getUserCredentialId().toString(), disabled);
+            }
+            if (customer.getEmail() != null && !customer.getEmail().isBlank()) {
+                COD_DISABLED_CUSTOMERS.put(customer.getEmail().trim().toLowerCase(), disabled);
+            }
+        }
+
+        // Store under UserCredential fields if present
+        if (credential != null) {
+            COD_DISABLED_CUSTOMERS.put(credential.getId().toString(), disabled);
+            if (credential.getEmail() != null && !credential.getEmail().isBlank()) {
+                COD_DISABLED_CUSTOMERS.put(credential.getEmail().trim().toLowerCase(), disabled);
+            }
+            if (credential.getPhoneNumber() != null && !credential.getPhoneNumber().isBlank()) {
+                String p = credential.getPhoneNumber().trim();
+                String d = p.replaceAll("[^0-9]", "");
+                COD_DISABLED_CUSTOMERS.put(p, disabled);
+                COD_DISABLED_CUSTOMERS.put(d, disabled);
+                if (d.length() >= 10) {
+                    String last10 = d.substring(d.length() - 10);
+                    COD_DISABLED_CUSTOMERS.put(last10, disabled);
+                    COD_DISABLED_CUSTOMERS.put("+91" + last10, disabled);
+                    COD_DISABLED_CUSTOMERS.put("91" + last10, disabled);
+                    COD_DISABLED_CUSTOMERS.put("ord-cust-" + last10, disabled);
+                    COD_DISABLED_CUSTOMERS.put("ord-cust-+91" + last10, disabled);
+                }
+            }
+        }
+
+        // Store under raw ID digits if numeric
+        String rawDigits = id.replaceAll("[^0-9]", "");
+        if (rawDigits.length() >= 10) {
+            String last10 = rawDigits.substring(rawDigits.length() - 10);
+            COD_DISABLED_CUSTOMERS.put(last10, disabled);
+            COD_DISABLED_CUSTOMERS.put("+91" + last10, disabled);
+            COD_DISABLED_CUSTOMERS.put("91" + last10, disabled);
+            COD_DISABLED_CUSTOMERS.put("ord-cust-" + last10, disabled);
+            COD_DISABLED_CUSTOMERS.put("ord-cust-+91" + last10, disabled);
+        }
+
+        saveCodDisabledCustomersToFile();
 
         Map<String, Object> res = new HashMap<>();
-        res.put("id", customer.getId().toString());
+        res.put("id", customer != null ? customer.getId().toString() : id);
         res.put("isCodDisabled", disabled);
         res.put("message", disabled ? "Cash on Delivery has been disabled for this customer." : "Cash on Delivery has been enabled for this customer.");
 
@@ -792,7 +1045,12 @@ public class AdminCustomerController {
         customerRepository.save(customer);
 
         COD_DISABLED_CUSTOMERS.remove(custId.toString());
+        COD_DISABLED_CUSTOMERS.remove(id);
+        if (customer.getUserCredentialId() != null) {
+            COD_DISABLED_CUSTOMERS.remove(customer.getUserCredentialId().toString());
+        }
         SUSPENSION_REASONS.remove(custId.toString());
+        saveCodDisabledCustomersToFile();
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", custId.toString());

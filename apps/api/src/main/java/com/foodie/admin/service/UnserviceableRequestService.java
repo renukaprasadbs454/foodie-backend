@@ -28,6 +28,10 @@ public class UnserviceableRequestService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
+    private com.foodie.admin.repository.LocationZoneRepository locationZoneRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
     private com.foodie.restaurant.repository.RestaurantDocumentRepository restaurantDocumentRepository;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -47,28 +51,67 @@ public class UnserviceableRequestService {
                 .collect(Collectors.toList());
     }
 
-    public boolean hasPendingRequestNear(Double lat, Double lng, double radiusKm) {
-        if (lat == null || lng == null) return false;
+    public UnserviceableRequestDto getLatestRequestNear(Double lat, Double lng, double radiusKm) {
+        if (lat == null || lng == null) return null;
         try {
             List<UnserviceableRequestDto> all = getAllRequests();
-            // If admin has APPROVED any unserviceable request near this location (e.g. within 15 km),
-            // then the area is approved / extended and must NOT be blocked by lingering duplicate requests.
             for (UnserviceableRequestDto req : all) {
-                if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
-                    if (req.getLatitude() != null && req.getLongitude() != null) {
-                        double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
-                        if (dist <= Math.max(radiusKm, 15.0)) {
-                            return false;
+                if (req.getLatitude() != null && req.getLongitude() != null) {
+                    double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
+                    if (dist <= radiusKm) {
+                        return req;
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Error getting latest unserviceable request near ({}, {}): {}", lat, lng, ex.getMessage());
+        }
+        return null;
+    }
+
+    private boolean isPhoneMatching(String phone1, String phone2) {
+        if (phone1 == null || phone2 == null) return false;
+        String digits1 = phone1.replaceAll("[^0-9]", "");
+        String digits2 = phone2.replaceAll("[^0-9]", "");
+        if (digits1.isBlank() || digits2.isBlank()) return false;
+        if (digits1.equals(digits2)) return true;
+        if (digits1.length() >= 10 && digits2.length() >= 10) {
+            String last10_1 = digits1.substring(digits1.length() - 10);
+            String last10_2 = digits2.substring(digits2.length() - 10);
+            return last10_1.equals(last10_2);
+        }
+        return false;
+    }
+
+    private boolean isEmailMatching(String email1, String email2) {
+        if (email1 == null || email2 == null) return false;
+        String clean1 = email1.trim().toLowerCase();
+        String clean2 = email2.trim().toLowerCase();
+        return !clean1.isBlank() && clean1.equals(clean2);
+    }
+
+    public boolean hasPendingRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
+        try {
+            List<UnserviceableRequestDto> all = getAllRequests();
+            // 1. Direct customer matching by phone or email
+            if ((phone != null && !phone.isBlank()) || (email != null && !email.isBlank())) {
+                for (UnserviceableRequestDto req : all) {
+                    boolean phoneMatch = isPhoneMatching(phone, req.getContactPhone());
+                    boolean emailMatch = isEmailMatching(email, req.getContactEmail());
+                    if (phoneMatch || emailMatch) {
+                        if ("PENDING".equalsIgnoreCase(req.getStatus())) {
+                            return true;
                         }
                     }
                 }
             }
 
-            for (UnserviceableRequestDto req : all) {
-                if ("PENDING".equalsIgnoreCase(req.getStatus())) {
+            // 2. Proximity matching
+            if (lat != null && lng != null) {
+                for (UnserviceableRequestDto req : all) {
                     if (req.getLatitude() != null && req.getLongitude() != null) {
                         double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
-                        if (dist <= radiusKm) {
+                        if (dist <= radiusKm && "PENDING".equalsIgnoreCase(req.getStatus())) {
                             return true;
                         }
                     }
@@ -78,6 +121,117 @@ public class UnserviceableRequestService {
             log.warn("Error checking pending unserviceable requests: {}", ex.getMessage());
         }
         return false;
+    }
+
+    public boolean hasApprovedRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
+        try {
+            // A pending request always takes priority over any older approved record
+            if (hasPendingRequest(lat, lng, phone, email, radiusKm)) {
+                return false;
+            }
+
+            List<UnserviceableRequestDto> all = getAllRequests();
+            // 1. Direct customer matching by phone or email
+            if ((phone != null && !phone.isBlank()) || (email != null && !email.isBlank())) {
+                for (UnserviceableRequestDto req : all) {
+                    boolean phoneMatch = isPhoneMatching(phone, req.getContactPhone());
+                    boolean emailMatch = isEmailMatching(email, req.getContactEmail());
+                    if (phoneMatch || emailMatch) {
+                        if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // 2. Proximity matching
+            if (lat != null && lng != null) {
+                for (UnserviceableRequestDto req : all) {
+                    if (req.getLatitude() != null && req.getLongitude() != null) {
+                        double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
+                        if (dist <= radiusKm && "APPROVED".equalsIgnoreCase(req.getStatus())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Error checking approved unserviceable requests: {}", ex.getMessage());
+        }
+        return false;
+    }
+
+    public boolean hasRejectedRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
+        try {
+            if (hasPendingRequest(lat, lng, phone, email, radiusKm)) {
+                return false;
+            }
+
+            List<UnserviceableRequestDto> all = getAllRequests();
+            // 1. Direct customer matching by phone or email
+            if ((phone != null && !phone.isBlank()) || (email != null && !email.isBlank())) {
+                for (UnserviceableRequestDto req : all) {
+                    boolean phoneMatch = isPhoneMatching(phone, req.getContactPhone());
+                    boolean emailMatch = isEmailMatching(email, req.getContactEmail());
+                    if (phoneMatch || emailMatch) {
+                        if ("REJECTED".equalsIgnoreCase(req.getStatus())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // 2. Proximity matching
+            if (lat != null && lng != null) {
+                for (UnserviceableRequestDto req : all) {
+                    if (req.getLatitude() != null && req.getLongitude() != null) {
+                        double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
+                        if (dist <= radiusKm && "REJECTED".equalsIgnoreCase(req.getStatus())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Error checking rejected unserviceable requests: {}", ex.getMessage());
+        }
+        return false;
+    }
+
+    public boolean hasPendingRequestNear(Double lat, Double lng, double radiusKm) {
+        return hasPendingRequest(lat, lng, null, null, radiusKm);
+    }
+
+    public boolean hasApprovedRequestNear(Double lat, Double lng, double radiusKm) {
+        return hasApprovedRequest(lat, lng, null, null, radiusKm);
+    }
+
+    public boolean hasRejectedRequestNear(Double lat, Double lng, double radiusKm) {
+        return hasRejectedRequest(lat, lng, null, null, radiusKm);
+    }
+
+    public UnserviceableRequestDto getNearestApprovedRequest(Double lat, Double lng, double maxRadiusKm) {
+        if (lat == null || lng == null) return null;
+        try {
+            List<UnserviceableRequestDto> all = getAllRequests();
+            UnserviceableRequestDto best = null;
+            double minDist = maxRadiusKm;
+            for (UnserviceableRequestDto req : all) {
+                if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
+                    if (req.getLatitude() != null && req.getLongitude() != null) {
+                        double dist = calculateHaversineDistance(lat, lng, req.getLatitude(), req.getLongitude());
+                        if (dist <= minDist) {
+                            minDist = dist;
+                            best = req;
+                        }
+                    }
+                }
+            }
+            return best;
+        } catch (Exception ex) {
+            log.warn("Error getting nearest approved unserviceable request: {}", ex.getMessage());
+        }
+        return null;
     }
 
     private double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -131,6 +285,44 @@ public class UnserviceableRequestService {
         String cleanStatus = status != null ? status.trim().toUpperCase() : "PENDING";
         entity.setStatus(cleanStatus);
         entity.setUpdatedAt(Instant.now());
+
+        // If approved, ensure nearest active zone is associated and expanded if needed
+        if ("APPROVED".equalsIgnoreCase(cleanStatus)) {
+            try {
+                if (entity.getLatitude() != null && entity.getLongitude() != null && locationZoneRepository != null) {
+                    var zones = locationZoneRepository.findAll().stream()
+                            .filter(z -> !"DELETED".equalsIgnoreCase(z.getStatus()))
+                            .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
+                            .toList();
+                    com.foodie.admin.entity.LocationZone nearestZone = null;
+                    double minDistance = Double.MAX_VALUE;
+                    for (var z : zones) {
+                        if (z.getLatitude() != null && z.getLongitude() != null) {
+                            double d = calculateHaversineDistance(entity.getLatitude(), entity.getLongitude(), z.getLatitude(), z.getLongitude());
+                            if (d < minDistance) {
+                                minDistance = d;
+                                nearestZone = z;
+                            }
+                        }
+                    }
+                    if (nearestZone != null) {
+                        if (entity.getZoneId() == null || entity.getZoneId().isBlank()) {
+                            entity.setZoneId(nearestZone.getId());
+                            entity.setZoneName(nearestZone.getZoneName());
+                        }
+                        double currentRadius = nearestZone.getRadiusKm() != null ? nearestZone.getRadiusKm() : 10.0;
+                        double requiredRadius = Math.ceil(minDistance + 2.0);
+                        if (requiredRadius > currentRadius) {
+                            nearestZone.setRadiusKm(requiredRadius);
+                            locationZoneRepository.saveAndFlush(nearestZone);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to associate nearest zone on request approval: {}", ex.getMessage());
+            }
+        }
+
         UnserviceableRequest saved = repository.save(entity);
 
         // If approved, cascade approval to all duplicate requests for this requester or within 10 km
@@ -140,8 +332,9 @@ public class UnserviceableRequestService {
                 for (UnserviceableRequest other : all) {
                     if (!other.getId().equals(entity.getId()) && "PENDING".equalsIgnoreCase(other.getStatus())) {
                         boolean match = false;
-                        if (entity.getContactPhone() != null && !entity.getContactPhone().isBlank() &&
-                            entity.getContactPhone().equalsIgnoreCase(other.getContactPhone())) {
+                        if (isPhoneMatching(entity.getContactPhone(), other.getContactPhone())) {
+                            match = true;
+                        } else if (isEmailMatching(entity.getContactEmail(), other.getContactEmail())) {
                             match = true;
                         } else if (entity.getLatitude() != null && entity.getLongitude() != null &&
                                    other.getLatitude() != null && other.getLongitude() != null) {
@@ -162,6 +355,37 @@ public class UnserviceableRequestService {
                 }
             } catch (Exception e) {
                 log.warn("Failed to cascade approval to duplicate unserviceable requests: {}", e.getMessage());
+            }
+        }
+
+        // If rejected, cascade rejection to all pending requests near this location
+        if ("REJECTED".equalsIgnoreCase(cleanStatus)) {
+            try {
+                List<UnserviceableRequest> all = repository.findAll();
+                for (UnserviceableRequest other : all) {
+                    if (!other.getId().equals(entity.getId())) {
+                        boolean match = false;
+                        if (isPhoneMatching(entity.getContactPhone(), other.getContactPhone())) {
+                            match = true;
+                        } else if (isEmailMatching(entity.getContactEmail(), other.getContactEmail())) {
+                            match = true;
+                        } else if (entity.getLatitude() != null && entity.getLongitude() != null &&
+                                   other.getLatitude() != null && other.getLongitude() != null) {
+                            double d = calculateHaversineDistance(entity.getLatitude(), entity.getLongitude(),
+                                    other.getLatitude(), other.getLongitude());
+                            if (d <= 10.0) {
+                                match = true;
+                            }
+                        }
+                        if (match) {
+                            other.setStatus("REJECTED");
+                            other.setUpdatedAt(Instant.now());
+                            repository.save(other);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to cascade rejection to duplicate unserviceable requests: {}", e.getMessage());
             }
         }
 

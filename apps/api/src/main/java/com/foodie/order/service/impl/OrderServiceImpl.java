@@ -194,6 +194,19 @@ public class OrderServiceImpl implements OrderService {
 
             UUID customerId = resolveCustomerId(userCredentialId);
 
+            if (request != null && request.paymentMethod() != null) {
+                String pm = request.paymentMethod().trim();
+                if ("COD".equalsIgnoreCase(pm) || "CASH_ON_DELIVERY".equalsIgnoreCase(pm)) {
+                    CustomerContact contact = getCustomerContactByCustomerId(customerId);
+                    String phone = contact != null ? contact.phone() : null;
+                    if (com.foodie.admin.controller.AdminCustomerController.isCodDisabled(customerId, userCredentialId, null, phone)) {
+                        throw new BadRequestException(
+                                ErrorCode.VALIDATION_FAILED,
+                                "Cash on Delivery has been disabled for your account by an administrator. Please choose an online payment method.");
+                    }
+                }
+            }
+
             UUID addressId = request.addressId();
             if (addressId == null || !addressOwnershipQuery.isAddressOwnedByCustomer(addressId, customerId)) {
                 List<String> existingAddrs = jdbcTemplate
@@ -588,6 +601,18 @@ public class OrderServiceImpl implements OrderService {
             UUID customerId = resolveCustomerId(actorUserCredentialId);
             if (!order.getCustomerId().equals(customerId)) {
                 throw new ResourceNotFoundException("Order not found.");
+            }
+            if (targetStatus == OrderStatus.CONFIRMED) {
+                PaymentDetailRecord pInfo = resolvePaymentInfo(order);
+                if (pInfo != null && pInfo.isCOD()) {
+                    CustomerContact contact = resolveCustomerContact(order.getId());
+                    String phone = contact != null ? contact.phone() : null;
+                    if (com.foodie.admin.controller.AdminCustomerController.isCodDisabled(customerId, actorUserCredentialId, null, phone)) {
+                        throw new BadRequestException(
+                                ErrorCode.VALIDATION_FAILED,
+                                "Cash on Delivery has been disabled for your account by an administrator. Please choose an online payment method.");
+                    }
+                }
             }
         } else if (actorType == OrderActorType.RESTAURANT) {
             UUID restaurantId = restaurantSummaryProvider.findByOwnerUserCredentialId(actorUserCredentialId)

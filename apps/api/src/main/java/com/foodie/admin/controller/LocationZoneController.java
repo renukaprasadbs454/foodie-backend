@@ -765,8 +765,25 @@ public class LocationZoneController {
 
         if (unserviceableRequestService != null) {
             UnserviceableRequestDto updated = unserviceableRequestService.updateStatus(requestId, status);
-            if (updated == null) return ResponseEntity.notFound().build();
-            return ResponseEntity.ok(ApiResponse.success(updated));
+            if (updated != null) {
+                unserviceableRequests.put(requestId, updated);
+                for (UnserviceableRequestDto other : unserviceableRequests.values()) {
+                    boolean match = false;
+                    if (updated.getContactPhone() != null && !updated.getContactPhone().isBlank() && updated.getContactPhone().equalsIgnoreCase(other.getContactPhone())) {
+                        match = true;
+                    } else if (updated.getContactEmail() != null && !updated.getContactEmail().isBlank() && updated.getContactEmail().equalsIgnoreCase(other.getContactEmail())) {
+                        match = true;
+                    } else if (updated.getLatitude() != null && updated.getLongitude() != null && other.getLatitude() != null && other.getLongitude() != null) {
+                        double d = calculateHaversineDistance(updated.getLatitude(), updated.getLongitude(), other.getLatitude(), other.getLongitude());
+                        if (d <= 10.0) match = true;
+                    }
+                    if (match) {
+                        other.setStatus(updated.getStatus());
+                    }
+                }
+                saveUnserviceableRequestsToFile();
+                return ResponseEntity.ok(ApiResponse.success(updated));
+            }
         }
 
         UnserviceableRequestDto req = unserviceableRequests.get(requestId);
@@ -824,6 +841,24 @@ public class LocationZoneController {
             unserviceableRequestService.updateStatus(requestId, "APPROVED");
         }
         unserviceableRequests.put(requestId, req);
+        for (UnserviceableRequestDto other : unserviceableRequests.values()) {
+            boolean match = false;
+            if (req.getContactPhone() != null && !req.getContactPhone().isBlank() && req.getContactPhone().equalsIgnoreCase(other.getContactPhone())) {
+                match = true;
+            } else if (req.getContactEmail() != null && !req.getContactEmail().isBlank() && req.getContactEmail().equalsIgnoreCase(other.getContactEmail())) {
+                match = true;
+            } else if (req.getLatitude() != null && req.getLongitude() != null && other.getLatitude() != null && other.getLongitude() != null) {
+                double d = calculateHaversineDistance(req.getLatitude(), req.getLongitude(), other.getLatitude(), other.getLongitude());
+                if (d <= 10.0) match = true;
+            }
+            if (match) {
+                other.setStatus("APPROVED");
+                if (nearestZone != null) {
+                    other.setZoneId(nearestZone.getId());
+                    other.setZoneName(nearestZone.getZoneName());
+                }
+            }
+        }
         saveUnserviceableRequestsToFile();
 
         if (nearestZone != null) {
@@ -912,6 +947,24 @@ public class LocationZoneController {
             unserviceableRequestService.updateStatus(requestId, "APPROVED");
         }
         unserviceableRequests.put(requestId, req);
+        for (UnserviceableRequestDto other : unserviceableRequests.values()) {
+            boolean match = false;
+            if (req.getContactPhone() != null && !req.getContactPhone().isBlank() && req.getContactPhone().equalsIgnoreCase(other.getContactPhone())) {
+                match = true;
+            } else if (req.getContactEmail() != null && !req.getContactEmail().isBlank() && req.getContactEmail().equalsIgnoreCase(other.getContactEmail())) {
+                match = true;
+            } else if (req.getLatitude() != null && req.getLongitude() != null && other.getLatitude() != null && other.getLongitude() != null) {
+                double d = calculateHaversineDistance(req.getLatitude(), req.getLongitude(), other.getLatitude(), other.getLongitude());
+                if (d <= 10.0) match = true;
+            }
+            if (match) {
+                other.setStatus("APPROVED");
+                if (nearestZone != null) {
+                    other.setZoneId(nearestZone.getId());
+                    other.setZoneName(nearestZone.getZoneName());
+                }
+            }
+        }
         saveUnserviceableRequestsToFile();
 
         return ResponseEntity.ok(ApiResponse.success(mapToDto(nearestZone)));
