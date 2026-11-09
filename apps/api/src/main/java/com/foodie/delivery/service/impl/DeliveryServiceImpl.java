@@ -1515,6 +1515,26 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<com.foodie.delivery.dto.response.CashDepositResponseDto> listAllCashDeposits() {
+        return deliveryCashDepositRepository
+                .findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"))
+                .stream()
+                .map(d -> new com.foodie.delivery.dto.response.CashDepositResponseDto(
+                        d.getId(),
+                        d.getDeliveryPartner().getId(),
+                        d.getDeliveryPartner().getFullName(),
+                        d.getAmount(),
+                        d.getStatus().name(),
+                        d.getReferenceNumber(),
+                        d.getRejectionReason(),
+                        d.getCreatedAt(),
+                        d.getApprovedAt(),
+                        null))
+                .toList();
+    }
+
+    @Override
     @Transactional
     public com.foodie.delivery.dto.response.CashDepositResponseDto approveCashDeposit(UUID depositId, UUID adminId) {
         com.foodie.delivery.entity.DeliveryCashDeposit deposit = deliveryCashDepositRepository.findById(depositId)

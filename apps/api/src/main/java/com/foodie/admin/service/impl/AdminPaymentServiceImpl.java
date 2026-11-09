@@ -133,6 +133,8 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.admin.service.AdminZoneService adminZoneService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.delivery.repository.DeliveryCashDepositRepository deliveryCashDepositRepository;
 
     @Override
     public List<PaymentSettlementResponseDto> listSettlements() {
@@ -186,12 +188,24 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                 customerName = "Customer " + order.getCustomerId().toString().substring(0, 4);
             }
 
+            String method = "COD";
+            if (paymentRepository != null) {
+                var paymentOpt = paymentRepository.findByOrderId(order.getId());
+                if (paymentOpt.isPresent()) {
+                    var p = paymentOpt.get();
+                    if (p.getStatus() == com.foodie.common.enums.PaymentStatus.CAPTURED
+                            && (p.getIdempotencyKey() == null || !p.getIdempotencyKey().contains("COD"))) {
+                        method = "ONLINE";
+                    }
+                }
+            }
+
             result.add(new PaymentSettlementResponseDto(
                     order.getId(),
                     order.getId(),
                     order.getOrderNumber(),
                     customerName,
-                    "RAZORPAY",
+                    method,
                     split.totalPaid(),
                     split.foodSubtotal(),
                     split.deliveryFee(),
@@ -248,13 +262,23 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                 }
             }
 
-            String paymentMethod = "RAZORPAY_UPI";
-            if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
+            boolean isCod = (payment.getIdempotencyKey() != null && payment.getIdempotencyKey().contains("COD"));
+            String paymentMethod = "CASHFREE_UPI";
+            String gatewayName = "CASHFREE";
+
+            if (isCod) {
+                paymentMethod = "COD";
+                gatewayName = "COD";
+            } else if (payment.getWalletAmount() != null && payment.getWalletAmount().compareTo(BigDecimal.ZERO) > 0) {
                 if (payment.getAmount() == null || payment.getAmount().compareTo(BigDecimal.ZERO) == 0) {
                     paymentMethod = "FOODIE_WALLET";
+                    gatewayName = "FOODIE_WALLET";
                 } else {
                     paymentMethod = "SPLIT_WALLET_GATEWAY";
+                    gatewayName = "CASHFREE";
                 }
+            } else if (payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("WALLET_")) {
+                gatewayName = "FOODIE_WALLET";
             }
 
             String gatewayTxId = payment.getCashfreeOrderId() != null
@@ -262,10 +286,6 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                     : (payment.getPaymentSessionId() != null
                             ? payment.getPaymentSessionId()
                             : (payment.getId() != null ? payment.getId().toString() : "N/A"));
-
-            String gatewayName = payment.getCashfreeOrderId() != null && payment.getCashfreeOrderId().startsWith("WALLET_")
-                    ? "FOODIE_WALLET"
-                    : "RAZORPAY";
 
             result.add(new PaymentTransactionResponseDto(
                     payment.getId(),
@@ -279,6 +299,26 @@ public class AdminPaymentServiceImpl implements AdminPaymentService {
                     gatewayName,
                     payment.getCreatedAt(),
                     payment.getUpdatedAt()));
+        }
+
+        if (deliveryCashDepositRepository != null) {
+            var deposits = deliveryCashDepositRepository.findAll();
+            for (var d : deposits) {
+                if (d.getStatus() == com.foodie.delivery.entity.DeliveryCashDeposit.DepositStatus.APPROVED) {
+                    result.add(new PaymentTransactionResponseDto(
+                            d.getId(),
+                            null,
+                            d.getDeliveryPartner() != null ? d.getDeliveryPartner().getId() : null,
+                            d.getAmount() != null ? d.getAmount() : BigDecimal.ZERO,
+                            "INR",
+                            "COD_DEPOSIT",
+                            "CAPTURED",
+                            d.getReferenceNumber() != null ? d.getReferenceNumber() : d.getId().toString(),
+                            "CASHFREE",
+                            d.getApprovedAt() != null ? d.getApprovedAt() : d.getCreatedAt(),
+                            d.getApprovedAt()));
+                }
+            }
         }
 
         result.sort((a, b) -> {

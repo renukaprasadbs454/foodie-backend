@@ -465,7 +465,8 @@ public class AdminOrderController {
         }
 
         order.assignDeliveryPartner(partner.getId());
-        if (order.getStatus() == OrderStatus.PLACED || order.getStatus() == OrderStatus.CONFIRMED) {
+        if (order.getStatus() == OrderStatus.PLACED || order.getStatus() == OrderStatus.CONFIRMED
+                || order.getStatus() == OrderStatus.ASSIGNED || order.getStatus() == OrderStatus.REACHED_RESTAURANT) {
             order.transitionTo(OrderStatus.WAITING_FOR_DELIVERY_PARTNER);
         }
         orderRepository.save(order);
@@ -492,6 +493,32 @@ public class AdminOrderController {
                             );
                         } catch (Exception ex) {
                             // ignore notification save failure
+                        }
+                    }
+
+                    if (messagingTemplate != null) {
+                        try {
+                            java.util.Map<String, Object> cancelPayload = new java.util.LinkedHashMap<>();
+                            cancelPayload.put("type", "ORDER_ASSIGNMENT_CANCELLED");
+                            cancelPayload.put("event", "ORDER_ASSIGNMENT_CANCELLED");
+                            cancelPayload.put("status", "CANCELLED");
+                            cancelPayload.put("orderId", order.getId().toString());
+                            cancelPayload.put("orderNumber", order.getOrderNumber());
+                            cancelPayload.put("deliveryPartnerId", oldPartner.getId().toString());
+                            cancelPayload.put("cancelledForPartnerId", oldPartner.getId().toString());
+                            cancelPayload.put("title", "Order Cancelled");
+                            cancelPayload.put("body", "Order #" + order.getOrderNumber() + " has been cancelled by admin or reassigned.");
+                            cancelPayload.put("timestamp", java.time.Instant.now().toString());
+
+                            messagingTemplate.convertAndSend("/topic/deliveryPartner_" + oldPartner.getId(), cancelPayload);
+                            messagingTemplate.convertAndSend("deliveryPartner_" + oldPartner.getId(), cancelPayload);
+                            if (oldPartner.getUserCredentialId() != null) {
+                                messagingTemplate.convertAndSend("/topic/user/" + oldPartner.getUserCredentialId() + "/notifications", cancelPayload);
+                                messagingTemplate.convertAndSend("/topic/user/" + oldPartner.getUserCredentialId() + "/offers", cancelPayload);
+                            }
+                            messagingTemplate.convertAndSend("/topic/order/" + order.getId(), cancelPayload);
+                        } catch (Exception wsEx) {
+                            System.err.println("Warning: failed to send cancel WebSocket to old partner: " + wsEx.getMessage());
                         }
                     }
                 }

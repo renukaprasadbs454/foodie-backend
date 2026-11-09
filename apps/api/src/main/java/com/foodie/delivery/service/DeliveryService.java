@@ -71,6 +71,8 @@ public interface DeliveryService {
 
         List<com.foodie.delivery.dto.response.CashDepositResponseDto> listPendingCashDeposits();
 
+        List<com.foodie.delivery.dto.response.CashDepositResponseDto> listAllCashDeposits();
+
         com.foodie.delivery.dto.response.CashDepositResponseDto approveCashDeposit(UUID depositId, UUID adminId);
 
         com.foodie.delivery.dto.response.CashDepositResponseDto rejectCashDeposit(UUID depositId, UUID adminId, String reason);

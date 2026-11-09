@@ -487,6 +487,13 @@ public class AdminDeliveryController {
         return ResponseEntity.ok(ApiResponse.success(deliveryService.listPendingCashDeposits()));
     }
 
+    @GetMapping({"/cash-deposits/all", "/cod-deposits"})
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List all cash deposits (PENDING, APPROVED, REJECTED) for COD Cash Collection tab")
+    public ResponseEntity<ApiResponse<List<CashDepositResponseDto>>> listAllCashDeposits() {
+        return ResponseEntity.ok(ApiResponse.success(deliveryService.listAllCashDeposits()));
+    }
+
     @PostMapping("/cash-deposits/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Approve a delivery partner cash deposit request and clear cash balance")

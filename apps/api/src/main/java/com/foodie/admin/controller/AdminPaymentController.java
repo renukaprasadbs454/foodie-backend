@@ -70,6 +70,8 @@ public class AdminPaymentController {
     private com.foodie.delivery.repository.DeliveryPartnerRepository deliveryPartnerRepository;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.admin.security.AdminAccess adminAccess;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.delivery.service.DeliveryService deliveryService;
 
     @GetMapping("/settlements")
     @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
@@ -101,6 +103,16 @@ public class AdminPaymentController {
                 ? adminAccess.resolveAuthorizedZone(authentication, requestedZoneId)
                 : requestedZoneId;
         return ResponseEntity.ok(ApiResponse.success(adminPaymentService.listTransactions(activeZoneId)));
+    }
+
+    @GetMapping("/cod-deposits")
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'FINANCE', 'OPS', 'SUPER_ADMIN')")
+    @Operation(summary = "List all delivery partner COD cash collections / deposits")
+    public ResponseEntity<ApiResponse<List<com.foodie.delivery.dto.response.CashDepositResponseDto>>> listCodDeposits() {
+        if (deliveryService != null) {
+            return ResponseEntity.ok(ApiResponse.success(deliveryService.listAllCashDeposits()));
+        }
+        return ResponseEntity.ok(ApiResponse.success(List.of()));
     }
 
     @GetMapping("/ledger")
