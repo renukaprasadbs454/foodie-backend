@@ -998,24 +998,33 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
         }
 
         for (ConditionDef c : conditionDefs) {
-            if ("LOGIN_SLOT".equalsIgnoreCase(c.type())) {
+            boolean isLoginSlot = "LOGIN_SLOT".equalsIgnoreCase(c.type())
+                    || "loginSlot".equalsIgnoreCase(c.id());
+
+            boolean isOrderRejection = "ORDER_REJECTION".equalsIgnoreCase(c.type())
+                    || "orderRejection".equalsIgnoreCase(c.id())
+                    || c.maxRejections() != null;
+
+            if (isLoginSlot) {
+                int defaultMinMinutes = c.minDurationMinutes() != null ? c.minDurationMinutes() : 270;
+                boolean isDefaultSlot = (c.timeSlot() == null || c.timeSlot().isBlank() || "7pm - 12am".equalsIgnoreCase(c.timeSlot().trim()));
+
                 String rawStartTime;
                 String rawEndTime;
                 String rawDuration;
-                int defaultMinMinutes = c.minDurationMinutes() != null ? c.minDurationMinutes() : 270;
 
-                if (bookedShift != null) {
+                if (bookedShift != null && isDefaultSlot) {
                     rawStartTime = bookedShift.getStartTime();
                     rawEndTime = bookedShift.getEndTime();
                     rawDuration = bookedShift.getDurationHours();
                 } else {
                     String configuredSlot = (c.timeSlot() != null && !c.timeSlot().isBlank()) ? c.timeSlot()
-                            : (c.value() != null ? c.value() : "7pm - 12am");
+                            : (c.value() != null && !c.value().isBlank() ? c.value() : "7pm - 12am");
                     String[] parts = configuredSlot.split("\\s*[-–—]\\s*");
-                    rawStartTime = parts.length > 0 ? parts[0] : "7pm";
-                    rawEndTime = parts.length > 1 ? parts[1] : "12am";
+                    rawStartTime = parts.length > 0 ? parts[0].trim() : "7pm";
+                    rawEndTime = parts.length > 1 ? parts[1].trim() : "12am";
                     rawDuration = (c.duration() != null && !c.duration().isBlank()) ? c.duration()
-                            : (c.subtext() != null ? c.subtext() : "4h 30m");
+                            : (c.subtext() != null && !c.subtext().isBlank() ? c.subtext() : "4h 30m");
                 }
 
                 String timeSlot = formatTimeSlotDisplay(rawStartTime, rawEndTime);
@@ -1027,12 +1036,12 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 Instant shiftEndInstant = bounds[1];
 
                 long eligibleMinutes = calculateEligibleOnlineMinutes(partner, shiftStartInstant, shiftEndInstant);
-                double progressPct = Math.min(100.0, ((double) eligibleMinutes / (double) requiredMinutes) * 100.0);
+                double progressPct = requiredMinutes > 0 ? Math.min(100.0, ((double) eligibleMinutes / (double) requiredMinutes) * 100.0) : 100.0;
 
                 Instant now = Instant.now();
                 String status = "PENDING";
-                String subtext = requiredDurationStr;
                 String progressText = "";
+                String subtext;
 
                 if (shiftBookingRepository == null && onlineSessionRepository == null) {
                     status = "SATISFIED";
@@ -1054,15 +1063,15 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
 
                 result.add(new IncentiveConditionProgressDto(
-                        c.id(),
+                        c.id() != null ? c.id() : "loginSlot",
                         "LOGIN_SLOT",
-                        c.title() != null ? c.title() : "Mandatory Login: Complete below slot",
+                        c.title() != null && !c.title().isBlank() ? c.title() : "Mandatory Login: Complete below slot",
                         timeSlot,
                         subtext,
                         status,
                         progressPct,
                         progressText));
-            } else if ("ORDER_REJECTION".equalsIgnoreCase(c.type())) {
+            } else if (isOrderRejection) {
                 int maxRejections = c.maxRejections() != null ? c.maxRejections() : 1;
                 long rejectedCount = deliveryAssignmentRepository.countByDeliveryPartnerIdAndStatusAndAssignedAtBetween(
                         partner.getId(),
@@ -1089,13 +1098,14 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
 
                 String val = (c.value() != null && !c.value().isBlank()) ? c.value() : "Do not reject";
-                String sub = (c.subtext() != null && !c.subtext().isBlank()) ? c.subtext()
-                        : ("more than " + maxRejections + (maxRejections == 1 ? " order" : " orders"));
+                String sub = (c.maxRejections() != null)
+                        ? ("more than " + c.maxRejections() + (c.maxRejections() == 1 ? " order" : " orders"))
+                        : ((c.subtext() != null && !c.subtext().isBlank()) ? c.subtext() : "more than " + maxRejections + (maxRejections == 1 ? " order" : " orders"));
 
                 result.add(new IncentiveConditionProgressDto(
-                        c.id(),
+                        c.id() != null ? c.id() : "orderRejection",
                         "ORDER_REJECTION",
-                        c.title() != null ? c.title() : "Other condition",
+                        c.title() != null && !c.title().isBlank() ? c.title() : "Other condition",
                         val,
                         sub,
                         status,
@@ -1475,10 +1485,29 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     String cTitle = cNode.has("title") ? cNode.get("title").asText() : "";
                     String cVal = cNode.has("value") ? cNode.get("value").asText() : (cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : "");
                     String cSub = cNode.has("subtext") ? cNode.get("subtext").asText() : (cNode.has("duration") ? cNode.get("duration").asText() : "");
-                    String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : cVal;
-                    String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : cSub;
+                    String cTimeSlot = cNode.has("timeSlot") ? cNode.get("timeSlot").asText() : ("LOGIN_SLOT".equalsIgnoreCase(cType) ? cVal : "");
+                    String cDuration = cNode.has("duration") ? cNode.get("duration").asText() : ("LOGIN_SLOT".equalsIgnoreCase(cType) ? cSub : "");
                     Integer cMinDur = (cNode.has("minDurationMinutes") && !cNode.get("minDurationMinutes").isNull()) ? cNode.get("minDurationMinutes").asInt() : null;
-                    Integer cMaxRej = (cNode.has("maxRejections") && !cNode.get("maxRejections").isNull()) ? cNode.get("maxRejections").asInt() : null;
+                    Integer cMaxRej = null;
+                    if (cNode.has("maxRejections") && !cNode.get("maxRejections").isNull()) {
+                        cMaxRej = cNode.get("maxRejections").asInt();
+                    } else if (cNode.has("limit") && !cNode.get("limit").isNull()) {
+                        cMaxRej = cNode.get("limit").asInt();
+                    } else if (!cSub.isBlank() && cSub.matches(".*\\b\\d+\\b.*")) {
+                        try {
+                            var matcher = java.util.regex.Pattern.compile("\\d+").matcher(cSub);
+                            if (matcher.find()) {
+                                cMaxRej = Integer.parseInt(matcher.group());
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    if (cType.isBlank() || "CUSTOM".equalsIgnoreCase(cType)) {
+                        if (cId.toLowerCase().contains("login") || !cTimeSlot.isBlank() || cTitle.toLowerCase().contains("login")) {
+                            cType = "LOGIN_SLOT";
+                        } else if (cId.toLowerCase().contains("reject") || cMaxRej != null || cTitle.toLowerCase().contains("reject") || cVal.toLowerCase().contains("reject")) {
+                            cType = "ORDER_REJECTION";
+                        }
+                    }
                     conditions.add(new ConditionDef(cId, cType, cTitle, cVal, cSub, cTimeSlot, cDuration, cMinDur, cMaxRej));
                 }
             }

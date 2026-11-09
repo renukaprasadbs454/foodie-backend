@@ -1436,4 +1436,78 @@ class DeliveryIncentiveServiceImplTest {
         assertThat(dailyOffer.milestones().get(0).rewardAmount()).isEqualByComparingTo("28.00");
         assertThat(dailyOffer.milestones().get(1).rewardAmount()).isEqualByComparingTo("30.00");
     }
+
+    @Test
+    void getIncentivesProgress_adminConfiguredConditionsReflectedDynamically() {
+        LocalDate today = LocalDate.now(ZONE_IST);
+
+        String json = """
+        {
+          "pricingBasis": "UNIVERSAL",
+          "universalConfig": {
+            "incentives": [
+              {
+                "id": "dailyTargetBonus",
+                "title": "Daily Target Bonus",
+                "value": 150,
+                "active": true,
+                "creatorRole": "SUPER_ADMIN",
+                "scope": "GLOBAL",
+                "milestones": [
+                  { "trips": 6, "reward": 42 },
+                  { "trips": 9, "reward": 75 }
+                ],
+                "conditions": [
+                  {
+                    "id": "loginSlot",
+                    "type": "LOGIN_SLOT",
+                    "title": "Mandatory Login: Complete below slot",
+                    "timeSlot": "8 PM – 12 AM",
+                    "duration": "4h 30m"
+                  },
+                  {
+                    "id": "orderRejection",
+                    "type": "ORDER_REJECTION",
+                    "title": "Other condition",
+                    "value": "Do not reject",
+                    "maxRejections": 2,
+                    "subtext": "more than 2 orders"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """;
+        DeliveryPricingConfig config = DeliveryPricingConfig.createDefault();
+        config.update(new BigDecimal("200.00"), new BigDecimal("25.00"), "UNIVERSAL", json, UUID.randomUUID());
+        when(pricingConfigRepository.findById(any())).thenReturn(Optional.of(config));
+
+        IncentivesProgressResponseDto progress = incentiveService.getIncentivesProgress(userCredentialId, today);
+
+        var dailyOffer = progress.offers().stream()
+                .filter(o -> "dailyTargetBonus".equals(o.id()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(dailyOffer).isNotNull();
+        assertThat(dailyOffer.conditions()).isNotNull();
+        assertThat(dailyOffer.conditions()).hasSize(2);
+
+        var loginCond = dailyOffer.conditions().stream()
+                .filter(c -> "LOGIN_SLOT".equals(c.type()))
+                .findFirst()
+                .orElse(null);
+        assertThat(loginCond).isNotNull();
+        assertThat(loginCond.value()).isEqualTo("8pm - 12am");
+        assertThat(loginCond.subtext()).isEqualTo("4h 30m");
+
+        var rejCond = dailyOffer.conditions().stream()
+                .filter(c -> "ORDER_REJECTION".equals(c.type()))
+                .findFirst()
+                .orElse(null);
+        assertThat(rejCond).isNotNull();
+        assertThat(rejCond.value()).isEqualTo("Do not reject");
+        assertThat(rejCond.subtext()).isEqualTo("more than 2 orders");
+    }
 }
