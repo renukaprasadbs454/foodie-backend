@@ -151,7 +151,7 @@ class AdminPaymentServiceImplTest {
         assertThat(dto.userId()).isEqualTo(customerId);
         assertThat(dto.amount()).isEqualByComparingTo("250.00");
         assertThat(dto.gatewayTransactionId()).isEqualTo("cf_order_999");
-        assertThat(dto.gatewayName()).isEqualTo("RAZORPAY");
+        assertThat(dto.gatewayName()).isEqualTo("CASHFREE");
         assertThat(dto.status()).isEqualTo("CAPTURED");
     }
 
