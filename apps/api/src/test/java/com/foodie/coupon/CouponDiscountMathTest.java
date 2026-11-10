@@ -52,4 +52,44 @@ class CouponDiscountMathTest {
                 assertThat(CouponServiceImpl.computeDiscount(coupon, new BigDecimal("250.00")))
                                 .isEqualByComparingTo("25.00");
         }
+
+        @Test
+        void percentWithCapCapsWhenExceeding() {
+                Coupon coupon = Coupon.create(
+                                "REST50",
+                                DiscountType.PERCENT,
+                                "SHARED",
+                                "RESTAURANT",
+                                "PERCENTAGE",
+                                null,
+                                new BigDecimal("50.00"),
+                                new BigDecimal("100.00"),
+                                new BigDecimal("90.00"),
+                                Instant.now().plusSeconds(60),
+                                null,
+                                1,
+                                java.util.UUID.randomUUID());
+                assertThat(CouponServiceImpl.computeDiscount(coupon, new BigDecimal("300.00")))
+                                .isEqualByComparingTo("90.00");
+        }
+
+        @Test
+        void percentWithCapAppliesPercentWhenBelowCap() {
+                Coupon coupon = Coupon.create(
+                                "REST50",
+                                DiscountType.PERCENT,
+                                "SHARED",
+                                "RESTAURANT",
+                                "PERCENTAGE",
+                                null,
+                                new BigDecimal("50.00"),
+                                new BigDecimal("50.00"),
+                                new BigDecimal("90.00"),
+                                Instant.now().plusSeconds(60),
+                                null,
+                                1,
+                                java.util.UUID.randomUUID());
+                assertThat(CouponServiceImpl.computeDiscount(coupon, new BigDecimal("100.00")))
+                                .isEqualByComparingTo("50.00");
+        }
 }

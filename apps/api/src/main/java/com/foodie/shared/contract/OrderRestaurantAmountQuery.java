@@ -11,6 +11,11 @@ public interface OrderRestaurantAmountQuery {
     record RestaurantOrderAmount(
             UUID restaurantId,
             BigDecimal subtotal,
-            BigDecimal taxAmount) {
+            BigDecimal taxAmount,
+            BigDecimal discountAmount,
+            UUID couponId) {
+        public RestaurantOrderAmount(UUID restaurantId, BigDecimal subtotal, BigDecimal taxAmount) {
+            this(restaurantId, subtotal, taxAmount, BigDecimal.ZERO, null);
+        }
     }
 }

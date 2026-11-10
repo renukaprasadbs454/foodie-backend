@@ -24,6 +24,8 @@ public class OrderRestaurantAmountQueryImpl implements OrderRestaurantAmountQuer
                 .map(order -> new RestaurantOrderAmount(
                         order.getRestaurantId(),
                         order.getSubtotal(),
-                        order.getTaxAmount()));
+                        order.getTaxAmount(),
+                        order.getDiscountAmount(),
+                        order.getCouponId()));
     }
 }

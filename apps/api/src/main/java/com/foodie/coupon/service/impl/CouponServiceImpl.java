@@ -211,6 +211,12 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         if (request.getZoneId() != null && !request.getZoneId().isBlank()) {
             coupon.setZoneId(request.getZoneId().trim());
         }
+        if (request.getAdminDiscount() != null) {
+            coupon.setAdminDiscount(CouponMapper.scaleMoney(request.getAdminDiscount()));
+        }
+        if (request.getRestaurantDiscount() != null) {
+            coupon.setRestaurantDiscount(CouponMapper.scaleMoney(request.getRestaurantDiscount()));
+        }
         try {
             coupon = couponRepository.save(coupon);
         } catch (DataIntegrityViolationException ex) {

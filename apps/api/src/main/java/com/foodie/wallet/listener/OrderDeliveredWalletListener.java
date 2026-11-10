@@ -2,6 +2,8 @@ package com.foodie.wallet.listener;
 
 import com.foodie.common.enums.LedgerReferenceType;
 import com.foodie.common.enums.OwnerType;
+import com.foodie.coupon.entity.Coupon;
+import com.foodie.coupon.repository.CouponRepository;
 import com.foodie.shared.contract.OrderRestaurantAmountQuery;
 import com.foodie.shared.contract.RestaurantSummaryProvider;
 import com.foodie.shared.event.OrderDeliveredEvent;
@@ -26,14 +28,17 @@ public class OrderDeliveredWalletListener {
     private final WalletService walletService;
     private final OrderRestaurantAmountQuery orderRestaurantAmountQuery;
     private final RestaurantSummaryProvider restaurantSummaryProvider;
+    private final CouponRepository couponRepository;
 
     public OrderDeliveredWalletListener(
             WalletService walletService,
             OrderRestaurantAmountQuery orderRestaurantAmountQuery,
-            RestaurantSummaryProvider restaurantSummaryProvider) {
+            RestaurantSummaryProvider restaurantSummaryProvider,
+            CouponRepository couponRepository) {
         this.walletService = walletService;
         this.orderRestaurantAmountQuery = orderRestaurantAmountQuery;
         this.restaurantSummaryProvider = restaurantSummaryProvider;
+        this.couponRepository = couponRepository;
     }
 
     @EventListener
@@ -66,17 +71,54 @@ public class OrderDeliveredWalletListener {
             commissionPct = new BigDecimal("18.00"); // default to 18% if not set
         }
 
+        // Zomato/Swiggy model: Calculate restaurant co-funded discount share if coupon used
+        BigDecimal restaurantDiscountShare = BigDecimal.ZERO;
+        if (orderAmount.couponId() != null
+                && orderAmount.discountAmount() != null
+                && orderAmount.discountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            var couponOpt = couponRepository.findById(orderAmount.couponId());
+            if (couponOpt.isPresent()) {
+                var coupon = couponOpt.get();
+                if (coupon.getFunderType() == Coupon.FunderType.RESTAURANT
+                        || coupon.getFunderType() == Coupon.FunderType.MERCHANT) {
+                    restaurantDiscountShare = orderAmount.discountAmount();
+                } else if (coupon.getFunderType() == Coupon.FunderType.SHARED) {
+                    BigDecimal restDisc = coupon.getRestaurantDiscount();
+                    BigDecimal adminDisc = coupon.getAdminDiscount();
+                    if (restDisc != null && adminDisc != null && restDisc.add(adminDisc).compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal totalSplit = restDisc.add(adminDisc);
+                        restaurantDiscountShare = orderAmount.discountAmount()
+                                .multiply(restDisc)
+                                .divide(totalSplit, 2, RoundingMode.HALF_UP);
+                    } else if (restDisc != null && restDisc.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal totalVal = coupon.getValue() != null && coupon.getValue().compareTo(BigDecimal.ZERO) > 0
+                                ? coupon.getValue()
+                                : restDisc;
+                        restaurantDiscountShare = orderAmount.discountAmount()
+                                .multiply(restDisc)
+                                .divide(totalVal, 2, RoundingMode.HALF_UP);
+                    } else {
+                        // Default 50/50 split for SHARED
+                        restaurantDiscountShare = orderAmount.discountAmount()
+                                .divide(new BigDecimal("2"), 2, RoundingMode.HALF_UP);
+                    }
+                }
+            }
+        }
+
         BigDecimal commissionAmount = subtotal.multiply(commissionPct).divide(new BigDecimal("100"), 2,
                 RoundingMode.HALF_UP);
-        BigDecimal netEarnings = subtotal.subtract(commissionAmount);
+        BigDecimal netEarnings = subtotal.subtract(commissionAmount).subtract(restaurantDiscountShare);
+        if (netEarnings.compareTo(BigDecimal.ZERO) < 0) {
+            netEarnings = BigDecimal.ZERO;
+        }
 
-        // Include tax if applicable. For this system, we'll assume the restaurant gets
-        // the tax.
+        // Include tax if applicable. For this system, we'll assume the restaurant gets the tax.
         BigDecimal taxAmount = orderAmount.taxAmount() != null ? orderAmount.taxAmount() : BigDecimal.ZERO;
         BigDecimal finalEarnings = netEarnings.add(taxAmount);
 
-        log.info("Crediting restaurant {} for order {} finalEarnings {} (Subtotal: {}, CommPct: {}%, Tax: {})",
-                orderAmount.restaurantId(), event.orderId(), finalEarnings, subtotal, commissionPct, taxAmount);
+        log.info("Crediting restaurant {} for order {} finalEarnings {} (Subtotal: {}, CommPct: {}%, RestShare: {}, Tax: {})",
+                orderAmount.restaurantId(), event.orderId(), finalEarnings, subtotal, commissionPct, restaurantDiscountShare, taxAmount);
 
         walletService.credit(
                 OwnerType.RESTAURANT,
