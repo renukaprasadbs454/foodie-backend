@@ -78,8 +78,12 @@ public class DeliveryPricingConfig {
             String configData,
             UUID updatedBy
     ) {
-        this.minPricePerDelivery = minPricePerDelivery;
-        this.moneyPerKm = moneyPerKm;
+        if (minPricePerDelivery != null) {
+            this.minPricePerDelivery = minPricePerDelivery;
+        }
+        if (moneyPerKm != null) {
+            this.moneyPerKm = moneyPerKm;
+        }
         if (pricingBasis != null && !pricingBasis.isBlank()) {
             this.pricingBasis = pricingBasis;
         }

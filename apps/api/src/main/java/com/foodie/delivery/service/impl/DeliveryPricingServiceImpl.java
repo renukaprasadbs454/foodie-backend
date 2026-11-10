@@ -53,12 +53,12 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
     public DeliveryPricingConfigResponseDto updatePricingConfig(UUID actorCredentialId, UpdateDeliveryPricingRequestDto request) {
         DeliveryPricingConfig config = getOrCreateConfig();
 
-        UUID adminUserId = actorCredentialId;
+        UUID adminUserId = null;
         String actorRole = null;
         String actorZoneId = null;
         if (adminIdentityQueryPort != null && actorCredentialId != null) {
             adminUserId = adminIdentityQueryPort.findAdminUserIdByUserCredentialId(actorCredentialId)
-                    .orElse(actorCredentialId);
+                    .orElse(null);
             actorRole = adminIdentityQueryPort.findRoleNameByUserCredentialId(actorCredentialId).orElse(null);
             actorZoneId = adminIdentityQueryPort.findAssignedZoneIdByUserCredentialId(actorCredentialId).orElse(null);
         }
@@ -150,14 +150,27 @@ public class DeliveryPricingServiceImpl implements DeliveryPricingService {
             }
         }
 
+        BigDecimal minPrice = request.minPricePerDelivery() != null
+                ? request.minPricePerDelivery().setScale(2, RoundingMode.HALF_UP)
+                : config.getMinPricePerDelivery();
+        BigDecimal moneyKm = request.moneyPerKm() != null
+                ? request.moneyPerKm().setScale(2, RoundingMode.HALF_UP)
+                : config.getMoneyPerKm();
+
         config.update(
-                request.minPricePerDelivery().setScale(2, RoundingMode.HALF_UP),
-                request.moneyPerKm().setScale(2, RoundingMode.HALF_UP),
+                minPrice,
+                moneyKm,
                 pricingBasis,
                 configDataJson,
                 adminUserId
         );
-        DeliveryPricingConfig saved = configRepository.save(config);
+        DeliveryPricingConfig saved;
+        try {
+            saved = configRepository.save(config);
+        } catch (Exception ex) {
+            config.update(minPrice, moneyKm, pricingBasis, configDataJson, null);
+            saved = configRepository.save(config);
+        }
         return toDto(saved);
     }
 

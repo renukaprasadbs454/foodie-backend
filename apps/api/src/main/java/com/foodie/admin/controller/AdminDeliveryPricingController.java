@@ -2,6 +2,8 @@ package com.foodie.admin.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.foodie.admin.entity.AdminUser;
+import com.foodie.admin.repository.AdminUserRepository;
 import com.foodie.common.dto.ApiResponse;
 import com.foodie.delivery.entity.DeliveryPricingConfig;
 import com.foodie.delivery.repository.DeliveryPricingConfigRepository;
@@ -31,11 +33,22 @@ public class AdminDeliveryPricingController {
     private static final UUID DEFAULT_CONFIG_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     private final DeliveryPricingConfigRepository pricingConfigRepository;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AdminUserRepository adminUserRepository;
 
     public AdminDeliveryPricingController(
             DeliveryPricingConfigRepository pricingConfigRepository,
             ObjectMapper objectMapper) {
         this.pricingConfigRepository = pricingConfigRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    public AdminDeliveryPricingController(
+            DeliveryPricingConfigRepository pricingConfigRepository,
+            AdminUserRepository adminUserRepository,
+            ObjectMapper objectMapper) {
+        this.pricingConfigRepository = pricingConfigRepository;
+        this.adminUserRepository = adminUserRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -79,12 +92,22 @@ public class AdminDeliveryPricingController {
 
         BigDecimal minPrice = null;
         if (body.get("minPricePerDelivery") != null) {
-            minPrice = new BigDecimal(body.get("minPricePerDelivery").toString());
+            try {
+                minPrice = new BigDecimal(body.get("minPricePerDelivery").toString());
+            } catch (Exception ignored) {}
+        }
+        if (minPrice == null && config.getMinPricePerDelivery() != null) {
+            minPrice = config.getMinPricePerDelivery();
         }
 
         BigDecimal moneyPerKm = null;
         if (body.get("moneyPerKm") != null) {
-            moneyPerKm = new BigDecimal(body.get("moneyPerKm").toString());
+            try {
+                moneyPerKm = new BigDecimal(body.get("moneyPerKm").toString());
+            } catch (Exception ignored) {}
+        }
+        if (moneyPerKm == null && config.getMoneyPerKm() != null) {
+            moneyPerKm = config.getMoneyPerKm();
         }
 
         String pricingBasis = body.get("pricingBasis") != null ? body.get("pricingBasis").toString() : "UNIVERSAL";
@@ -105,9 +128,31 @@ public class AdminDeliveryPricingController {
             }
         }
 
-        UUID adminId = (principal != null && principal.userId() != null) ? principal.userId() : null;
+        UUID adminId = null;
+        if (principal != null && principal.userId() != null) {
+            UUID credId = principal.userId();
+            if (adminUserRepository != null) {
+                adminId = adminUserRepository.findByUserCredentialId(credId)
+                        .map(AdminUser::getId)
+                        .filter(adminUserRepository::existsById)
+                        .orElseGet(() -> {
+                            if (adminUserRepository.existsById(credId)) {
+                                return credId;
+                            }
+                            return adminUserRepository.findAll().stream().findFirst().map(AdminUser::getId).orElse(null);
+                        });
+            }
+        }
+
         config.update(minPrice, moneyPerKm, pricingBasis, configDataStr, adminId);
-        DeliveryPricingConfig saved = pricingConfigRepository.save(config);
+        DeliveryPricingConfig saved;
+        try {
+            saved = pricingConfigRepository.save(config);
+        } catch (Exception ex) {
+            // Guard against FK constraint violation on updated_by (admin_user)
+            config.update(minPrice, moneyPerKm, pricingBasis, configDataStr, null);
+            saved = pricingConfigRepository.save(config);
+        }
 
         return ResponseEntity.ok(ApiResponse.success(buildResponseMap(saved)));
     }
@@ -138,6 +183,28 @@ public class AdminDeliveryPricingController {
                     data.put("zones", objectMapper.convertValue(parsed.get("zones"), Object.class));
                 }
             } catch (Exception ignored) {
+            }
+        }
+
+        if (data.get("incentives") == null && data.get("universalConfig") instanceof Map uMap && uMap.containsKey("incentives")) {
+            data.put("incentives", uMap.get("incentives"));
+        } else if (data.get("universalConfig") == null && data.get("incentives") != null) {
+            Map<String, Object> uConfig = new LinkedHashMap<>();
+            uConfig.put("minPrice", config.getMinPricePerDelivery());
+            uConfig.put("moneyPerKm", config.getMoneyPerKm());
+            uConfig.put("incentives", data.get("incentives"));
+            data.put("universalConfig", uConfig);
+        } else if (data.get("incentives") == null && data.get("zoneConfigs") instanceof Map zMap && !zMap.isEmpty()) {
+            for (Object zVal : zMap.values()) {
+                if (zVal instanceof Map singleZone && singleZone.containsKey("incentives") && singleZone.get("incentives") != null) {
+                    data.put("incentives", singleZone.get("incentives"));
+                    Map<String, Object> uConfig = new LinkedHashMap<>();
+                    uConfig.put("minPrice", config.getMinPricePerDelivery());
+                    uConfig.put("moneyPerKm", config.getMoneyPerKm());
+                    uConfig.put("incentives", singleZone.get("incentives"));
+                    data.put("universalConfig", uConfig);
+                    break;
+                }
             }
         }
         return data;
