@@ -33,19 +33,12 @@ public class AdminDeliveryPricingController {
     private static final UUID DEFAULT_CONFIG_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     private final DeliveryPricingConfigRepository pricingConfigRepository;
     private final ObjectMapper objectMapper;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private AdminUserRepository adminUserRepository;
+    private final AdminUserRepository adminUserRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AdminDeliveryPricingController(
             DeliveryPricingConfigRepository pricingConfigRepository,
-            ObjectMapper objectMapper) {
-        this.pricingConfigRepository = pricingConfigRepository;
-        this.objectMapper = objectMapper;
-    }
-
-    public AdminDeliveryPricingController(
-            DeliveryPricingConfigRepository pricingConfigRepository,
-            AdminUserRepository adminUserRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) AdminUserRepository adminUserRepository,
             ObjectMapper objectMapper) {
         this.pricingConfigRepository = pricingConfigRepository;
         this.adminUserRepository = adminUserRepository;
@@ -112,6 +105,24 @@ public class AdminDeliveryPricingController {
 
         String pricingBasis = body.get("pricingBasis") != null ? body.get("pricingBasis").toString() : "UNIVERSAL";
 
+        if ("UNIVERSAL".equalsIgnoreCase(pricingBasis)) {
+            Object universalIncentives = null;
+            if (body.get("incentives") != null) {
+                universalIncentives = body.get("incentives");
+            } else if (body.get("universalConfig") instanceof Map uMap && uMap.get("incentives") != null) {
+                universalIncentives = uMap.get("incentives");
+            }
+
+            if (universalIncentives != null && body.get("zoneConfigs") instanceof Map zMap) {
+                for (Object key : zMap.keySet()) {
+                    Object zObj = zMap.get(key);
+                    if (zObj instanceof Map singleZone) {
+                        singleZone.put("incentives", universalIncentives);
+                    }
+                }
+            }
+        }
+
         String configDataStr = null;
         if (body.get("configData") != null && !body.get("configData").toString().isBlank()) {
             configDataStr = body.get("configData").toString();
@@ -132,15 +143,14 @@ public class AdminDeliveryPricingController {
         if (principal != null && principal.userId() != null) {
             UUID credId = principal.userId();
             if (adminUserRepository != null) {
-                adminId = adminUserRepository.findByUserCredentialId(credId)
-                        .map(AdminUser::getId)
-                        .filter(adminUserRepository::existsById)
-                        .orElseGet(() -> {
-                            if (adminUserRepository.existsById(credId)) {
-                                return credId;
-                            }
-                            return adminUserRepository.findAll().stream().findFirst().map(AdminUser::getId).orElse(null);
-                        });
+                try {
+                    adminId = adminUserRepository.findByUserCredentialId(credId)
+                            .map(AdminUser::getId)
+                            .filter(adminUserRepository::existsById)
+                            .orElse(null);
+                } catch (Exception ignored) {
+                    adminId = null;
+                }
             }
         }
 

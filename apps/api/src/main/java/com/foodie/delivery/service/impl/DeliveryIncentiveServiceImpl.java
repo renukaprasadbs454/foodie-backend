@@ -1550,6 +1550,30 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                     configFound = true;
                 }
 
+                if (universalNode == null && root.has("zoneConfigs") && !root.get("zoneConfigs").isNull()) {
+                    JsonNode zoneConfigs = root.get("zoneConfigs");
+                    JsonNode fallbackZNode = null;
+                    for (var it = zoneConfigs.fieldNames(); it.hasNext();) {
+                        String zKey = it.next();
+                        JsonNode zNode = zoneConfigs.get(zKey);
+                        if (zNode.has("incentives") && zNode.get("incentives").isArray() && !zNode.get("incentives").isEmpty()) {
+                            if (fallbackZNode == null) {
+                                fallbackZNode = zNode.get("incentives");
+                            }
+                            if (partnerZoneId != null && isZoneMatch(zKey, partnerZoneId)) {
+                                universalNode = zNode.get("incentives");
+                                break;
+                            }
+                        }
+                    }
+                    if (universalNode == null && fallbackZNode != null) {
+                        universalNode = fallbackZNode;
+                    }
+                    if (universalNode != null) {
+                        configFound = true;
+                    }
+                }
+
                 if (universalNode != null && universalNode.isArray()) {
                     for (JsonNode item : universalNode) {
                         IncentiveRuleDef rule = parseRuleFromJson(item, null);
