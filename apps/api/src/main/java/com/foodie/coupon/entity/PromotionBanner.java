@@ -22,7 +22,7 @@ public class PromotionBanner extends BaseEntity {
     @Column(name = "subtitle")
     private String subtitle;
 
-    @Column(name = "image_url", nullable = false, length = 1024)
+    @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
     private String imageUrl;
 
     @Column(name = "cta_text")

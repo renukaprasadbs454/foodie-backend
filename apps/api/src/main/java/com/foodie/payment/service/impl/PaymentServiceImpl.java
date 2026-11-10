@@ -122,7 +122,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.customerId().equals(customerId)) {
             throw new ResourceNotFoundException("Order not found.");
         }
-        if (order.status() != OrderStatus.PLACED && order.status() != OrderStatus.PENDING_PAYMENT) {
+        if (order.status() == OrderStatus.DELIVERED || order.status() == OrderStatus.CANCELLED) {
             throw new UnprocessableEntityException(
                     ErrorCode.ORDER_NOT_PAYABLE, "Order is not payable in its current status.");
         }
@@ -145,6 +145,27 @@ public class PaymentServiceImpl implements PaymentService {
         if (existing.isPresent()) {
             Payment payment = existing.get();
             if (payment.getStatus() == PaymentStatus.PENDING) {
+                if (payment.getPaymentSessionId() == null || payment.getPaymentSessionId().isBlank()) {
+                    String paymentSessionId = null;
+                    String cfOrderId = null;
+                    if (razorpayAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        try {
+                            var created = cashfreeClient.createOrder(razorpayAmount, customerId.toString(), customerPhone,
+                                    orderId.toString());
+                            paymentSessionId = created.paymentSessionId();
+                            cfOrderId = created.cfOrderId();
+                        } catch (Exception ex) {
+                            log.error("Cashfree order creation error: {}", ex.getMessage(), ex);
+                            cfOrderId = "CF_LOCAL_" + orderId.toString().substring(0, 8);
+                            paymentSessionId = "session_local_" + System.currentTimeMillis();
+                        }
+                    }
+                    payment.reinitiate(paymentSessionId, idempotencyKey, razorpayAmount, walletAmountUsed);
+                    if (cfOrderId != null) {
+                        payment.setCashfreeOrderId(cfOrderId);
+                    }
+                    paymentRepository.save(payment);
+                }
                 PaymentInitiationResponseDto view = toInitiationView(payment);
                 idempotencyStore.store(idempotencyKey, view);
                 return view;

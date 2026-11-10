@@ -32,6 +32,9 @@ public class AdminPromotionBannerController {
 
     private final PromotionBannerService bannerService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.foodie.infrastructure.storage.ObjectStorageClient objectStorageClient;
+
     public AdminPromotionBannerController(PromotionBannerService bannerService) {
         this.bannerService = bannerService;
     }
@@ -96,5 +99,37 @@ public class AdminPromotionBannerController {
             @PathVariable("id") UUID id) {
         bannerService.deleteBanner(id);
         return ResponseEntity.ok(ApiResponse.success(true));
+    }
+
+    @PostMapping(value = "/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN') and @adminAccess.hasAnyRole(authentication, 'OPS', 'FINANCE', 'SUPER_ADMIN')")
+    @Operation(summary = "Upload custom promotional banner image or animation file")
+    public ResponseEntity<ApiResponse<String>> uploadBannerFile(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @org.springframework.web.bind.annotation.RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new com.foodie.common.exception.BadRequestException(
+                    com.foodie.common.enums.ErrorCode.VALIDATION_FAILED, "File is required.");
+        }
+        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "banner.png";
+        String ext = "png";
+        if (filename.endsWith(".gif")) ext = "gif";
+        else if (filename.endsWith(".webp")) ext = "webp";
+        else if (filename.endsWith(".svg")) ext = "svg";
+        else if (filename.endsWith(".apng")) ext = "apng";
+        else if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) ext = "jpg";
+
+        String key = "banners/" + UUID.randomUUID() + "." + ext;
+        try {
+            if (objectStorageClient != null) {
+                objectStorageClient.putObject(key, file.getInputStream(), file.getSize(),
+                        file.getContentType() != null ? file.getContentType() : "image/" + ext);
+            }
+            String url = "/api/v1/storage/" + key;
+            return ResponseEntity.ok(ApiResponse.success(url));
+        } catch (java.io.IOException e) {
+            throw new com.foodie.common.exception.BadRequestException(
+                    com.foodie.common.enums.ErrorCode.BAD_REQUEST, "Failed to upload file.");
+        }
     }
 }

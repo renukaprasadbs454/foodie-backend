@@ -301,6 +301,15 @@ public class OrderServiceImpl implements OrderService {
             BigDecimal total = subtotal.subtract(discount).add(deliveryFee).add(taxAmount)
                     .setScale(2, RoundingMode.HALF_UP);
 
+            boolean isCod = request != null && request.paymentMethod() != null
+                    && ("COD".equalsIgnoreCase(request.paymentMethod().trim())
+                            || "CASH_ON_DELIVERY".equalsIgnoreCase(request.paymentMethod().trim()));
+            if (isCod) {
+                // Add ₹5.00 Handling charge for COD option and round to upper whole rupee (no paisa)
+                total = total.add(BigDecimal.valueOf(5));
+                total = total.setScale(0, RoundingMode.CEILING).setScale(2, RoundingMode.HALF_UP);
+            }
+
             Order order = Order.place(
                     orderNumberGenerator.next(),
                     customerId,

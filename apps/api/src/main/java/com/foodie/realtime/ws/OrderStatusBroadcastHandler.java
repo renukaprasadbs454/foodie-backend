@@ -3,6 +3,7 @@ package com.foodie.realtime.ws;
 import com.foodie.shared.contract.OrderNotificationQuery;
 import com.foodie.shared.event.OrderPlacedEvent;
 import com.foodie.shared.event.OrderStatusChangedEvent;
+import com.foodie.shared.event.PaymentCapturedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -55,6 +56,30 @@ public class OrderStatusBroadcastHandler {
             String restaurantTopic = "/topic/restaurant/" + snapshot.restaurantId() + "/orders";
             messagingTemplate.convertAndSend(restaurantTopic, payload);
         });
+    }
+
+    @EventListener
+    public void onPaymentCaptured(PaymentCapturedEvent event) {
+        String destination = "/topic/order/" + event.orderId();
+        log.info("Broadcasting PAYMENT_CAPTURED for order {} to {}", event.orderId(), destination);
+
+        Map<String, Object> payload = Map.of(
+                "type", "PAYMENT_CAPTURED",
+                "orderId", event.orderId().toString(),
+                "paymentStatus", "PAID",
+                "paymentMethod", "ONLINE",
+                "timestamp", event.occurredAt().toString());
+
+        messagingTemplate.convertAndSend(destination, payload);
+
+        // Fan out to restaurant
+        orderNotificationQuery.findByOrderId(event.orderId()).ifPresent(snapshot -> {
+            String restaurantTopic = "/topic/restaurant/" + snapshot.restaurantId() + "/orders";
+            messagingTemplate.convertAndSend(restaurantTopic, payload);
+        });
+
+        // Fan out to delivery partner assignment topic
+        messagingTemplate.convertAndSend("/topic/delivery/order/" + event.orderId(), payload);
     }
 }
 
