@@ -15,7 +15,7 @@ public final class CouponMapper {
     public static CouponService.CouponView toView(Coupon coupon) {
         return new CouponService.CouponView(
                 coupon.getCode(),
-                coupon.getDiscountType().name(),
+                coupon.getDiscountType() != null ? coupon.getDiscountType().name() : "PERCENT",
                 coupon.getValue(),
                 coupon.getMinOrderAmount(),
                 coupon.getMaxDiscountAmount(),

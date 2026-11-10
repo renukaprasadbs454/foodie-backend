@@ -73,11 +73,25 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     @Override
     @Transactional(readOnly = true)
     public List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal) {
-        requireRestaurant(restaurantId);
+        if (restaurantId == null) {
+            return java.util.Collections.emptyList();
+        }
+        try {
+            requireRestaurant(restaurantId);
+        } catch (Exception ex) {
+            log.warn("Restaurant {} not found while checking coupon eligibility: {}", restaurantId, ex.getMessage());
+        }
         Instant now = Instant.now();
-        List<Coupon> candidates = couponRepository.findEligibleCandidates(restaurantId, now, Coupon.ApprovalStatus.APPROVED);
+        List<Coupon> candidates;
+        try {
+            candidates = couponRepository.findEligibleCandidates(restaurantId, now, Coupon.ApprovalStatus.APPROVED);
+        } catch (Exception ex) {
+            log.warn("Error finding eligible candidates: {}", ex.getMessage());
+            candidates = java.util.Collections.emptyList();
+        }
         List<CouponView> eligible = new ArrayList<>();
         for (Coupon coupon : candidates) {
+            if (coupon == null) continue;
             if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null && adminZoneService != null) {
                 try {
                     com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(coupon.getZoneId().trim());
@@ -93,7 +107,9 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                 } catch (Exception ignored) {}
             }
             if (isWithinUsageLimits(coupon, customerId)) {
-                eligibilityCache.markEligible(coupon.getId(), customerId);
+                if (customerId != null) {
+                    eligibilityCache.markEligible(coupon.getId(), customerId);
+                }
                 eligible.add(CouponMapper.toView(coupon));
             }
         }
@@ -143,10 +159,27 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     @Transactional(readOnly = true)
     public List<EligibleCouponResponseDto> listEligibleForCaller(
             UUID userCredentialId, UUID restaurantId, BigDecimal cartTotal) {
-        UUID customerId = resolveCustomerId(userCredentialId);
-        return listEligible(customerId, restaurantId, cartTotal).stream()
-                .map(CouponMapper::toEligibleDto)
-                .toList();
+        if (restaurantId == null) {
+            return java.util.Collections.emptyList();
+        }
+        UUID customerId = null;
+        if (userCredentialId != null && customerSummaryProvider != null) {
+            try {
+                customerId = customerSummaryProvider.findByUserCredentialId(userCredentialId)
+                        .map(CustomerSummaryProvider.CustomerSummary::customerId)
+                        .orElse(null);
+            } catch (Exception ex) {
+                log.warn("Could not resolve customerId for credential {}: {}", userCredentialId, ex.getMessage());
+            }
+        }
+        try {
+            return listEligible(customerId, restaurantId, cartTotal).stream()
+                    .map(CouponMapper::toEligibleDto)
+                    .toList();
+        } catch (Exception ex) {
+            log.error("Error in listEligibleForCaller for restaurant {}: {}", restaurantId, ex.getMessage());
+            return java.util.Collections.emptyList();
+        }
     }
 
     @Override

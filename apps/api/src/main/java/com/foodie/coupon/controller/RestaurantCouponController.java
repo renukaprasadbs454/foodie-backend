@@ -83,7 +83,7 @@ public class RestaurantCouponController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('RESTAURANT') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('RESTAURANT') or hasRole('ADMIN') or hasRole('CUSTOMER')")
     @Operation(summary = "Get all coupons assigned to this restaurant")
     public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getRestaurantCoupons(
             @AuthenticationPrincipal AuthPrincipal principal,

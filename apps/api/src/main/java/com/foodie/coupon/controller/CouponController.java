@@ -42,11 +42,17 @@ public class CouponController {
     @Operation(summary = "List coupons eligible for the caller's cart context")
     public ResponseEntity<ApiResponse<List<EligibleCouponResponseDto>>> listEligible(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam @NotNull UUID restaurantId,
-            @RequestParam @NotNull @DecimalMin(value = "0.00", inclusive = true) BigDecimal cartTotal
+            @RequestParam(value = "restaurantId", required = false) UUID restaurantId,
+            @RequestParam(value = "cartTotal", required = false, defaultValue = "0.00") BigDecimal cartTotal
     ) {
+        if (restaurantId == null) {
+            return ResponseEntity.ok(ApiResponse.success(java.util.Collections.emptyList()));
+        }
         return ResponseEntity.ok(ApiResponse.success(
-                couponQueryService.listEligibleForCaller(principal.userId(), restaurantId, cartTotal)));
+                couponQueryService.listEligibleForCaller(
+                        principal != null ? principal.userId() : null,
+                        restaurantId,
+                        cartTotal != null ? cartTotal : BigDecimal.ZERO)));
     }
 
     @PostMapping("/apply")
