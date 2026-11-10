@@ -1609,8 +1609,8 @@ public class DeliveryIncentiveServiceImpl implements DeliveryIncentiveService {
                 }
                 for (IncentiveRuleDef zRule : zoneRules) {
                     if ("UNIVERSAL".equalsIgnoreCase(pricingBasisStr)) {
-                        // In Universal mode, only authentic ZONE_ADMIN created incentives or custom zone rules override universal
-                        if (!merged.containsKey(zRule.id()) || "ZONE_ADMIN".equalsIgnoreCase(zRule.creatorRole())) {
+                        // In Universal mode, universal rules set by Admin take precedence; new custom zone incentives are appended
+                        if (!merged.containsKey(zRule.id())) {
                             merged.put(zRule.id(), zRule);
                         }
                     } else {

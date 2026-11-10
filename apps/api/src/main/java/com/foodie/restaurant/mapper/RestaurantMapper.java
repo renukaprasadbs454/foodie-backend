@@ -72,6 +72,25 @@ public class RestaurantMapper {
                         String contactPhone,
                         BigDecimal dynamicAvgRating,
                         Long reviewCount) {
+                return toDetail(
+                                restaurant, logoUrl, coverUrl, privileged, legalDetails,
+                                documents, contactPhone, dynamicAvgRating, reviewCount,
+                                restaurant.getStatus() != null ? restaurant.getStatus().name() : "PENDING",
+                                restaurant.getRejectionReason());
+        }
+
+        public RestaurantDetailResponseDto toDetail(
+                        Restaurant restaurant,
+                        String logoUrl,
+                        String coverUrl,
+                        boolean privileged,
+                        RestaurantLegalDetailResponseDto legalDetails,
+                        List<RestaurantDocumentResponseDto> documents,
+                        String contactPhone,
+                        BigDecimal dynamicAvgRating,
+                        Long reviewCount,
+                        String effectiveStatus,
+                        String effectiveRejectionReason) {
                 RestaurantAddress address = restaurant.getAddress();
                 BigDecimal finalAvgRating = dynamicAvgRating != null ? dynamicAvgRating : restaurant.getAvgRating();
                 Long finalReviewCount = reviewCount != null ? reviewCount : 0L;
@@ -96,9 +115,9 @@ public class RestaurantMapper {
                                 logoUrl,
                                 coverUrl,
                                 finalAvgRating,
-                                restaurant.getStatus().name(),
+                                effectiveStatus,
                                 restaurant.getRestaurantType(),
-                                restaurant.getRejectionReason(),
+                                effectiveRejectionReason,
                                 privileged ? restaurant.getCommissionPct() : null,
                                 privileged ? restaurant.getOwnerUserCredentialId() : null,
                                 legalDetails,

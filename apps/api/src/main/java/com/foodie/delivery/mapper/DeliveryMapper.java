@@ -16,6 +16,12 @@ public class DeliveryMapper {
 
         public DeliveryProfileResponseDto toProfile(DeliveryPartner partner, String profileImageUrl,
                         java.util.List<DeliveryDocumentResponseDto> documents, String phoneNumber) {
+                return toProfile(partner, profileImageUrl, documents, phoneNumber, true, null);
+        }
+
+        public DeliveryProfileResponseDto toProfile(DeliveryPartner partner, String profileImageUrl,
+                        java.util.List<DeliveryDocumentResponseDto> documents, String phoneNumber,
+                        boolean deliveryServiceEnabled, String maintenanceMessage) {
                 return new DeliveryProfileResponseDto(
                                 partner.getId(),
                                 partner.getFullName(),
@@ -28,7 +34,7 @@ public class DeliveryMapper {
                                 partner.getState(),
                                 partner.getPincode(),
                                 partner.getKycStatus().name(),
-                                partner.isOnline(),
+                                deliveryServiceEnabled && partner.isOnline(),
                                 profileImageUrl,
                                 documents,
                                 partner.getCashInHand(),
@@ -39,7 +45,9 @@ public class DeliveryMapper {
                                 partner.isZoneVerified(),
                                 partner.getLocationApprovalStatus() != null && !"NONE".equalsIgnoreCase(partner.getLocationApprovalStatus()) ? partner.getLocationApprovalStatus() : (partner.isZoneVerified() ? "APPROVED" : "PENDING"),
                                 partner.getMaxCashInHandLimit(),
-                                partner.isCashLimitExceeded());
+                                partner.isCashLimitExceeded(),
+                                deliveryServiceEnabled,
+                                maintenanceMessage);
         }
 
         

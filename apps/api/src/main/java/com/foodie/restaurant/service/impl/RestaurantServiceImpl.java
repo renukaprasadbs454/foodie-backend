@@ -262,6 +262,12 @@ public class RestaurantServiceImpl implements RestaurantService {
             }
         }
 
+        if (targetZone != null && !targetZone.isCustomerOrderingEnabled()) {
+            log.info("Customer zone {} has customerOrderingEnabled=false (maintenance). Returning empty restaurants feed.", targetZone.getId());
+            PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+            return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+        }
+
         String zoneKey = (targetZone != null ? targetZone.getId() : "all") + (isApprovedArea ? "|appr" : "");
         String cacheKey = zoneKey + "|" + RestaurantCacheService.geoBucket(lat, lng)
                 + "|" + nullToEmpty(search)
@@ -1365,6 +1371,23 @@ public class RestaurantServiceImpl implements RestaurantService {
             }
         }
 
+        String effectiveStatus = restaurant.getStatus() != null ? restaurant.getStatus().name() : "PENDING";
+        String effectiveRejectionReason = restaurant.getRejectionReason();
+        if (locationZoneRepository != null) {
+            String rzId = restaurant.getZoneId();
+            LocationZone rz = null;
+            if (rzId != null && !rzId.isBlank()) {
+                rz = locationZoneRepository.findById(rzId).orElse(null);
+            }
+            if (rz == null && restaurant.getAddress() != null && restaurant.getAddress().getLatitude() != null && restaurant.getAddress().getLongitude() != null) {
+                rz = findActiveZoneForCoordinates(restaurant.getAddress().getLatitude().doubleValue(), restaurant.getAddress().getLongitude().doubleValue());
+            }
+            if (rz != null && !rz.isRestaurantEnabled()) {
+                effectiveStatus = "SUSPENDED";
+                effectiveRejectionReason = "Restaurant service is under maintenance";
+            }
+        }
+
         return restaurantMapper.toDetail(
                 restaurant,
                 signedOrNull(restaurant.getLogoImageKey()),
@@ -1374,7 +1397,9 @@ public class RestaurantServiceImpl implements RestaurantService {
                 documents,
                 contactPhone,
                 dynamicRating,
-                reviewCount);
+                reviewCount,
+                effectiveStatus,
+                effectiveRejectionReason);
     }
 
     private RestaurantAddress toAddress(RestaurantAddressRequestDto dto) {
@@ -1595,6 +1620,20 @@ public class RestaurantServiceImpl implements RestaurantService {
             );
         }
 
+        if (!matchedZone.isCustomerOrderingEnabled()) {
+            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                    false,
+                    matchedZone.getId(),
+                    matchedZone.getZoneName(),
+                    matchedZone.getCityName(),
+                    lat,
+                    lng,
+                    0,
+                    availableZoneNames,
+                    "Customer service is under maintenance"
+            );
+        }
+
         final LocationZone activeZone = matchedZone;
         List<Restaurant> approved = restaurantRepository.findAllByStatus(com.foodie.common.enums.RestaurantStatus.APPROVED);
         long count = approved.stream().filter(r -> isRestaurantInZone(r, activeZone)).count();
@@ -1686,9 +1725,6 @@ public class RestaurantServiceImpl implements RestaurantService {
             if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) {
                 continue;
             }
-            if (!zone.isCustomerOrderingEnabled()) {
-                continue;
-            }
             if (isPointInsideZone(lat, lng, zone)) {
                 if (zone.getLatitude() != null && zone.getLongitude() != null) {
                     double d = calculateDistance(lat, lng, zone.getLatitude(), zone.getLongitude());
@@ -1725,7 +1761,6 @@ public class RestaurantServiceImpl implements RestaurantService {
     private boolean isPointInsideZone(double lat, double lng, LocationZone zone) {
         if (zone == null) return false;
         if (zone.getStatus() != null && !"ACTIVE".equalsIgnoreCase(zone.getStatus().trim())) return false;
-        if (!zone.isCustomerOrderingEnabled() && !zone.isRestaurantEnabled()) return false;
 
         // Radius check (standard operating zone capped at 25km; points further away require admin unserviceable approval)
         if (zone.getLatitude() != null && zone.getLongitude() != null && zone.getRadiusKm() != null && zone.getRadiusKm() > 0) {

@@ -230,7 +230,24 @@ public class DeliveryServiceImpl implements DeliveryService {
                 phone = cred.getPhoneNumber();
             }
         }
-        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs, phone);
+        boolean deliveryServiceEnabled = true;
+        String maintenanceMessage = null;
+        if (locationZoneRepository != null && partner.getZoneId() != null && !partner.getZoneId().isBlank()) {
+            try {
+                var zOpt = locationZoneRepository.findById(partner.getZoneId());
+                if (zOpt.isEmpty()) {
+                    zOpt = locationZoneRepository.findAll().stream()
+                            .filter(z -> (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(partner.getZoneId())) ||
+                                    (z.getId() != null && z.getId().equalsIgnoreCase(partner.getZoneId())))
+                            .findFirst();
+                }
+                if (zOpt.isPresent() && !zOpt.get().isDeliveryPartnerEnabled()) {
+                    deliveryServiceEnabled = false;
+                    maintenanceMessage = "Delivery service is under maintenance";
+                }
+            } catch (Exception ignored) {}
+        }
+        return deliveryMapper.toProfile(partner, signedOrNull(partner.getProfileImageKey()), docs, phone, deliveryServiceEnabled, maintenanceMessage);
     }
 
     @Override
@@ -350,6 +367,18 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             if ("REJECTED".equalsIgnoreCase(partner.getLocationApprovalStatus())) {
                 throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Your delivery zone location request was rejected by Super Admin. You cannot receive deliveries.");
+            }
+            if (locationZoneRepository != null && partner.getZoneId() != null && !partner.getZoneId().isBlank()) {
+                var zOpt = locationZoneRepository.findById(partner.getZoneId());
+                if (zOpt.isEmpty()) {
+                    zOpt = locationZoneRepository.findAll().stream()
+                            .filter(z -> (z.getZoneName() != null && z.getZoneName().equalsIgnoreCase(partner.getZoneId())) ||
+                                    (z.getId() != null && z.getId().equalsIgnoreCase(partner.getZoneId())))
+                            .findFirst();
+                }
+                if (zOpt.isPresent() && !zOpt.get().isDeliveryPartnerEnabled()) {
+                    throw new UnprocessableEntityException(ErrorCode.BAD_REQUEST, "Delivery service is under maintenance for your zone.");
+                }
             }
             if (!partner.isZoneVerified()) {
                 partner.setZoneVerified(true);
@@ -502,6 +531,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         orderDeliveryPort.findByOrderId(assignment.getOrderId()).ifPresent(order -> {
             if (order.status() != com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT &&
+                    order.status() != com.foodie.common.enums.OrderStatus.READY_FOR_PICKUP &&
                     order.status() != com.foodie.common.enums.OrderStatus.PICKED_UP &&
                     order.status() != com.foodie.common.enums.OrderStatus.OUT_FOR_DELIVERY &&
                     order.status() != com.foodie.common.enums.OrderStatus.DELIVERED) {

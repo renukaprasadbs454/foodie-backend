@@ -96,6 +96,8 @@ public class AdminDeliveryPricingController {
             try {
                 if (body.containsKey("universalConfig") && body.get("universalConfig") instanceof Map<?, ?> uMap && uMap.containsKey("incentives")) {
                     body.put("incentives", uMap.get("incentives"));
+                } else if (body.containsKey("incentives") && body.get("universalConfig") instanceof Map uMap) {
+                    uMap.put("incentives", body.get("incentives"));
                 }
                 configDataStr = objectMapper.writeValueAsString(body);
             } catch (Exception e) {

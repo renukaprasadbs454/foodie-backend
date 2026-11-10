@@ -336,8 +336,11 @@ public class LocationZoneController {
             org.springframework.security.core.Authentication authentication) {
         if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
             com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
-            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
-                throw new com.foodie.common.exception.ForbiddenException("Zone creation is strictly reserved for Super Administrators.");
+            boolean isGlobalAdmin = admin.getRole().getName() == com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    || admin.getRole().getName() == com.foodie.admin.entity.AdminRoleName.ADMIN
+                    || (admin.getAssignedZoneId() == null || admin.getAssignedZoneId().isBlank() || "ALL".equalsIgnoreCase(admin.getAssignedZoneId()));
+            if (!isGlobalAdmin) {
+                throw new com.foodie.common.exception.ForbiddenException("Zone creation is strictly reserved for Administrators.");
             }
         }
 
@@ -417,8 +420,11 @@ public class LocationZoneController {
             org.springframework.security.core.Authentication authentication) {
         if (adminAccess != null && authentication != null && authentication.isAuthenticated()) {
             com.foodie.admin.entity.AdminUser admin = adminAccess.requireAdmin(authentication);
-            if (admin.getRole().getName() != com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN) {
-                throw new com.foodie.common.exception.ForbiddenException("Zone deletion is strictly reserved for Super Administrators.");
+            boolean isGlobalAdmin = admin.getRole().getName() == com.foodie.admin.entity.AdminRoleName.SUPER_ADMIN
+                    || admin.getRole().getName() == com.foodie.admin.entity.AdminRoleName.ADMIN
+                    || (admin.getAssignedZoneId() == null || admin.getAssignedZoneId().isBlank() || "ALL".equalsIgnoreCase(admin.getAssignedZoneId()));
+            if (!isGlobalAdmin) {
+                throw new com.foodie.common.exception.ForbiddenException("Zone deletion is strictly reserved for Administrators.");
             }
         }
 
