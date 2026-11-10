@@ -109,7 +109,7 @@ public class AdminPromotionBannerController {
             @org.springframework.web.bind.annotation.RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new com.foodie.common.exception.BadRequestException(
-                    com.foodie.common.enums.ErrorCode.VALIDATION_FAILED, "File is required.");
+                    com.foodie.common.exception.ErrorCode.VALIDATION_FAILED, "File is required.");
         }
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "banner.png";
         String ext = "png";
@@ -129,7 +129,7 @@ public class AdminPromotionBannerController {
             return ResponseEntity.ok(ApiResponse.success(url));
         } catch (java.io.IOException e) {
             throw new com.foodie.common.exception.BadRequestException(
-                    com.foodie.common.enums.ErrorCode.BAD_REQUEST, "Failed to upload file.");
+                    com.foodie.common.exception.ErrorCode.BAD_REQUEST, "Failed to upload file.");
         }
     }
 }
