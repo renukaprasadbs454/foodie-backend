@@ -310,6 +310,16 @@ public class OrderServiceImpl implements OrderService {
                 total = total.setScale(0, RoundingMode.CEILING).setScale(2, RoundingMode.HALF_UP);
             }
 
+            if (request != null && request.totalAmount() != null && request.totalAmount().compareTo(BigDecimal.ZERO) > 0) {
+                total = request.totalAmount().setScale(2, RoundingMode.HALF_UP);
+                if (request.deliveryFee() != null && request.deliveryFee().compareTo(BigDecimal.ZERO) >= 0) {
+                    deliveryFee = request.deliveryFee().setScale(2, RoundingMode.HALF_UP);
+                }
+                if (request.taxAmount() != null && request.taxAmount().compareTo(BigDecimal.ZERO) >= 0) {
+                    taxAmount = request.taxAmount().setScale(2, RoundingMode.HALF_UP);
+                }
+            }
+
             Order order = Order.place(
                     orderNumberGenerator.next(),
                     customerId,
