@@ -61,6 +61,16 @@ class OrderStateMachineTest {
     }
 
     @Test
+    void reachedCustomer_systemTransitionsAllowed() {
+        assertThat(OrderStateMachine.evaluate(
+                OrderStatus.OUT_FOR_DELIVERY, OrderStatus.REACHED_CUSTOMER, OrderActorType.SYSTEM))
+                .isEqualTo(Decision.ALLOW);
+        assertThat(OrderStateMachine.evaluate(
+                OrderStatus.REACHED_CUSTOMER, OrderStatus.DELIVERED, OrderActorType.SYSTEM))
+                .isEqualTo(Decision.ALLOW);
+    }
+
+    @Test
     void terminal_blocksFurtherTransitions() {
         assertThat(OrderStateMachine.evaluate(
                 OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderActorType.ADMIN))

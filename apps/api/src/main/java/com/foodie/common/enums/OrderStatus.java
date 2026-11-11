@@ -12,6 +12,7 @@ public enum OrderStatus {
     REACHED_RESTAURANT,
     PICKED_UP,
     OUT_FOR_DELIVERY,
+    REACHED_CUSTOMER,
     DELIVERED,
     REJECTED,
     CANCELLED

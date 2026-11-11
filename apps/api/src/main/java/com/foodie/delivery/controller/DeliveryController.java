@@ -164,11 +164,21 @@ public class DeliveryController {
     }
 
     @PostMapping("/assignments/{id}/arrived-restaurant")
-    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> arrivedAtRestaurant(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable UUID id) {
         deliveryService.arrivedAtRestaurant(principal.userId(), id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/assignments/{id}/arrived-customer")
+    @PreAuthorize("hasAnyRole('DELIVERY_PARTNER', 'ADMIN')")
+    @Operation(summary = "Notify customer that delivery partner has arrived at customer location")
+    public ResponseEntity<ApiResponse<Void>> arrivedAtCustomer(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID id) {
+        deliveryService.arrivedAtCustomer(principal.userId(), id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 

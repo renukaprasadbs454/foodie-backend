@@ -91,7 +91,9 @@ public class DomainNotificationListeners {
                 return;
             }
             String friendlyStatus = event.toStatus().name();
-            if (event.toStatus() == OrderStatus.PICKED_UP || event.toStatus() == OrderStatus.OUT_FOR_DELIVERY) {
+            if (event.toStatus() == OrderStatus.REACHED_CUSTOMER) {
+                friendlyStatus = "arrived at your delivery location!";
+            } else if (event.toStatus() == OrderStatus.PICKED_UP || event.toStatus() == OrderStatus.OUT_FOR_DELIVERY) {
                 friendlyStatus = "collected and on the way!";
             } else if (event.toStatus() == OrderStatus.READY_FOR_PICKUP) {
                 friendlyStatus = "ready for pickup!";
@@ -267,7 +269,8 @@ public class DomainNotificationListeners {
                 || to == OrderStatus.READY_FOR_PICKUP
                 || to == OrderStatus.ASSIGNED
                 || to == OrderStatus.PICKED_UP
-                || to == OrderStatus.OUT_FOR_DELIVERY;
+                || to == OrderStatus.OUT_FOR_DELIVERY
+                || to == OrderStatus.REACHED_CUSTOMER;
     }
 
     private void safeRun(Runnable action) {

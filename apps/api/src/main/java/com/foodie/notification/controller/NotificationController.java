@@ -102,7 +102,8 @@ public class NotificationController {
                 notificationService.updatePreferences(principal.userId(), request)));
     }
 
-    @PutMapping("/device-token")
+    @PutMapping({"/device-token", "/me/device-token"})
+    @PostMapping({"/device-token", "/me/device-token"})
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Register FCM device token for push delivery")
     public ResponseEntity<ApiResponse<Void>> registerDeviceToken(

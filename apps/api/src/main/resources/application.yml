@@ -60,7 +60,7 @@ springdoc:
 foodie:
   jwt:
     secret: ${JWT_SECRET:local-dev-only-change-me-foodie-jwt-secret-key-32b}
-    access-token-ttl-seconds: 900
+    access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
     refresh-token-ttl-customer-seconds: 2592000
     refresh-token-ttl-partner-seconds: 1209600
     refresh-token-ttl-admin-seconds: 604800

@@ -534,9 +534,24 @@ public class DeliveryServiceImpl implements DeliveryService {
                     order.status() != com.foodie.common.enums.OrderStatus.READY_FOR_PICKUP &&
                     order.status() != com.foodie.common.enums.OrderStatus.PICKED_UP &&
                     order.status() != com.foodie.common.enums.OrderStatus.OUT_FOR_DELIVERY &&
+                    order.status() != com.foodie.common.enums.OrderStatus.REACHED_CUSTOMER &&
                     order.status() != com.foodie.common.enums.OrderStatus.DELIVERED) {
                 orderDeliveryPort.updateStatus(assignment.getOrderId(),
                         com.foodie.common.enums.OrderStatus.REACHED_RESTAURANT);
+            }
+        });
+    }
+
+    @Override
+    @Transactional
+    public void arrivedAtCustomer(UUID userCredentialId, UUID assignmentId) {
+        DeliveryAssignment assignment = requireAssignment(userCredentialId, assignmentId);
+
+        orderDeliveryPort.findByOrderId(assignment.getOrderId()).ifPresent(order -> {
+            if (order.status() != com.foodie.common.enums.OrderStatus.REACHED_CUSTOMER &&
+                    order.status() != com.foodie.common.enums.OrderStatus.DELIVERED) {
+                orderDeliveryPort.updateStatus(assignment.getOrderId(),
+                        com.foodie.common.enums.OrderStatus.REACHED_CUSTOMER);
             }
         });
     }

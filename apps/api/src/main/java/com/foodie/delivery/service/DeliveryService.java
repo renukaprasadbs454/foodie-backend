@@ -42,6 +42,8 @@ public interface DeliveryService {
 
         void arrivedAtRestaurant(UUID userCredentialId, UUID assignmentId);
 
+        void arrivedAtCustomer(UUID userCredentialId, UUID assignmentId);
+
         DeliveryAssignmentResponseDto verifyPickup(UUID userCredentialId, UUID assignmentId,
                         VerifyOtpRequestDto request);
 

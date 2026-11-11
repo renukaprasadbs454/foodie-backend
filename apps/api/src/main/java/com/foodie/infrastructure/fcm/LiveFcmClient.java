@@ -29,14 +29,19 @@ public class LiveFcmClient implements FcmClient {
             throw new ExternalServiceException("FCM device token missing for user.");
         }
 
-        if (deviceToken.startsWith("ExponentPushToken") || deviceToken.startsWith("ExpoPushToken")) {
+        String cleanToken = deviceToken.trim().replaceAll("^\"|\"$", "");
+        if (cleanToken.startsWith("ExponentPushToken") || cleanToken.startsWith("ExpoPushToken")) {
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                String safeTitle = title != null ? title.replace("\"", "\\\"").replace("\n", " ") : "";
+                String safeBody = body != null ? body.replace("\"", "\\\"").replace("\n", " ") : "";
                 String payload = String.format(
-                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"badge\":1}",
-                        deviceToken,
-                        title.replace("\"", "\\\""),
-                        body.replace("\"", "\\\""));
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"channelId\":\"default\",\"_displayInForeground\":true,\"badge\":1,\"data\":{\"title\":\"%s\",\"body\":\"%s\"}}",
+                        cleanToken,
+                        safeTitle,
+                        safeBody,
+                        safeTitle,
+                        safeBody);
                 java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create("https://exp.host/--/api/v2/push/send"))
                         .header("Content-Type", "application/json")

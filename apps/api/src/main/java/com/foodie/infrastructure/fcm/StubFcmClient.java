@@ -10,15 +10,20 @@ public class StubFcmClient implements FcmClient {
 
     @Override
     public FcmSendResult sendPush(UUID userCredentialId, String deviceToken, String title, String body) {
-        if (deviceToken != null
-                && (deviceToken.startsWith("ExponentPushToken") || deviceToken.startsWith("ExpoPushToken"))) {
+        String cleanToken = deviceToken != null ? deviceToken.trim().replaceAll("^\"|\"$", "") : null;
+        if (cleanToken != null
+                && (cleanToken.startsWith("ExponentPushToken") || cleanToken.startsWith("ExpoPushToken"))) {
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                String safeTitle = title != null ? title.replace("\"", "\\\"").replace("\n", " ") : "";
+                String safeBody = body != null ? body.replace("\"", "\\\"").replace("\n", " ") : "";
                 String payload = String.format(
-                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"badge\":1}",
-                        deviceToken,
-                        title.replace("\"", "\\\""),
-                        body.replace("\"", "\\\""));
+                        "{\"to\":\"%s\",\"title\":\"%s\",\"body\":\"%s\",\"sound\":\"default\",\"priority\":\"high\",\"channelId\":\"default\",\"_displayInForeground\":true,\"badge\":1,\"data\":{\"title\":\"%s\",\"body\":\"%s\"}}",
+                        cleanToken,
+                        safeTitle,
+                        safeBody,
+                        safeTitle,
+                        safeBody);
                 java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create("https://exp.host/--/api/v2/push/send"))
                         .header("Content-Type", "application/json")
