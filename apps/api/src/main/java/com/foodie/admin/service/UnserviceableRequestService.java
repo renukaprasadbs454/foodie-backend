@@ -92,6 +92,11 @@ public class UnserviceableRequestService {
 
     public boolean hasPendingRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
         try {
+            // An approved request always takes priority: if the customer or location is approved, it is NOT pending!
+            if (hasApprovedRequest(lat, lng, phone, email, radiusKm)) {
+                return false;
+            }
+
             List<UnserviceableRequestDto> all = getAllRequests();
             // 1. Direct customer matching by phone or email
             if ((phone != null && !phone.isBlank()) || (email != null && !email.isBlank())) {
@@ -125,11 +130,6 @@ public class UnserviceableRequestService {
 
     public boolean hasApprovedRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
         try {
-            // A pending request always takes priority over any older approved record
-            if (hasPendingRequest(lat, lng, phone, email, radiusKm)) {
-                return false;
-            }
-
             List<UnserviceableRequestDto> all = getAllRequests();
             // 1. Direct customer matching by phone or email
             if ((phone != null && !phone.isBlank()) || (email != null && !email.isBlank())) {
@@ -163,7 +163,8 @@ public class UnserviceableRequestService {
 
     public boolean hasRejectedRequest(Double lat, Double lng, String phone, String email, double radiusKm) {
         try {
-            if (hasPendingRequest(lat, lng, phone, email, radiusKm)) {
+            // Approval overrides rejection
+            if (hasApprovedRequest(lat, lng, phone, email, radiusKm)) {
                 return false;
             }
 
@@ -258,18 +259,69 @@ public class UnserviceableRequestService {
     @Transactional
     public UnserviceableRequestDto saveRequest(UnserviceableRequestDto dto) {
         if (dto == null) return null;
-        if (dto.getId() == null || dto.getId().isBlank()) {
-            dto.setId("req-" + UUID.randomUUID().toString().substring(0, 8));
-        }
-        if (dto.getStatus() == null || dto.getStatus().isBlank()) {
-            dto.setStatus("PENDING");
-        }
-        if (dto.getCreatedAt() == null) {
-            dto.setCreatedAt(Instant.now());
+
+        UnserviceableRequest entity = null;
+        if (dto.getId() != null && !dto.getId().isBlank()) {
+            entity = repository.findById(dto.getId()).orElse(null);
         }
 
-        UnserviceableRequest entity = repository.findById(dto.getId()).orElseGet(UnserviceableRequest::new);
+        if (entity == null) {
+            // Check for existing request by contact or location deduplication
+            List<UnserviceableRequest> all = repository.findAll();
+            for (UnserviceableRequest existing : all) {
+                boolean phoneMatch = isPhoneMatching(dto.getContactPhone(), existing.getContactPhone());
+                boolean emailMatch = isEmailMatching(dto.getContactEmail(), existing.getContactEmail());
+                boolean coordsMatch = dto.getLatitude() != null && dto.getLongitude() != null &&
+                        existing.getLatitude() != null && existing.getLongitude() != null &&
+                        calculateHaversineDistance(dto.getLatitude(), dto.getLongitude(),
+                                existing.getLatitude(), existing.getLongitude()) <= 2.0;
+
+                if ((phoneMatch || emailMatch) && coordsMatch) {
+                    entity = existing;
+                    break;
+                } else if ((phoneMatch || emailMatch) && entity == null) {
+                    entity = existing;
+                } else if (coordsMatch && entity == null && (dto.getContactPhone() == null || dto.getContactPhone().isBlank())) {
+                    entity = existing;
+                }
+            }
+        }
+
+        if (entity != null) {
+            // If already APPROVED by Admin, NEVER downgrade back to PENDING!
+            if ("APPROVED".equalsIgnoreCase(entity.getStatus())) {
+                log.info("Request for contact {} or location ({}, {}) is already APPROVED by Admin. Preserving APPROVED status.",
+                        dto.getContactPhone(), dto.getLatitude(), dto.getLongitude());
+                dto.setStatus("APPROVED");
+                dto.setId(entity.getId());
+                if (entity.getZoneId() != null && (dto.getZoneId() == null || dto.getZoneId().isBlank())) {
+                    dto.setZoneId(entity.getZoneId());
+                    dto.setZoneName(entity.getZoneName());
+                }
+            } else if ("REJECTED".equalsIgnoreCase(entity.getStatus())) {
+                dto.setStatus("REJECTED");
+                dto.setId(entity.getId());
+            } else {
+                dto.setId(entity.getId());
+            }
+            if (dto.getCreatedAt() == null) {
+                dto.setCreatedAt(entity.getCreatedAt() != null ? entity.getCreatedAt() : Instant.now());
+            }
+        } else {
+            if (dto.getId() == null || dto.getId().isBlank()) {
+                dto.setId("req-" + UUID.randomUUID().toString().substring(0, 8));
+            }
+            if (dto.getStatus() == null || dto.getStatus().isBlank()) {
+                dto.setStatus("PENDING");
+            }
+            if (dto.getCreatedAt() == null) {
+                dto.setCreatedAt(Instant.now());
+            }
+            entity = new UnserviceableRequest();
+        }
+
         mapToEntity(dto, entity);
+        entity.setUpdatedAt(Instant.now());
         UnserviceableRequest saved = repository.save(entity);
         return mapToDto(saved);
     }

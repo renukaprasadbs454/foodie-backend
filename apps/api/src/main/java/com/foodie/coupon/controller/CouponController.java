@@ -38,7 +38,7 @@ public class CouponController {
     }
 
     @GetMapping("/eligible")
-    @PreAuthorize("hasRole('CUSTOMER')")
+    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN') or hasRole('RESTAURANT') or isAnonymous() or isAuthenticated()")
     @Operation(summary = "List coupons eligible for the caller's cart context")
     public ResponseEntity<ApiResponse<List<EligibleCouponResponseDto>>> listEligible(
             @AuthenticationPrincipal AuthPrincipal principal,

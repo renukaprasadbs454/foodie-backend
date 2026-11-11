@@ -60,6 +60,13 @@ public class CreateCouponRequestDto {
 
     private BigDecimal restaurantDiscount;
 
+    private String title;
+    private String zoneName;
+    private String module;
+    private String createdBy;
+    private Boolean isActive;
+    private String status;
+
     public CreateCouponRequestDto() {
     }
 
@@ -86,7 +93,10 @@ public class CreateCouponRequestDto {
 
     @JsonAnySetter
     public void rejectUnknown(String name, Object value) {
-        throw new BadRequestException(ErrorCode.UNKNOWN_FIELD, "Unknown field: " + name);
+        // Silently tolerate extra frontend metadata to prevent breaking coupon creation
+        if ("maxDiscount".equalsIgnoreCase(name) && value instanceof Number && this.maxDiscountAmount == null) {
+            this.maxDiscountAmount = BigDecimal.valueOf(((Number) value).doubleValue());
+        }
     }
 
     public String getCode() {
@@ -207,5 +217,53 @@ public class CreateCouponRequestDto {
 
     public void setRestaurantDiscount(BigDecimal restaurantDiscount) {
         this.restaurantDiscount = restaurantDiscount;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getZoneName() {
+        return zoneName;
+    }
+
+    public void setZoneName(String zoneName) {
+        this.zoneName = zoneName;
+    }
+
+    public String getModule() {
+        return module;
+    }
+
+    public void setModule(String module) {
+        this.module = module;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

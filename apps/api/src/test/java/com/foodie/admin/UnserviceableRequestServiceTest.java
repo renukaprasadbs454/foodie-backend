@@ -157,4 +157,57 @@ class UnserviceableRequestServiceTest {
         assertThat(list.get(0).getId()).isEqualTo("req-101");
         assertThat(list.get(0).getRequesterName()).isEqualTo("Partner Alice");
     }
+
+    @Test
+    void saveRequest_whenExistingRequestIsApproved_preservesApprovedStatus() {
+        UnserviceableRequest existingApproved = new UnserviceableRequest();
+        existingApproved.setId("req-appr-1");
+        existingApproved.setContactPhone("+919876543210");
+        existingApproved.setContactEmail("customer@foodie.com");
+        existingApproved.setLatitude(13.3400);
+        existingApproved.setLongitude(77.1200);
+        existingApproved.setStatus("APPROVED");
+        existingApproved.setZoneId("dz-tumkur");
+        existingApproved.setZoneName("Tumkur Zone");
+
+        when(repository.findAll()).thenReturn(List.of(existingApproved));
+        when(repository.save(any(UnserviceableRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UnserviceableRequestDto incoming = new UnserviceableRequestDto();
+        incoming.setContactPhone("+919876543210");
+        incoming.setContactEmail("customer@foodie.com");
+        incoming.setLatitude(13.3400);
+        incoming.setLongitude(77.1200);
+        incoming.setStatus("PENDING");
+
+        UnserviceableRequestDto saved = service.saveRequest(incoming);
+
+        assertThat(saved.getStatus()).isEqualTo("APPROVED");
+        assertThat(saved.getId()).isEqualTo("req-appr-1");
+        assertThat(saved.getZoneId()).isEqualTo("dz-tumkur");
+    }
+
+    @Test
+    void hasApprovedRequest_whenApprovedExists_returnsTrueAndHasPendingReturnsFalse() {
+        UnserviceableRequest existingApproved = new UnserviceableRequest();
+        existingApproved.setId("req-appr-2");
+        existingApproved.setContactPhone("+919876543210");
+        existingApproved.setContactEmail("customer@foodie.com");
+        existingApproved.setLatitude(13.3400);
+        existingApproved.setLongitude(77.1200);
+        existingApproved.setStatus("APPROVED");
+
+        UnserviceableRequest otherPending = new UnserviceableRequest();
+        otherPending.setId("req-pend-other");
+        otherPending.setContactPhone("+911111111111");
+        otherPending.setLatitude(13.3410);
+        otherPending.setLongitude(77.1210);
+        otherPending.setStatus("PENDING");
+
+        when(repository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(existingApproved, otherPending));
+
+        // When checking for the approved customer, hasApprovedRequest is true and hasPendingRequest is false
+        assertThat(service.hasApprovedRequest(13.3400, 77.1200, "+919876543210", "customer@foodie.com", 10.0)).isTrue();
+        assertThat(service.hasPendingRequest(13.3400, 77.1200, "+919876543210", "customer@foodie.com", 10.0)).isFalse();
+    }
 }

@@ -223,20 +223,6 @@ public class RestaurantServiceImpl implements RestaurantService {
         }
         BigDecimal minRatingDecimal = minRating != null ? BigDecimal.valueOf(minRating) : null;
 
-        // Block restaurant feed if customer location or customer has an unserviceable request REJECTED or PENDING
-        if (unserviceableRequestService != null) {
-            if (unserviceableRequestService.hasRejectedRequest(lat, lng, phone, email, 15.0)) {
-                log.info("Customer location ({}, {}) or contact ({}) has a REJECTED unserviceable request by Admin. Returning empty feed.", lat, lng, phone);
-                PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
-                return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
-            }
-            if (unserviceableRequestService.hasPendingRequest(lat, lng, phone, email, 10.0)) {
-                log.info("Customer location ({}, {}) or contact ({}) has a PENDING unserviceable request awaiting admin extension/approval. Returning empty restaurants feed.", lat, lng, phone);
-                PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
-                return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
-            }
-        }
-
         boolean isApprovedArea = unserviceableRequestService != null
                 && unserviceableRequestService.hasApprovedRequest(lat, lng, phone, email, 25.0);
 
@@ -254,12 +240,25 @@ public class RestaurantServiceImpl implements RestaurantService {
                                 ? calculateDistance(lat, lng, z.getLatitude(), z.getLongitude()) : Double.MAX_VALUE))
                         .orElse(null);
             }
-            if (targetZone == null && !isApprovedArea) {
-                // Customer coordinates fall outside all active admin operating zones!
-                log.info("Customer location ({}, {}) falls outside all active admin operating zones. Returning empty restaurants feed.", lat, lng);
-                PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
-                return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+        }
+
+        // Only block if customer is OUTSIDE active zones AND NOT approved by admin
+        if (targetZone == null && !isApprovedArea) {
+            if (unserviceableRequestService != null) {
+                if (unserviceableRequestService.hasRejectedRequest(lat, lng, phone, email, 15.0)) {
+                    log.info("Customer location ({}, {}) or contact ({}) has a REJECTED unserviceable request by Admin. Returning empty feed.", lat, lng, phone);
+                    PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+                    return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+                }
+                if (unserviceableRequestService.hasPendingRequest(lat, lng, phone, email, 10.0)) {
+                    log.info("Customer location ({}, {}) or contact ({}) has a PENDING unserviceable request awaiting admin extension/approval. Returning empty restaurants feed.", lat, lng, phone);
+                    PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+                    return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
+                }
             }
+            log.info("Customer location ({}, {}) falls outside all active admin operating zones. Returning empty restaurants feed.", lat, lng);
+            PaginationMeta emptyPagination = new PaginationMeta(page, size, 0, 0);
+            return new PageResult<>(java.util.Collections.emptyList(), emptyPagination);
         }
 
         if (targetZone != null && !targetZone.isCustomerOrderingEnabled()) {
@@ -301,10 +300,11 @@ public class RestaurantServiceImpl implements RestaurantService {
             Double refLng = lng != null ? lng : (finalTargetZone.getLongitude() != null ? finalTargetZone.getLongitude() : null);
             String targetCity = finalTargetZone.getCityName() != null ? finalTargetZone.getCityName().toLowerCase() : "";
 
-            if (!inZone.isEmpty() && !isApprovedArea) {
+            if (!inZone.isEmpty()) {
                 stream = inZone.stream();
-            } else if (isApprovedArea) {
-                // Expansion or approved zone: serve nearest restaurants from nearby zones (within 35km)
+            } else {
+                // If inZone is empty (e.g. newly created operating zone or restaurants slightly outside polygon),
+                // serve nearest restaurants from nearby areas (within 35km or city match) or platform approved restaurants
                 List<Restaurant> nearby = approvedList.stream().filter(r -> {
                     RestaurantAddress addr = r.getAddress();
                     Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
@@ -329,16 +329,9 @@ public class RestaurantServiceImpl implements RestaurantService {
 
                 if (!nearby.isEmpty()) {
                     stream = nearby.stream();
-                } else if (!inZone.isEmpty()) {
-                    stream = inZone.stream();
                 } else {
                     stream = approvedList.stream();
                 }
-            } else {
-                // If inZone is empty and NOT approved by admin:
-                // Strictly return empty feed! Do NOT display nearest restaurants!
-                log.info("No restaurants in zone and area not approved by admin. Returning empty feed.");
-                stream = java.util.Collections.<Restaurant>emptyList().stream();
             }
         }
 
@@ -1563,50 +1556,51 @@ public class RestaurantServiceImpl implements RestaurantService {
                     "Customer coordinates required for zone detection.");
         }
 
-        if (unserviceableRequestService != null && unserviceableRequestService.hasRejectedRequest(lat, lng, phone, email, 15.0)) {
-            log.info("Customer location ({}, {}) or contact ({}) has been REJECTED by Admin.", lat, lng, phone);
-            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
-                    false,
-                    null,
-                    null,
-                    null,
-                    lat,
-                    lng,
-                    0,
-                    availableZoneNames,
-                    "Your area expansion request was reviewed and rejected by Admin. We do not deliver to this area at this time."
-            );
-        }
-
-        if (unserviceableRequestService != null && unserviceableRequestService.hasPendingRequest(lat, lng, phone, email, 10.0)) {
-            log.info("Customer location ({}, {}) or contact ({}) has a PENDING unserviceable request awaiting admin extension/approval.", lat, lng, phone);
-            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
-                    false,
-                    null,
-                    null,
-                    null,
-                    lat,
-                    lng,
-                    0,
-                    availableZoneNames,
-                    "Your area expansion request is currently under review by Super Admin. Restaurants will be available once approved."
-            );
-        }
-
         boolean isApprovedArea = unserviceableRequestService != null
                 && unserviceableRequestService.hasApprovedRequest(lat, lng, phone, email, 25.0);
 
+        // 1. Check if customer is inside an active admin operating zone
         LocationZone matchedZone = findActiveZoneForCoordinates(lat, lng);
-        if (matchedZone == null) {
-            if (isApprovedArea) {
-                matchedZone = allZones.stream()
-                        .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
-                        .min(java.util.Comparator.comparingDouble(z -> (z.getLatitude() != null && z.getLongitude() != null)
-                                ? calculateDistance(lat, lng, z.getLatitude(), z.getLongitude()) : Double.MAX_VALUE))
-                        .orElse(null);
-            }
+        if (matchedZone == null && isApprovedArea) {
+            matchedZone = allZones.stream()
+                    .filter(z -> "ACTIVE".equalsIgnoreCase(z.getStatus()))
+                    .min(java.util.Comparator.comparingDouble(z -> (z.getLatitude() != null && z.getLongitude() != null)
+                            ? calculateDistance(lat, lng, z.getLatitude(), z.getLongitude()) : Double.MAX_VALUE))
+                    .orElse(null);
         }
+
+        // 2. If customer is OUTSIDE active zones and NOT approved by admin:
         if (matchedZone == null) {
+            if (unserviceableRequestService != null && unserviceableRequestService.hasRejectedRequest(lat, lng, phone, email, 15.0)) {
+                log.info("Customer location ({}, {}) or contact ({}) has been REJECTED by Admin.", lat, lng, phone);
+                return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                        false,
+                        null,
+                        null,
+                        null,
+                        lat,
+                        lng,
+                        0,
+                        availableZoneNames,
+                        "Your area expansion request was reviewed and rejected by Admin. We do not deliver to this area at this time."
+                );
+            }
+
+            if (unserviceableRequestService != null && unserviceableRequestService.hasPendingRequest(lat, lng, phone, email, 10.0)) {
+                log.info("Customer location ({}, {}) or contact ({}) has a PENDING unserviceable request awaiting admin extension/approval.", lat, lng, phone);
+                return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
+                        false,
+                        null,
+                        null,
+                        null,
+                        lat,
+                        lng,
+                        0,
+                        availableZoneNames,
+                        "Your area expansion request is currently under review by Super Admin. Restaurants will be available once approved."
+                );
+            }
+
             return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
                     false,
                     null,
@@ -1620,6 +1614,7 @@ public class RestaurantServiceImpl implements RestaurantService {
             );
         }
 
+        // 3. Matched Zone found! Check customerOrderingEnabled
         if (!matchedZone.isCustomerOrderingEnabled()) {
             return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
                     false,
@@ -1639,51 +1634,34 @@ public class RestaurantServiceImpl implements RestaurantService {
         long count = approved.stream().filter(r -> isRestaurantInZone(r, activeZone)).count();
 
         if (count == 0) {
-            // ONLY if admin approved the area, allow nearest restaurant fallback count!
-            if (isApprovedArea) {
-                String targetCity = activeZone.getCityName() != null ? activeZone.getCityName().toLowerCase() : "";
-                Double refLat = lat != null ? lat : (activeZone.getLatitude() != null ? activeZone.getLatitude() : null);
-                Double refLng = lng != null ? lng : (activeZone.getLongitude() != null ? activeZone.getLongitude() : null);
-                count = approved.stream().filter(r -> {
-                    RestaurantAddress addr = r.getAddress();
-                    Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
-                            : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
-                    Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
-                            : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
+            // Check nearest restaurants from the same city or within 35km
+            String targetCity = activeZone.getCityName() != null ? activeZone.getCityName().toLowerCase() : "";
+            Double refLat = lat != null ? lat : (activeZone.getLatitude() != null ? activeZone.getLatitude() : null);
+            Double refLng = lng != null ? lng : (activeZone.getLongitude() != null ? activeZone.getLongitude() : null);
+            count = approved.stream().filter(r -> {
+                RestaurantAddress addr = r.getAddress();
+                Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
+                        : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
+                Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
+                        : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
 
-                    if (refLat != null && refLng != null && rLat != null && rLng != null) {
-                        double dist = calculateDistance(refLat, refLng, rLat, rLng);
-                        return dist <= 35.0;
-                    }
-                    if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
-                        String rCity = addr.getCity().toLowerCase();
-                        if (rCity.equals(targetCity)) return true;
-                        if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
-                            (rCity.contains("bangalore") || rCity.contains("bengaluru"))) return true;
-                        if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
-                            (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
-                    }
-                    return false;
-                }).count();
-                if (count == 0) {
-                    count = approved.size();
+                if (refLat != null && refLng != null && rLat != null && rLng != null) {
+                    double dist = calculateDistance(refLat, refLng, rLat, rLng);
+                    return dist <= 35.0;
                 }
+                if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
+                    String rCity = addr.getCity().toLowerCase();
+                    if (rCity.equals(targetCity)) return true;
+                    if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
+                        (rCity.contains("bangalore") || rCity.contains("bengaluru"))) return true;
+                    if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
+                        (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
+                }
+                return false;
+            }).count();
+            if (count == 0 && !approved.isEmpty()) {
+                count = approved.size();
             }
-        }
-
-        // If count is 0 and NOT approved by admin: area is not serviceable!
-        if (count == 0 && !isApprovedArea) {
-            return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
-                    false,
-                    null,
-                    null,
-                    null,
-                    lat,
-                    lng,
-                    0,
-                    availableZoneNames,
-                    "No restaurants are available in this location. Submit an expansion request to admin."
-            );
         }
 
         return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
@@ -1708,15 +1686,6 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     private LocationZone findActiveZoneForCoordinates(Double lat, Double lng) {
         if (lat == null || lng == null) return null;
-        if (unserviceableRequestService != null) {
-            if (unserviceableRequestService.hasRejectedRequestNear(lat, lng, 15.0)) {
-                log.info("Location ({}, {}) has a REJECTED unserviceable request by Admin. Disallowing zone matching.", lat, lng);
-                return null;
-            }
-            if (unserviceableRequestService.hasPendingRequestNear(lat, lng, 10.0)) {
-                return null;
-            }
-        }
         List<LocationZone> allZones = getOrInitActiveZones();
         LocationZone bestZone = null;
         double minDistance = Double.MAX_VALUE;

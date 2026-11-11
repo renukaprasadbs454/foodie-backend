@@ -729,10 +729,9 @@ public class LocationZoneController {
             }
         }
 
-        // Deduplicate: if an existing pending request exists for similar coords & contact, update it
+        // Deduplicate: if an existing request exists for similar coords & contact, preserve approval or update it
         UnserviceableRequestDto existing = null;
         for (UnserviceableRequestDto r : unserviceableRequests.values()) {
-            if (!"PENDING".equalsIgnoreCase(r.getStatus())) continue;
             boolean sameEmail = dto.getContactEmail() != null && !dto.getContactEmail().isBlank() && dto.getContactEmail().equalsIgnoreCase(r.getContactEmail());
             boolean samePhone = dto.getContactPhone() != null && !dto.getContactPhone().isBlank() && dto.getContactPhone().equalsIgnoreCase(r.getContactPhone());
             boolean sameCoords = dto.getLatitude() != null && dto.getLongitude() != null && r.getLatitude() != null && r.getLongitude() != null &&
@@ -741,10 +740,18 @@ public class LocationZoneController {
             if ((sameEmail || samePhone) && sameCoords) {
                 existing = r;
                 break;
+            } else if ((sameEmail || samePhone) && existing == null) {
+                existing = r;
+            } else if (sameCoords && existing == null) {
+                existing = r;
             }
         }
 
         if (existing != null) {
+            if ("APPROVED".equalsIgnoreCase(existing.getStatus())) {
+                dto.setStatus("APPROVED");
+                existing.setStatus("APPROVED");
+            }
             if (dto.getAddress() != null && !dto.getAddress().isBlank()) {
                 existing.setAddress(dto.getAddress());
             }

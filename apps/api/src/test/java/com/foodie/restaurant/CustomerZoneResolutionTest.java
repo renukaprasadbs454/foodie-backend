@@ -37,6 +37,7 @@ class CustomerZoneResolutionTest {
     @Mock private LocationZoneRepository locationZoneRepository;
     @Mock private RestaurantCacheService restaurantCacheService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.foodie.admin.service.UnserviceableRequestService unserviceableRequestService;
 
     private RestaurantServiceImpl service;
 
@@ -68,6 +69,7 @@ class CustomerZoneResolutionTest {
                 null,
                 new BigDecimal("10.00")
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "unserviceableRequestService", unserviceableRequestService);
 
         bangaloreZone = new LocationZone();
         bangaloreZone.setId("dz-bangalore");
@@ -191,5 +193,50 @@ class CustomerZoneResolutionTest {
 
         assertThat(result.items()).isEmpty();
         assertThat(result.pagination().totalElements()).isEqualTo(0);
+    }
+
+    @Test
+    void detectCustomerZone_whenInActiveZone_evenWithPendingUnserviceableRequest_identifiesZoneAsServiceable() {
+        when(locationZoneRepository.findAll()).thenReturn(List.of(bangaloreZone, tumkurZone));
+        when(restaurantRepository.findAllByStatus(RestaurantStatus.APPROVED))
+                .thenReturn(List.of(bangaloreRestaurant, tumkurRestaurant));
+
+        // Active admin operating zone match MUST take precedence over pending unserviceable requests
+        CustomerZoneDetectResponseDto response = service.detectCustomerZone(13.3400, 77.1200, "9876543210", "test@foodie.com");
+
+        assertThat(response.serviceable()).isTrue();
+        assertThat(response.zoneId()).isEqualTo("dz-tumkur");
+        assertThat(response.zoneName()).isEqualTo("Tumkur Zone");
+        assertThat(response.restaurantCount()).isEqualTo(1);
+    }
+
+    @Test
+    void detectCustomerZone_whenInActiveZoneWithZeroInPolygonRestaurants_identifiesZoneAsServiceableWithFallback() {
+        when(locationZoneRepository.findAll()).thenReturn(List.of(bangaloreZone, tumkurZone));
+        // Only restaurant in Bangalore, but customer is in Tumkur zone (0 direct in-polygon restaurants for Tumkur)
+        when(restaurantRepository.findAllByStatus(RestaurantStatus.APPROVED))
+                .thenReturn(List.of(bangaloreRestaurant));
+
+        CustomerZoneDetectResponseDto response = service.detectCustomerZone(13.3400, 77.1200);
+
+        assertThat(response.serviceable()).isTrue();
+        assertThat(response.zoneId()).isEqualTo("dz-tumkur");
+        assertThat(response.zoneName()).isEqualTo("Tumkur Zone");
+        // Fallback count ensures serviceable zone with active admin definition is not marked unserviceable
+        assertThat(response.restaurantCount()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void detectCustomerZone_whenApprovedByAdminOutsideZones_identifiesNearestActiveZone() {
+        when(locationZoneRepository.findAll()).thenReturn(List.of(bangaloreZone, tumkurZone));
+        when(restaurantRepository.findAllByStatus(RestaurantStatus.APPROVED))
+                .thenReturn(List.of(bangaloreRestaurant, tumkurRestaurant));
+        when(unserviceableRequestService.hasApprovedRequest(28.6139, 77.2090, null, null, 25.0))
+                .thenReturn(true);
+
+        CustomerZoneDetectResponseDto response = service.detectCustomerZone(28.6139, 77.2090);
+
+        assertThat(response.serviceable()).isTrue();
+        assertThat(response.zoneId()).isNotNull();
     }
 }

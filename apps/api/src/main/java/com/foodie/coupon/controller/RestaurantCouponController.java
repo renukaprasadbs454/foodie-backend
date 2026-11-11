@@ -66,6 +66,24 @@ public class RestaurantCouponController {
         return null;
     }
 
+    private boolean isZoneMatch(String zoneA, String zoneB) {
+        if (zoneA == null || zoneB == null) return false;
+        String a = zoneA.trim().toLowerCase();
+        String b = zoneB.trim().toLowerCase();
+        if (a.equals(b)) return true;
+        if (a.equals("all") || b.equals("all") || a.equals("all_locations") || b.equals("all_locations")) return true;
+        String normA = a.replace("dz-", "").replace("-zone", "").replace(" zone", "").trim();
+        String normB = b.replace("dz-", "").replace("-zone", "").replace(" zone", "").trim();
+        if (!normA.isEmpty() && normA.equals(normB)) return true;
+        if ((normA.contains("bangalore") || normA.contains("bengaluru") || normA.equals("blr")) &&
+            (normB.contains("bangalore") || normB.contains("bengaluru") || normB.equals("blr"))) return true;
+        if ((normA.contains("tumkur") || normA.contains("tumakuru") || normA.equals("tmk")) &&
+            (normB.contains("tumkur") || normB.contains("tumakuru") || normB.equals("tmk"))) return true;
+        if ((normA.contains("hubli") || normA.contains("hubballi") || normA.equals("hbl")) &&
+            (normB.contains("hubli") || normB.contains("hubballi") || normB.equals("hbl"))) return true;
+        return false;
+    }
+
     private boolean isRestaurantCoupon(Coupon c) {
         if (c == null) return false;
         if (c.getCouponType() == Coupon.CouponType.PROMO_COUPON) {
@@ -75,6 +93,7 @@ public class RestaurantCouponController {
             return false;
         }
         return c.getRestaurantId() != null ||
+               c.getFunderType() == Coupon.FunderType.SHARED ||
                c.getFunderType() == Coupon.FunderType.RESTAURANT ||
                c.getFunderType() == Coupon.FunderType.MERCHANT ||
                c.getCouponType() == Coupon.CouponType.RESTAURANT ||
@@ -83,58 +102,73 @@ public class RestaurantCouponController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('RESTAURANT') or hasRole('ADMIN') or hasRole('CUSTOMER')")
+    @PreAuthorize("hasRole('RESTAURANT') or hasRole('ADMIN') or hasRole('CUSTOMER') or isAnonymous() or isAuthenticated()")
     @Operation(summary = "Get all coupons assigned to this restaurant")
     public ResponseEntity<ApiResponse<List<CouponResponseDto>>> getRestaurantCoupons(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam(value = "restaurantId", required = false) UUID requestedRestaurantId) {
+            @RequestParam(value = "restaurantId", required = false) UUID requestedRestaurantId,
+            @RequestParam(value = "zoneId", required = false) String requestedZoneId) {
         UUID restId = resolveRestaurantId(principal, requestedRestaurantId);
         if (restId == null) {
             return ResponseEntity.ok(ApiResponse.success(Collections.emptyList()));
         }
-        List<Coupon> rawList = couponRepository.findByRestaurantId(restId).stream()
-                .filter(this::isRestaurantCoupon)
-                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
 
+        String restZoneId = null;
+        String restZoneName = null;
         if (restaurantRepository != null) {
-            restaurantRepository.findById(restId).ifPresent(r -> {
-                String zid = r.getZoneId();
-                String zname = r.getZoneName();
-                if (zid != null && !zid.isBlank()) {
-                    for (Coupon zc : couponRepository.findByZoneId(zid.trim())) {
-                        if (isRestaurantCoupon(zc) && rawList.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
-                            rawList.add(zc);
-                        }
-                    }
-                }
-                if (zname != null && !zname.isBlank()) {
-                    for (Coupon zc : couponRepository.findByZoneId(zname.trim())) {
-                        if (isRestaurantCoupon(zc) && rawList.stream().noneMatch(c -> c.getId().equals(zc.getId()))) {
-                            rawList.add(zc);
-                        }
-                    }
-                }
-            });
-        }
-        // Also include All Locations / global coupons
-        for (String allKey : java.util.List.of("ALL", "all", "ALL_LOCATIONS", "All Locations")) {
-            for (Coupon ac : couponRepository.findByZoneId(allKey)) {
-                if (isRestaurantCoupon(ac) && rawList.stream().noneMatch(c -> c.getId().equals(ac.getId()))) {
-                    rawList.add(ac);
-                }
+            var rOpt = restaurantRepository.findById(restId);
+            if (rOpt.isPresent()) {
+                restZoneId = rOpt.get().getZoneId();
+                restZoneName = rOpt.get().getZoneName();
             }
         }
-        couponRepository.findAll().stream()
-                .filter(c -> isRestaurantCoupon(c) && (c.getZoneId() == null || c.getZoneId().isBlank() || "ALL".equalsIgnoreCase(c.getZoneId()) || "All Locations".equalsIgnoreCase(c.getZoneId())))
-                .forEach(c -> {
-                    if (rawList.stream().noneMatch(existing -> existing.getId().equals(c.getId()))) {
-                        rawList.add(c);
-                    }
-                });
 
-        List<Coupon> coupons = rawList;
+        final String finalRestZoneId = restZoneId;
+        final String finalRestZoneName = restZoneName;
+        final String finalRequestedZoneId = requestedZoneId;
 
-        List<CouponResponseDto> dtos = coupons.stream()
+        List<Coupon> allCoupons = couponRepository.findAll();
+        List<Coupon> matchingCoupons = new java.util.ArrayList<>();
+
+        for (Coupon c : allCoupons) {
+            if (c == null || !isRestaurantCoupon(c)) {
+                continue;
+            }
+
+            // 1. Direct assignment to this restaurant
+            if (c.getRestaurantId() != null && c.getRestaurantId().equals(restId)) {
+                matchingCoupons.add(c);
+                continue;
+            }
+
+            // If coupon is assigned to a DIFFERENT restaurant, skip
+            if (c.getRestaurantId() != null && !c.getRestaurantId().equals(restId)) {
+                continue;
+            }
+
+            // 2. All Locations / Global restaurant campaigns
+            String cZone = c.getZoneId();
+            if (cZone == null || cZone.isBlank() || isZoneMatch(cZone, "ALL")) {
+                matchingCoupons.add(c);
+                continue;
+            }
+
+            // 3. Zone matching with restaurant profile or requested zone
+            if (finalRestZoneId != null && isZoneMatch(cZone, finalRestZoneId)) {
+                matchingCoupons.add(c);
+                continue;
+            }
+            if (finalRestZoneName != null && isZoneMatch(cZone, finalRestZoneName)) {
+                matchingCoupons.add(c);
+                continue;
+            }
+            if (finalRequestedZoneId != null && isZoneMatch(cZone, finalRequestedZoneId)) {
+                matchingCoupons.add(c);
+                continue;
+            }
+        }
+
+        List<CouponResponseDto> dtos = matchingCoupons.stream()
                 .map(c -> {
                     CouponResponseDto dto = CouponMapper.toResponse(c);
                     if (dto.restaurantId() == null) {

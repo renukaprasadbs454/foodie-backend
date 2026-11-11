@@ -70,6 +70,24 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.foodie.restaurant.repository.RestaurantRepository restaurantRepository;
 
+    private boolean isZoneMatch(String zoneA, String zoneB) {
+        if (zoneA == null || zoneB == null) return false;
+        String a = zoneA.trim().toLowerCase();
+        String b = zoneB.trim().toLowerCase();
+        if (a.equals(b)) return true;
+        if (a.equals("all") || b.equals("all") || a.equals("all_locations") || b.equals("all_locations")) return true;
+        String normA = a.replace("dz-", "").replace("-zone", "").replace(" zone", "").trim();
+        String normB = b.replace("dz-", "").replace("-zone", "").replace(" zone", "").trim();
+        if (!normA.isEmpty() && normA.equals(normB)) return true;
+        if ((normA.contains("bangalore") || normA.contains("bengaluru") || normA.equals("blr")) &&
+            (normB.contains("bangalore") || normB.contains("bengaluru") || normB.equals("blr"))) return true;
+        if ((normA.contains("tumkur") || normA.contains("tumakuru") || normA.equals("tmk")) &&
+            (normB.contains("tumkur") || normB.contains("tumakuru") || normB.equals("tmk"))) return true;
+        if ((normA.contains("hubli") || normA.contains("hubballi") || normA.equals("hbl")) &&
+            (normB.contains("hubli") || normB.contains("hubballi") || normB.equals("hbl"))) return true;
+        return false;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<CouponView> listEligible(UUID customerId, UUID restaurantId, BigDecimal cartTotal) {
@@ -92,19 +110,28 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
         List<CouponView> eligible = new ArrayList<>();
         for (Coupon coupon : candidates) {
             if (coupon == null) continue;
-            if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null && adminZoneService != null) {
-                try {
-                    com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(coupon.getZoneId().trim());
+            if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null) {
+                String cZone = coupon.getZoneId().trim();
+                if (!isZoneMatch(cZone, "ALL")) {
                     var r = restaurantRepository.findById(restaurantId).orElse(null);
                     if (r != null) {
-                        Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
-                        Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
-                        String city = r.getAddress() != null ? r.getAddress().getCity() : null;
-                        if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
-                            continue; // Skip coupon since restaurant is outside coupon zone
+                        boolean zoneMatches = (r.getZoneId() != null && isZoneMatch(cZone, r.getZoneId()))
+                                || (r.getZoneName() != null && isZoneMatch(cZone, r.getZoneName()));
+                        if (!zoneMatches && adminZoneService != null) {
+                            try {
+                                com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(cZone);
+                                Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
+                                Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
+                                String city = r.getAddress() != null ? r.getAddress().getCity() : null;
+                                if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                                    continue; // Skip coupon since restaurant is outside coupon zone
+                                }
+                            } catch (Exception ex) {
+                                continue;
+                            }
                         }
                     }
-                } catch (Exception ignored) {}
+                }
             }
             if (isWithinUsageLimits(coupon, customerId)) {
                 if (customerId != null) {
@@ -333,17 +360,32 @@ public class CouponServiceImpl implements CouponService, CouponQueryService, Cou
                     ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
                     "Coupon is not applicable to this restaurant.");
         }
-        if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null && adminZoneService != null) {
-            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(coupon.getZoneId().trim());
-            var r = restaurantRepository.findById(restaurantId).orElse(null);
-            if (r != null) {
-                Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
-                Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
-                String city = r.getAddress() != null ? r.getAddress().getCity() : null;
-                if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
-                    throw new UnprocessableEntityException(
-                            ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
-                            "Coupon is only applicable to restaurants in zone: " + zone.getZoneName());
+        if (coupon.getZoneId() != null && !coupon.getZoneId().isBlank() && restaurantId != null && restaurantRepository != null) {
+            String cZone = coupon.getZoneId().trim();
+            if (!isZoneMatch(cZone, "ALL")) {
+                var r = restaurantRepository.findById(restaurantId).orElse(null);
+                if (r != null) {
+                    boolean zoneMatches = (r.getZoneId() != null && isZoneMatch(cZone, r.getZoneId()))
+                            || (r.getZoneName() != null && isZoneMatch(cZone, r.getZoneName()));
+                    if (!zoneMatches && adminZoneService != null) {
+                        try {
+                            com.foodie.admin.entity.LocationZone zone = adminZoneService.validateZone(cZone);
+                            Double lat = r.getLatitude() != null ? r.getLatitude().doubleValue() : null;
+                            Double lng = r.getLongitude() != null ? r.getLongitude().doubleValue() : null;
+                            String city = r.getAddress() != null ? r.getAddress().getCity() : null;
+                            if (!adminZoneService.isLocationInZone(lat, lng, city, zone)) {
+                                throw new UnprocessableEntityException(
+                                        ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
+                                        "Coupon is only applicable to restaurants in zone: " + (zone != null ? zone.getZoneName() : cZone));
+                            }
+                        } catch (UnprocessableEntityException ue) {
+                            throw ue;
+                        } catch (Exception ex) {
+                            throw new UnprocessableEntityException(
+                                    ErrorCode.COUPON_NOT_APPLICABLE_TO_RESTAURANT,
+                                    "Coupon is only applicable to restaurants in zone: " + cZone);
+                        }
+                    }
                 }
             }
         }
