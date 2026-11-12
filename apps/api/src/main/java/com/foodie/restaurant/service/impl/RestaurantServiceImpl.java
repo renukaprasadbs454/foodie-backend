@@ -296,43 +296,7 @@ public class RestaurantServiceImpl implements RestaurantService {
         // 1. Zone filter - strictly isolate to the matched admin operating zone
         if (finalTargetZone != null) {
             List<Restaurant> inZone = stream.filter(r -> isRestaurantInZone(r, finalTargetZone)).toList();
-            Double refLat = lat != null ? lat : (finalTargetZone.getLatitude() != null ? finalTargetZone.getLatitude() : null);
-            Double refLng = lng != null ? lng : (finalTargetZone.getLongitude() != null ? finalTargetZone.getLongitude() : null);
-            String targetCity = finalTargetZone.getCityName() != null ? finalTargetZone.getCityName().toLowerCase() : "";
-
-            if (!inZone.isEmpty()) {
-                stream = inZone.stream();
-            } else {
-                // If inZone is empty (e.g. newly created operating zone or restaurants slightly outside polygon),
-                // serve nearest restaurants from nearby areas (within 35km or city match) or platform approved restaurants
-                List<Restaurant> nearby = approvedList.stream().filter(r -> {
-                    RestaurantAddress addr = r.getAddress();
-                    Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
-                            : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
-                    Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
-                            : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
-
-                    if (refLat != null && refLng != null && rLat != null && rLng != null) {
-                        double dist = calculateDistance(refLat, refLng, rLat, rLng);
-                        return dist <= 35.0;
-                    }
-                    if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
-                        String rCity = addr.getCity().toLowerCase();
-                        if (rCity.equals(targetCity)) return true;
-                        if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
-                            (rCity.contains("bangalore") || rCity.contains("bengaluru"))) return true;
-                        if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
-                            (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
-                    }
-                    return false;
-                }).toList();
-
-                if (!nearby.isEmpty()) {
-                    stream = nearby.stream();
-                } else {
-                    stream = approvedList.stream();
-                }
-            }
+            stream = inZone.stream();
         }
 
         // 2. Search filter (matching restaurant name, description, or available menu items)
@@ -1633,35 +1597,8 @@ public class RestaurantServiceImpl implements RestaurantService {
         List<Restaurant> approved = restaurantRepository.findAllByStatus(com.foodie.common.enums.RestaurantStatus.APPROVED);
         long count = approved.stream().filter(r -> isRestaurantInZone(r, activeZone)).count();
 
-        if (count == 0) {
-            // Check nearest restaurants from the same city or within 35km
-            String targetCity = activeZone.getCityName() != null ? activeZone.getCityName().toLowerCase() : "";
-            Double refLat = lat != null ? lat : (activeZone.getLatitude() != null ? activeZone.getLatitude() : null);
-            Double refLng = lng != null ? lng : (activeZone.getLongitude() != null ? activeZone.getLongitude() : null);
-            count = approved.stream().filter(r -> {
-                RestaurantAddress addr = r.getAddress();
-                Double rLat = r.getLatitude() != null ? r.getLatitude().doubleValue()
-                        : (addr != null && addr.getLatitude() != null ? addr.getLatitude().doubleValue() : null);
-                Double rLng = r.getLongitude() != null ? r.getLongitude().doubleValue()
-                        : (addr != null && addr.getLongitude() != null ? addr.getLongitude().doubleValue() : null);
-
-                if (refLat != null && refLng != null && rLat != null && rLng != null) {
-                    double dist = calculateDistance(refLat, refLng, rLat, rLng);
-                    return dist <= 35.0;
-                }
-                if (addr != null && addr.getCity() != null && !targetCity.isBlank()) {
-                    String rCity = addr.getCity().toLowerCase();
-                    if (rCity.equals(targetCity)) return true;
-                    if ((targetCity.contains("bangalore") || targetCity.contains("bengaluru")) &&
-                        (rCity.contains("bangalore") || rCity.contains("bengaluru"))) return true;
-                    if ((targetCity.contains("tumkur") || targetCity.contains("tumakuru")) &&
-                        (rCity.contains("tumkur") || rCity.contains("tumakuru"))) return true;
-                }
-                return false;
-            }).count();
-            if (count == 0 && !approved.isEmpty()) {
-                count = approved.size();
-            }
+        if (count == 0 && !approved.isEmpty()) {
+            count = approved.size();
         }
 
         return new com.foodie.restaurant.dto.response.CustomerZoneDetectResponseDto(
